@@ -1,0 +1,16 @@
+/envjarvis
+/notes/
+/test_hotword.py
+/contacts_cleaned.csv
+/contacts.csv
+/jarvis.db
+/.env
+/necessary things.zip
+/contacts(1).csv
+/updated_contacts.csv
+/requirements.txt
+/engine/auth/samples
+/engine/auth/trainer
+*__pycache__/
+/.idea/
+/.vscode/

@@ -1,0 +1,393 @@
+body {
+    background-color: black;
+    overflow-y: hidden;
+    overflow-x: hidden;
+}
+
+.square {
+    position: relative;
+    width: 400px;
+    height: 400px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.square span:nth-child(1),
+.square span:nth-child(2),
+.square span:nth-child(3) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: radial-gradient(#ff000000 50%, #ff00003b 40%);
+    box-shadow: 0 0 50px rgb(255, 0, 0), inset 0 0 50px rgb(255, 0, 0), inset 0 0 50px rgb(255, 0, 0);
+    border-radius: 38% 62% 63% 37% / 41% 44% 56% 59%;
+    transition: 0.5s;
+}
+
+.square span:nth-child(1) {
+    animation: animate1 6s linear infinite;
+}
+
+.square span:nth-child(2) {
+    animation: animate1 4s linear infinite;
+}
+
+.square span:nth-child(3) {
+    animation: animate1 8s linear infinite;
+}
+
+@keyframes animate1 {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes animate2 {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes animate3 {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+
+/* Input Field Start */
+
+#TextInput {
+    background-color: #181818a8;
+    border-color: red;
+    box-shadow: 0 0 20px rgb(255, 0, 0), inset 0 0 10px rgb(255, 0, 0);
+    border-radius: 8px;
+    color: white;
+    padding: 10px 0px 10px 20px;
+    margin: 0px 20%;
+    transition: all 0.3s ease-in-out;
+}
+
+#TextInput:focus {
+    box-shadow: 0 0 30px rgb(255, 80, 80), inset 0 0 15px rgb(255, 0, 0);
+    border-color: #ff4040;
+}
+
+.input-field {
+    background-color: transparent;
+    border: none;
+    width: 95%;
+    outline: none;
+    color: #ffffff;
+    font-family: cursive;
+}
+
+
+/* Button Glow Effect */
+
+.glow-on-hover {
+    width: 35px;
+    height: 35px;
+    border: none;
+    outline: none;
+    color: #fff;
+    background: #111;
+    cursor: pointer;
+    position: relative;
+    z-index: 0;
+    border-radius: 10px;
+    padding: 0px;
+    margin-left: 10px;
+}
+
+.glow-on-hover:before {
+    content: "";
+    background: linear-gradient( 45deg, #ff0000, #ff4040, #ff7373, #ff1a1a, #ff3333, #ff0000);
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    background-size: 400%;
+    z-index: -1;
+    filter: blur(5px);
+    width: calc(100% + 4px);
+    height: calc(100% + 4px);
+    animation: glowing 20s linear infinite;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+    border-radius: 10px;
+}
+
+.glow-on-hover:active {
+    color: #181818a8;
+}
+
+.glow-on-hover:active:after {
+    background: transparent;
+}
+
+.glow-on-hover:hover:before {
+    opacity: 1;
+}
+
+.glow-on-hover:after {
+    z-index: -1;
+    content: "";
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: #111;
+    left: 0;
+    top: 0;
+    border-radius: 10px;
+}
+
+@keyframes glowing {
+    0% {
+        background-position: 0 0;
+    }
+    50% {
+        background-position: 400% 0;
+    }
+    100% {
+        background-position: 0 0;
+    }
+}
+
+
+/* Input Field End */
+
+
+/* Chat Box Starts */
+
+
+/* Chat Box */
+
+.chat-canvas {
+    background-color: #191919;
+}
+
+
+/* Replace your existing receiver_message and sender_message styles with these */
+
+.receiver_message {
+    padding: 12px 16px;
+    border: 2px solid #ff4040;
+    border-radius: 0px 15px 15px 20px;
+    width: auto;
+    color: white;
+    background: radial-gradient(ellipse at center, #ff333333 0%, #ff00001a 40%, transparent 70%);
+    box-shadow: 0 0 20px rgba(255, 64, 64, 0.4), inset 0 0 20px rgba(255, 0, 0, 0.2), 0 0 40px rgba(255, 51, 51, 0.15);
+    position: relative;
+    animation: redGlow 4s ease-in-out infinite alternate;
+}
+
+.receiver_message::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #ff0000, #ff4040, #ff7373, #ff1a1a, #ff3333);
+    border-radius: 0px 15px 15px 20px;
+    z-index: -1;
+    filter: blur(8px);
+    opacity: 0.6;
+}
+
+.sender_message {
+    padding: 12px 16px;
+    border: 2px solid #00ffff;
+    border-radius: 15px 15px 0px 20px;
+    width: auto;
+    color: white;
+    background: radial-gradient(ellipse at center, #0066ff33 0%, #0066ff1a 40%, transparent 70%);
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.3), inset 0 0 20px rgba(0, 102, 255, 0.2), 0 0 40px rgba(0, 102, 255, 0.1);
+    position: relative;
+    animation: blueGlow 4s ease-in-out infinite alternate;
+}
+
+.sender_message::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #0066ff, #00ffff, #0088ff, #00ccff);
+    border-radius: 15px 15px 0px 20px;
+    z-index: -1;
+    filter: blur(8px);
+    opacity: 0.6;
+}
+
+
+/* Pulsing glow animations */
+
+@keyframes blueGlow {
+    0% {
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.3), inset 0 0 20px rgba(0, 102, 255, 0.2), 0 0 40px rgba(0, 102, 255, 0.1);
+    }
+    100% {
+        box-shadow: 0 0 30px rgba(0, 255, 255, 0.5), inset 0 0 30px rgba(0, 102, 255, 0.3), 0 0 60px rgba(0, 102, 255, 0.2);
+    }
+}
+
+@keyframes redGlow {
+    0% {
+        box-shadow: 0 0 20px rgba(255, 64, 64, 0.4), inset 0 0 20px rgba(255, 0, 0, 0.2), 0 0 40px rgba(255, 51, 51, 0.15);
+    }
+    100% {
+        box-shadow: 0 0 30px rgba(255, 64, 64, 0.6), inset 0 0 30px rgba(255, 0, 0, 0.3), 0 0 60px rgba(255, 51, 51, 0.25);
+    }
+}
+
+.width-size {
+    max-width: 80%;
+    width: auto;
+    position: relative;
+    z-index: 1;
+}
+
+
+/* Chat Box Ends */
+
+
+/* Enhanced Close Button Styling */
+
+.btn-close {
+    background: transparent !important;
+    border: 2px solid #ff4040 !important;
+    border-radius: 50% !important;
+    width: 35px !important;
+    height: 35px !important;
+    opacity: 1 !important;
+    position: relative;
+    transition: all 0.3s ease-in-out;
+    box-shadow: 0 0 15px rgba(255, 64, 64, 0.3);
+}
+
+.btn-close:before {
+    content: "✕";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #ff4040;
+    font-size: 16px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.btn-close:hover {
+    border-color: #ff6666 !important;
+    box-shadow: 0 0 25px rgba(255, 64, 64, 0.5), inset 0 0 15px rgba(255, 64, 64, 0.2);
+    transform: scale(1.1);
+}
+
+.btn-close:hover:before {
+    color: #ff6666;
+    text-shadow: 0 0 10px rgba(255, 102, 102, 0.8);
+}
+
+.btn-close:active {
+    transform: scale(0.95);
+    box-shadow: 0 0 30px rgba(255, 64, 64, 0.7), inset 0 0 20px rgba(255, 64, 64, 0.3);
+}
+
+
+/* Globe Intensified State While Typing */
+
+.square.typing span {
+    box-shadow: 0 0 80px rgb(255, 0, 0), inset 0 0 60px rgb(255, 0, 0), inset 0 0 80px rgb(255, 0, 0);
+    filter: brightness(1.5);
+    animation-duration: 2s !important;
+    /* spin faster while typing */
+}
+
+.svg-frame {
+    position: relative;
+    width: 455px;
+    height: 455px;
+    transform-style: preserve-3d;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: change-view 2s ease-in infinite;
+}
+
+@keyframes change-view {
+    0%,
+    50% {
+        transform: rotate(-0deg) skew(00deg) translateX(calc(0 * var(--i))) translateY(calc(-0px * var(--i)));
+    }
+    70%,
+    100% {
+        transform: rotate(-80deg) skew(30deg) translateX(calc(45px * var(--i))) translateY(calc(-35px * var(--i)));
+    }
+}
+
+svg {
+    position: absolute;
+    transition: 0.5s;
+    transform-origin: center;
+    width: 450px;
+    height: 450px;
+    fill: none;
+    animation: change-view 5s ease-in-out infinite alternate;
+    filter: drop-shadow(0 0 12px #00aaff);
+}
+
+#big-centro,
+#outter1,
+#solo-lines,
+#center,
+#outter-center,
+#bottom-dots,
+#center-lines,
+#squares,
+#top-dots {
+    transform-origin: center;
+    animation: rotate 4s ease-in-out infinite alternate;
+}
+
+#big-centro {
+    animation-delay: -1.5s;
+}
+
+#outter1 {
+    animation-delay: -1.2s;
+}
+
+#center {
+    animation-delay: -2.2s;
+}
+
+#bottom-dots,
+#top-dots {
+    animation-duration: 7s;
+}
+
+#center-lines,
+#outter-center {
+    animation-duration: 6s;
+    animation-delay: -3s;
+}
+
+@keyframes rotate {
+    to {
+        transform: rotate(360deg);
+    }
+}
