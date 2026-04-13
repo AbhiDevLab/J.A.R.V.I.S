@@ -123,7 +123,9 @@ def save_chat_turn(user_text: str, assistant_text: str, model: Optional[str] = N
     try:
         doc = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "model": model or os.environ.get("JARVIS_MODEL", "mistral"),
+        # Default model should reflect the project's configured assistant.
+        # Prefer explicit JARVIS_MODEL env var; fall back to the Gemini client model name.
+        "model": model or os.environ.get("JARVIS_MODEL", "gemini-2.5-flash-lite"),
             "user_text": user_text or "",
             "assistant_text": assistant_text or "",
             "meta": meta or {},

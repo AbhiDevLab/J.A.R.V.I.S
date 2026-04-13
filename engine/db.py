@@ -7,12 +7,6 @@ cursor = con.cursor()
 query = "CREATE TABLE IF NOT EXISTS sys_command(id integer primary key, name VARCHAR(100), path VARCHAR(1000))"
 cursor.execute(query)
 
-# Method 2: Via Task Manager
-# Open Word 2016.
-# Press Ctrl + Shift + Esc to open Task Manager.
-# In the Processes tab, find Microsoft Word under the "Apps" section.
-# Right-click on Microsoft Word and select Open file location.
-
 # query = "INSERT INTO sys_command values(null, 'word', 'C:\\Program Files\\Microsoft Office\\Office16\\WINWORD.EXE')"
 # cursor.execute(query)
 # con.commit()
@@ -37,7 +31,7 @@ cursor.execute("CREATE TABLE IF NOT EXISTS web_command(id integer primary key, n
 # cursor.execute(query)
 # con.commit()
 
-# query = "Delete FROM sys_command WHERE id = 4"
+# query = "Delete FROM web_command WHERE id = 2"
 # cursor.execute(query)
 # con.commit()
 
@@ -95,7 +89,7 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS contacts (id integer primary key, n
 
 
 
-# ## FINALLY INSERTING THE CONTACTS INTO DB ###
+# # ## FINALLY INSERTING THE CONTACTS INTO DB ###
 
 # con = sqlite3.connect("jarvis.db")
 # cursor = con.cursor()
