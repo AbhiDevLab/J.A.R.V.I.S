@@ -4,6 +4,10 @@ import time
 import os
 import sys
 from pathlib import Path
+import cv2
+from PIL import Image
+
+# face recognizer (imported lazily in authenticate to avoid heavy imports on every run)
 
 # Ensure the running interpreter's site-packages is on sys.path early so spawned children can import packages
 try:
@@ -66,15 +70,15 @@ def listenHotword():
 
 # Start all processes
 if __name__ == "__main__":
-    # Start the existing processes
+    # Start the existing processes (face auth runs later inside the GUI flow)
     p1 = multiprocessing.Process(target=startJarvis)
     p2 = multiprocessing.Process(target=listenHotword)
     p1.start()
     p2.start()
-    
+
     # Wait for the main Jarvis process to complete
     p1.join()
-    
+
     # Terminate other processes when Jarvis stops
     if p2.is_alive():
         p2.terminate()

@@ -2,7 +2,7 @@ import os
 import eel
 import subprocess
 from engine.gemini_client import init_gemini, is_available
-from engine.auth import recognize
+from engine.auth import recognizer as recognize
 from engine.features import *
 from engine.command import *
 
@@ -51,7 +51,66 @@ def start():
             eel.hideStart()
             playAssistantSound()
         else:
-            speak("Face Authentication Unsuccessful. Access Denied!")
+            # fallback to voice activation phrase (only if enabled)
+            voice_enabled = os.getenv('JARVIS_VOICE_ENABLED', '0')
+            if str(voice_enabled).lower() in ('1', 'true', 'yes'):
+                speak("Face Authentication Unsuccessful. Trying voice fallback...")
+                try:
+                    from engine.auth.voice_auth import listen_for_phrase
+                    # pass configured phrase and timeout from env via the function defaults
+                    voice_ok = listen_for_phrase()
+                except Exception as e:
+                    voice_ok = False
+                    print('Voice fallback error:', e)
+
+                if voice_ok:
+                    eel.hideFaceAuth()
+                    speak("Voice authentication successful. System unlocked.")
+                    eel.hideFaceAuthSuccess()
+                    eel.hideStart()
+                    playAssistantSound()
+                else:
+                    speak("Authentication failed. Access Denied!")
+                    # show Try Again button so user can trigger voice auth manually
+                    try:
+                        eel.showTryAgain()
+                    except Exception:
+                        pass
+            else:
+                speak("Authentication failed. Voice fallback is disabled.")
+
+    @eel.expose
+    def retryVoiceAuth():
+        """Called from the UI when the user clicks 'Try Again'. Runs the voice fallback flow."""
+        try:
+            eel.hideTryAgain()()
+        except Exception:
+            pass
+        speak("Listening for voice activation phrase...")
+        try:
+            from engine.auth.voice_auth import listen_for_phrase
+            voice_ok = listen_for_phrase()
+        except Exception as e:
+            voice_ok = False
+            print('Voice fallback error (retry):', e)
+
+        if voice_ok:
+            try:
+                eel.hideFaceAuth()
+                eel.hideFaceAuthSuccess()
+                eel.hideStart()
+            except Exception:
+                pass
+            speak("Voice authentication successful. System unlocked.")
+            playAssistantSound()
+            return True
+        else:
+            speak("Access Denied")
+            try:
+                eel.showTryAgain()()
+            except Exception:
+                pass
+            return False
 
     os.system('start brave.exe --app="http://localhost:8000/index.html"')
 

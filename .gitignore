@@ -1,16 +1,106 @@
-/envjarvis
-/notes/
-/test_hotword.py
-/contacts_cleaned.csv
-/contacts.csv
-/jarvis.db
-/.env
-/necessary things.zip
-/contacts(1).csv
-/updated_contacts.csv
-/requirements.txt
-/engine/auth/samples
-/engine/auth/trainer
-*__pycache__/
-/.idea/
-/.vscode/
+# =========================
+# Virtual environments
+# =========================
+envjarvis/
+envjarvis-ml/
+venv/
+ENV/
+env/
+.venv/
+.conda/
+.virtualenv/
+
+# =========================
+# IDE / Editor
+# =========================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Logs
+# =========================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.coverage
+.coverage.*
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# =========================
+# Databases
+# =========================
+*.sqlite
+*.sqlite3
+*.db
+jarvis.db
+
+# =========================
+# User-specific audio
+# =========================
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+
+# =========================
+# User/contact data
+# =========================
+contacts*.csv
+updated_contacts.csv
+necessary things.zip
+
+# =========================
+# Personal notes
+# =========================
+notes/
+Animations Loading Initializing.md
+
+# =========================
+# Face authentication data
+# =========================
+engine/auth/samples/
+engine/auth/trainer/
+
+# =========================
+# Misc local scripts
+# =========================
+device.bat

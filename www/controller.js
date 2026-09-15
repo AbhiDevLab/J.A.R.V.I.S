@@ -152,4 +152,41 @@ $(document).ready(function () {
   }
   eel.expose(hideStart);
 
+  // Show a "Try Again" button for voice fallback
+  function showTryAgain() {
+    try {
+      // ensure we don't add multiple buttons
+      if ($('#tryAgainBtn').length) return;
+      // place the button below the main wish/message container for visibility
+      const target = $('#WishMessage');
+      if (!target.length) return;
+      const container = target.closest('.d-flex') || target.parent();
+      const btn = $(
+        `<div id="tryAgainContainer" class="text-center mt-3 w-100"><button id="tryAgainBtn" class="btn btn-outline-light btn-lg">Try Again</button></div>`
+      );
+      // insert after the entire container so the button appears on its own row
+      container.after(btn);
+      $('#tryAgainBtn').on('click', function () {
+        // call back into Python to retry voice auth
+        try {
+          eel.retryVoiceAuth()();
+        } catch (e) {
+          console.error('Failed to call retryVoiceAuth', e);
+        }
+      });
+    } catch (e) {
+      console.error('showTryAgain error:', e);
+    }
+  }
+  eel.expose(showTryAgain);
+
+  function hideTryAgain() {
+    try {
+      $('#tryAgainContainer').remove();
+    } catch (e) {
+      console.error('hideTryAgain error:', e);
+    }
+  }
+  eel.expose(hideTryAgain);
+
 });
