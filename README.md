@@ -1,6 +1,7 @@
 # J.A.R.V.I.S (Just A Rather Very Intelligent System)
 
-![J.A.R.V.I.S Logo](readme/assets/images/logo.svg)
+![J.A.R.V.I.S Logo](<img width="1296" height="1047" alt="image" src="https://github.com/user-attachments/assets/b07d9f55-7159-4dc2-8a3c-ede68405972e" />
+)
 
 A Windows-centric Python desktop voice assistant with face authentication, voice fallback, local automation, and Gemini-powered conversational AI. Built with Python + Eel for a native-like web UI.
 
