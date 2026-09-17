@@ -103,4 +103,4 @@ engine/auth/trainer/
 # =========================
 # Misc local scripts
 # =========================
-device.bat
+# device.bat is required for ADB setup; do not ignore if needed for startup
