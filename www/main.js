@@ -11,6 +11,12 @@ $(document).ready(function () {
         $("#SiriWave #siri-container").show();
     }
 
+    function ShowSiriWave() {
+        prepareSiriWave();
+    }
+
+    eel.expose(ShowSiriWave);
+
     eel.init()()
 
     $(".text").textillate({

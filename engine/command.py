@@ -282,7 +282,7 @@ def allCommands(message=1):
                     print(
                         "Speech was interrupted by the JARVIS hotword."
                     )
-                    _safe_display("ShowHood")
+                    _safe_display("ShowSiriWave")
 
                     import time
                     time.sleep(0.15)

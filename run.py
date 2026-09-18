@@ -92,14 +92,9 @@ def ensure_omniroute():
 
     try:
         subprocess.Popen(
-            ["omniroute"],
+            ["cmd.exe", "/c", "omniroute"],
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
         )
-    except FileNotFoundError:
-        print("❌ Could not find 'omniroute' in PATH.")
-        print("   Make sure OmniRoute can be started by typing:")
-        print("   omniroute")
-        sys.exit(1)
     except Exception as exc:
         print(f"❌ Failed to start OmniRoute: {exc}")
         sys.exit(1)
