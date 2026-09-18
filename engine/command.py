@@ -2,6 +2,26 @@ import pyttsx3
 import speech_recognition as sr
 import eel
 
+# Shared process-safe audio control events.
+_interrupt_event = None
+_speaking_event = None
+_mic_busy_event = None
+
+
+def configure_audio_control(
+    interrupt_event=None,
+    speaking_event=None,
+    mic_busy_event=None,
+):
+    """Configure shared audio-control events supplied by run.py."""
+    global _interrupt_event
+    global _speaking_event
+    global _mic_busy_event
+
+    _interrupt_event = interrupt_event
+    _speaking_event = speaking_event
+    _mic_busy_event = mic_busy_event
+
 def _safe_display(fn, *args, **kwargs):
     try:
         f = getattr(eel, fn, None)
@@ -23,32 +43,71 @@ def speak(text, display=True):
         _safe_display('receiverText', text)
 
     # speak aloud
-    engine.say(text)
-    engine.runAndWait()
+    # Mark JARVIS as speaking so the hotword process knows
+    # that "Jarvis" should be treated as an interruption signal.
+    if _speaking_event is not None:
+        _speaking_event.set()
+
+    try:
+        engine.say(text)
+        engine.runAndWait()
+    finally:
+        if _speaking_event is not None:
+            _speaking_event.clear()
 
 # @eel.expose #for main.js file to access functions of backend
 def takecommand():
 
-    r=sr.Recognizer()
+    r = sr.Recognizer()
 
-    with sr.Microphone() as source:
-        print("Listening ....")
-        _safe_display('DisplayMessage', "Listening ....")
-        r.pause_threshold = 1
-        r.adjust_for_ambient_noise(source)
+    if _mic_busy_event is not None:
+        _mic_busy_event.set()
 
-        audio = r.listen(source, 10, 6)
-    
     try:
-        print('Recognizing ....')
-        _safe_display('DisplayMessage', "Recognizing ....")
-        query = r.recognize_google(audio, language='en-in')
-        print(f"User Said: {query}")
-        _safe_display('DisplayMessage', query)
-    except Exception as e:
-        return ""
-    
-    return query.lower()
+        with sr.Microphone() as source:
+            print("Listening ....")
+            _safe_display(
+                'DisplayMessage',
+                "Listening ...."
+            )
+
+            r.pause_threshold = 1
+            r.adjust_for_ambient_noise(source)
+
+            audio = r.listen(
+                source,
+                10,
+                6
+            )
+
+        try:
+            print('Recognizing ....')
+
+            _safe_display(
+                'DisplayMessage',
+                "Recognizing ...."
+            )
+
+            query = r.recognize_google(
+                audio,
+                language='en-in'
+            )
+
+            print(f"User Said: {query}")
+
+            _safe_display(
+                'DisplayMessage',
+                query
+            )
+
+        except Exception:
+            return ""
+
+        return query.lower()
+
+    finally:
+        if _mic_busy_event is not None:
+            _mic_busy_event.clear()
 
 @eel.expose
 def allCommands(message=1):

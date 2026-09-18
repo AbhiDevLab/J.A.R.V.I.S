@@ -96,42 +96,142 @@ def PlayYoutube(query):
         print(f"Error in PlayYoutube: {e}")
         speak("Sorry, I couldn't play that on YouTube")
 
-def hotword():
-    porcupine=None
-    paud=None
-    audio_stream=None
+#
+def hotword(
+    interrupt_event=None,
+    speaking_event=None,
+    mic_busy_event=None,
+):
+    porcupine = None
+    paud = None
+    audio_stream = None
+
     try:
-        # pre trained keywords     
-        porcupine=pvporcupine.create(keywords=["jarvis","alexa"], sensitivities=[0.9,0.9]) 
-        paud=pyaudio.PyAudio()
-        audio_stream=paud.open(rate=porcupine.sample_rate,channels=1,format=pyaudio.paInt16,input=True,frames_per_buffer=porcupine.frame_length)
-        
-        # loop for streaming
+        porcupine = pvporcupine.create(
+            keywords=["jarvis"],
+            sensitivities=[0.9],
+        )
+
+        paud = pyaudio.PyAudio()
+
         while True:
-            keyword=audio_stream.read(porcupine.frame_length)
-            keyword=struct.unpack_from("h"*porcupine.frame_length,keyword)
 
-            # processing keyword comes from mic 
-            keyword_index=porcupine.process(keyword)
+            # ---------------------------------------------------------
+            # SpeechRecognition owns the microphone.
+            # Release the Porcupine audio stream while it is busy.
+            # ---------------------------------------------------------
+            if (
+                mic_busy_event is not None
+                and mic_busy_event.is_set()
+            ):
+                if audio_stream is not None:
+                    try:
+                        audio_stream.stop_stream()
+                    except Exception:
+                        pass
 
-            # checking first keyword detetcted for not
-            if keyword_index>=0:
+                    try:
+                        audio_stream.close()
+                    except Exception:
+                        pass
+
+                    audio_stream = None
+
+                time.sleep(0.05)
+                continue
+
+            # ---------------------------------------------------------
+            # Re-open the Porcupine stream when the microphone
+            # becomes available again.
+            # ---------------------------------------------------------
+            if audio_stream is None:
+                audio_stream = paud.open(
+                    rate=porcupine.sample_rate,
+                    channels=1,
+                    format=pyaudio.paInt16,
+                    input=True,
+                    frames_per_buffer=porcupine.frame_length,
+                )
+
+            keyword = audio_stream.read(
+                porcupine.frame_length,
+                exception_on_overflow=False,
+            )
+
+            keyword = struct.unpack_from(
+                "h" * porcupine.frame_length,
+                keyword,
+            )
+
+            keyword_index = porcupine.process(keyword)
+
+            if keyword_index >= 0:
+
                 print("hotword detected")
 
-                # pressing shorcut key win+j
+                # -----------------------------------------------------
+                # Phase 1 behavior:
+                #
+                # If JARVIS is speaking, mark the hotword as an
+                # interruption request.
+                #
+                # We deliberately do NOT stop pyttsx3 yet.
+                # That comes in Phase 2.
+                # -----------------------------------------------------
+                if (
+                    speaking_event is not None
+                    and speaking_event.is_set()
+                ):
+
+                    print(
+                        "Hotword detected while JARVIS "
+                        "is speaking."
+                    )
+
+                    if interrupt_event is not None:
+                        interrupt_event.set()
+
+                    continue
+
+                # -----------------------------------------------------
+                # Normal hotword activation remains unchanged.
+                # -----------------------------------------------------
                 import pyautogui as autogui
+
                 autogui.keyDown("win")
                 autogui.press("j")
+
                 time.sleep(2)
+
                 autogui.keyUp("win")
-                
-    except:
+
+    except Exception as e:
+        print("Hotword listener stopped:", e)
+
+    finally:
+
         if porcupine is not None:
-            porcupine.delete()
+            try:
+                porcupine.delete()
+            except Exception:
+                pass
+
         if audio_stream is not None:
-            audio_stream.close()
+            try:
+                audio_stream.stop_stream()
+            except Exception:
+                pass
+
+            try:
+                audio_stream.close()
+            except Exception:
+                pass
+
         if paud is not None:
-            paud.terminate()
+            try:
+                paud.terminate()
+            except Exception:
+                pass
 
 # Whatsapp Message Sending 
 def findContact(query):

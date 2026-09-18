@@ -55,32 +55,84 @@ if not os.getenv('GEMINI_API_KEY'):
     sys.exit(1)
 
 # To run Jarvis
-def startJarvis():
-    # Code for process 1
+def startJarvis(
+    interrupt_event,
+    speaking_event,
+    mic_busy_event,
+):
     print("Process 1 is running...")
+
     from main import start
-    start()
+
+    start(
+        interrupt_event=interrupt_event,
+        speaking_event=speaking_event,
+        mic_busy_event=mic_busy_event,
+    )
 
 # To run hotword
-def listenHotword():
-    # Code for process 2
+def listenHotword(
+    interrupt_event,
+    speaking_event,
+    mic_busy_event,
+):
     print("Process 2 is running...")
+
     from engine.features import hotword
-    hotword() 
+
+    hotword(
+        interrupt_event=interrupt_event,
+        speaking_event=speaking_event,
+        mic_busy_event=mic_busy_event,
+    )
 
 # Start all processes
 if __name__ == "__main__":
-    # Start the existing processes (face auth runs later inside the GUI flow)
-    p1 = multiprocessing.Process(target=startJarvis)
-    p2 = multiprocessing.Process(target=listenHotword)
+    # Shared process-safe audio control signals.
+    #
+    # interrupt_event:
+    #   Hotword process sets this when "Jarvis" is detected
+    #   while JARVIS is speaking.
+    #
+    # speaking_event:
+    #   Main process sets this while TTS is speaking.
+    #
+    # mic_busy_event:
+    #   Main process sets this while SpeechRecognition owns
+    #   the microphone for a user query.
+    interrupt_event = multiprocessing.Event()
+    speaking_event = multiprocessing.Event()
+    mic_busy_event = multiprocessing.Event()
+
+    # Start GUI / main JARVIS process.
+    p1 = multiprocessing.Process(
+        target=startJarvis,
+        args=(
+            interrupt_event,
+            speaking_event,
+            mic_busy_event,
+        ),
+    )
+
+    # Start hotword listener process.
+    p2 = multiprocessing.Process(
+        target=listenHotword,
+        args=(
+            interrupt_event,
+            speaking_event,
+            mic_busy_event,
+        ),
+    )
+
     p1.start()
     p2.start()
 
-    # Wait for the main Jarvis process to complete
+    # Wait for the main Jarvis process to complete.
     p1.join()
 
-    # Terminate other processes when Jarvis stops
+    # Terminate the hotword process when Jarvis stops.
     if p2.is_alive():
         p2.terminate()
         p2.join()
+
     print("System Stop")

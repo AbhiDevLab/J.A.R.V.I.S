@@ -23,7 +23,21 @@ else:
     _dotenv_missing = True
 
 
-def start():
+def start(
+    interrupt_event=None,
+    speaking_event=None,
+    mic_busy_event=None
+    ):
+    
+    # Configure shared audio state for command.py.
+    from engine.command import configure_audio_control
+
+    configure_audio_control(
+        interrupt_event=interrupt_event,
+        speaking_event=speaking_event,
+        mic_busy_event=mic_busy_event,
+    )
+    
     # If dotenv was missing earlier, print a hint only when start runs.
     if globals().get('_dotenv_missing', False):
         print(
