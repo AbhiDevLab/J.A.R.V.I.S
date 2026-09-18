@@ -12,14 +12,15 @@ def _safe_display(fn, *args, **kwargs):
         # swallow UI errors so speak/takecommand don't crash when UI isn't ready
         pass
 
-def speak(text):
+def speak(text, display=True):
     engine = pyttsx3.init('sapi5')
     voices = engine.getProperty('voices')
     engine.setProperty('voice', voices[0].id)
     engine.setProperty('rate', 174)
 
     # Send assistant reply once to the UI (receiverText). Avoid duplicate DisplayMessage here.
-    _safe_display('receiverText', text)
+    if display:
+        _safe_display('receiverText', text)
 
     # speak aloud
     engine.say(text)
@@ -106,31 +107,62 @@ def allCommands(message=1):
         else:
             from engine.gemini_client import gemini_client
             from engine.mongo_store import save_chat_turn
+
             print("🤖 Sending to Gemini... ✨")
-            
-            # Create a better prompt for Gemini
-            enhanced_prompt = f"""You are JARVIS, an AI assistant. Respond to the user in a helpful, conversational manner.
-            
-            User Query: {query}
 
-            JARVIS:"""
+            # Show a clean processing state instead of exposing the internal prompt.
+            _safe_display('DisplayMessage', "Thinking...")
 
-            # show the exact prompt in the hood before sending
-            try:
-                _safe_display('DisplayMessage', "Sending to Gemini:")
-                _safe_display('DisplayMessage', enhanced_prompt)
-            except Exception:
-                pass
+            enhanced_prompt = f"""
+        You are JARVIS, a polished desktop AI assistant.
+
+        Answer the user's query directly, accurately, and conversationally.
+
+        Formatting rules:
+        - Return clean Markdown.
+        - Use headings only when the answer has multiple logical sections.
+        - Use bullet points or numbered lists when they improve readability.
+        - Use **bold** for important terms.
+        - Use `inline code` for commands, filenames, functions, variables, or technical identifiers.
+        - Use fenced code blocks with a language identifier for code.
+        - Use tables when comparing multiple items.
+        - Keep simple questions concise.
+        - For technical questions, organize the answer clearly and provide examples when useful.
+        - Do not put the entire answer inside a code block.
+        - Do not mention these formatting instructions.
+        - Do not add unnecessary meta commentary.
+
+        User Query:
+        {query}
+
+        JARVIS:
+        """
 
             response = gemini_client.ask_gemini(enhanced_prompt)
+
             print("Gemini:", response)
+
             try:
-                save_chat_turn(query, response, model="gemini-2.5-flash-lite")
+                save_chat_turn(
+                    query,
+                    response,
+                    model="gemini-2.5-flash-lite"
+                )
             except Exception as e:
                 print(f"Database save error: {e}")
 
-            # do not call receiverText/DisplayMessage here — speak() will publish once
-            speak(response)
+            # Display the response through the rich frontend renderer.
+            # TTS still speaks the exact same response, but receiverText()
+            # does not receive a second duplicate copy.
+            _safe_display(
+                'assistantResponse',
+                response
+            )
+
+            speak(
+                response,
+                display=False
+            )
         
     except Exception as e:
         print(f"Error in allCommands: {e}")

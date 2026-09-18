@@ -63,6 +63,271 @@ $(document).ready(function () {
   }
   eel.expose(senderText);
 
+  function isRichAssistantResponse(message) {
+    if (!message) {
+      return false;
+    }
+
+    const text = String(message).trim();
+
+    return (
+      text.length >= 180 ||
+      /```/.test(text) ||
+      /^#{1,6}\s/m.test(text) ||
+      /^\s*[-*+]\s/m.test(text) ||
+      /^\s*\d+\.\s/m.test(text) ||
+      /\|.+\|/.test(text)
+    );
+  }
+
+  async function copyTextToClipboard(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {
+      console.warn("Clipboard API unavailable:", e);
+    }
+
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+      return true;
+    } catch (e) {
+      console.error("Clipboard fallback failed:", e);
+      return false;
+    }
+  }
+
+  function enhanceCodeBlocks(container) {
+    const codeBlocks = container.querySelectorAll("pre");
+
+    codeBlocks.forEach((pre) => {
+      if (pre.querySelector(".jarvis-code-copy")) {
+        return;
+      }
+
+      const code = pre.querySelector("code");
+
+      if (!code) {
+        return;
+      }
+
+      const button = document.createElement("button");
+
+      button.className = "jarvis-code-copy";
+      button.type = "button";
+      button.innerHTML =
+        '<i class="bi bi-clipboard"></i> Copy';
+
+      button.addEventListener("click", async () => {
+        const success = await copyTextToClipboard(
+          code.innerText
+        );
+
+        if (success) {
+          button.innerHTML =
+            '<i class="bi bi-check2"></i> Copied';
+
+          setTimeout(() => {
+            button.innerHTML =
+              '<i class="bi bi-clipboard"></i> Copy';
+          }, 1600);
+        }
+      });
+
+      pre.appendChild(button);
+    });
+  }
+
+  function assistantResponse(message) {
+    try {
+      const chatBox = document.getElementById(
+        "chat-canvas-body"
+      );
+
+      if (!chatBox || !message) {
+        return;
+      }
+
+      const row = document.createElement("div");
+      row.className =
+        "row justify-content-start mb-4";
+
+      const width = document.createElement("div");
+      width.className = "width-size";
+
+      const card = document.createElement("article");
+      card.className = "jarvis-response-card";
+
+      const header = document.createElement("div");
+      header.className = "jarvis-response-header";
+
+      header.innerHTML = `
+            <div class="jarvis-response-brand">
+                <div class="jarvis-response-icon">
+                    <i class="bi bi-stars"></i>
+                </div>
+
+                <div class="jarvis-response-title">
+                    <strong>JARVIS</strong>
+                    <span>AI RESPONSE</span>
+                </div>
+            </div>
+
+            <button
+                type="button"
+                class="jarvis-copy-response"
+                aria-label="Copy response"
+            >
+                <i class="bi bi-copy"></i>
+                Copy
+            </button>
+        `;
+
+      const body = document.createElement("div");
+      body.className = "jarvis-response-body";
+
+      if (
+        window.marked &&
+        window.DOMPurify
+      ) {
+        const html = window.marked.parse(
+          String(message),
+          {
+            gfm: true,
+            breaks: true
+          }
+        );
+
+        body.innerHTML =
+          window.DOMPurify.sanitize(html);
+      } else {
+        body.textContent = String(message);
+      }
+
+      const footer = document.createElement("div");
+      footer.className = "jarvis-response-footer";
+
+      footer.innerHTML = `
+            <span>
+                <i class="bi bi-stars"></i>
+                JARVIS
+            </span>
+
+            <span class="jarvis-response-status">
+                Response ready
+            </span>
+        `;
+
+      card.appendChild(header);
+      card.appendChild(body);
+      card.appendChild(footer);
+
+      width.appendChild(card);
+      row.appendChild(width);
+
+      chatBox.appendChild(row);
+
+      const copyButton =
+        header.querySelector(
+          ".jarvis-copy-response"
+        );
+
+      copyButton.addEventListener(
+        "click",
+        async () => {
+          const success =
+            await copyTextToClipboard(
+              String(message)
+            );
+
+          if (success) {
+            copyButton.innerHTML =
+              '<i class="bi bi-check2"></i> Copied';
+
+            setTimeout(() => {
+              copyButton.innerHTML =
+                '<i class="bi bi-copy"></i> Copy';
+            }, 1600);
+          }
+        }
+      );
+
+      enhanceCodeBlocks(body);
+
+      chatBox.scrollTop =
+        chatBox.scrollHeight;
+
+      // Keep the main HUD clean instead of placing
+      // the entire long answer into WishMessage.
+      const plainText =
+        String(message)
+          .replace(/\s+/g, " ")
+          .trim();
+
+      const preview =
+        plainText.length > 120
+          ? plainText.slice(0, 117) + "..."
+          : plainText;
+
+      $("#WishMessage").text(preview);
+      $(".siri-message").text(
+        "Response ready."
+      );
+
+      try {
+        $(".siri-message").textillate(
+          "start"
+        );
+      } catch (e) { }
+
+      // Small HUD transient notification.
+      try {
+        const hood =
+          $("#JarvisHood");
+
+        if (hood.length) {
+          const transient = $(
+            `<div class="hood-transient receiver-transient">
+                        <div class="hood-response-label">
+                            <i class="bi bi-stars"></i>
+                            JARVIS RESPONSE READY
+                        </div>
+                    </div>`
+          );
+
+          hood.prepend(transient);
+
+          setTimeout(() => {
+            transient.fadeOut(
+              400,
+              () => transient.remove()
+            );
+          }, 3500);
+        }
+      } catch (e) { }
+
+    } catch (e) {
+      console.error(
+        "assistantResponse error:",
+        e
+      );
+
+      // Guaranteed fallback.
+      receiverText(message);
+    }
+  }
+
+  eel.expose(assistantResponse);
+
   function receiverText(message) {
     try {
       var chatBox = document.getElementById("chat-canvas-body");
