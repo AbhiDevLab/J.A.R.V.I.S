@@ -1067,3 +1067,145 @@ svg {
             5px 8px;
     }
 }
+
+/* =========================================================
+   MAIN HUD AI RESPONSE
+   ========================================================= */
+
+#JarvisHood {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Container positioned directly below the reactor */
+.hood-response-shell {
+    width: min(760px, 88vw);
+    margin-top: 16px;
+    position: relative;
+    z-index: 20;
+}
+
+/* HUD response card */
+.hood-response-card {
+    width: 100%;
+    max-height: 180px;
+    overflow: hidden;
+
+    border-radius: 15px;
+
+    box-shadow:
+        0 0 20px rgba(255, 64, 64, 0.18),
+        0 0 35px rgba(0, 170, 255, 0.10),
+        inset 0 0 22px rgba(255, 255, 255, 0.015);
+}
+
+/* Scrollable response content */
+.hood-response-card .jarvis-response-body {
+    max-height: 105px;
+    overflow-y: auto;
+
+    scrollbar-width: thin;
+}
+
+/* Chromium scrollbar */
+.hood-response-card
+.jarvis-response-body::-webkit-scrollbar {
+    width: 5px;
+}
+
+.hood-response-card
+.jarvis-response-body::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.hood-response-card
+.jarvis-response-body::-webkit-scrollbar-thumb {
+    background: rgba(0, 170, 255, 0.45);
+    border-radius: 10px;
+}
+
+.hood-response-card
+.jarvis-response-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 170, 255, 0.70);
+}
+
+/* Replay animation whenever a new answer arrives */
+.hood-response-refresh {
+    animation:
+        hoodResponseIn
+        0.42s
+        cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes hoodResponseIn {
+
+    from {
+        opacity: 0;
+        transform:
+            translateY(12px)
+            scale(0.985);
+        filter: blur(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform:
+            translateY(0)
+            scale(1);
+        filter: blur(0);
+    }
+
+}
+
+/* Compact footer for HUD */
+.hood-response-card
+.jarvis-response-footer {
+    padding: 7px 13px;
+}
+
+/* Slightly smaller text for the main HUD */
+.hood-response-card
+.jarvis-response-body {
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+/* Smaller displays */
+@media (max-height: 850px) {
+
+    .hood-response-shell {
+        margin-top: 10px;
+    }
+
+    .hood-response-card {
+        max-height: 150px;
+    }
+
+    .hood-response-card
+    .jarvis-response-body {
+        max-height: 82px;
+    }
+
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+
+    .hood-response-shell {
+        width: 92vw;
+    }
+
+    .hood-response-card {
+        max-height: 170px;
+    }
+
+    .hood-response-card
+    .jarvis-response-body {
+        max-height: 95px;
+        font-size: 12px;
+    }
+
+}
