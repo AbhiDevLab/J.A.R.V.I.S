@@ -52,6 +52,7 @@ def takecommand():
 
 @eel.expose
 def allCommands(message=1):
+    hud_already_shown = False
 
     if message == 1:
         query = takecommand()
@@ -159,6 +160,13 @@ def allCommands(message=1):
                 response
             )
 
+            # Return to the main JARVIS HUD immediately.
+            # Do this BEFORE TTS because speak() blocks while
+            # pyttsx3.runAndWait() is speaking the response.
+            _safe_display('ShowHood')
+
+            hud_already_shown = True
+
             speak(
                 response,
                 display=False
@@ -168,4 +176,5 @@ def allCommands(message=1):
         print(f"Error in allCommands: {e}")
         speak("There was an error processing your command")
     
-    _safe_display('ShowHood')
+    if not hud_already_shown:
+        _safe_display('ShowHood')
