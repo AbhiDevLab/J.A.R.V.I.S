@@ -1,8 +1,10 @@
+import os
 import speech_recognition as sr
 import eel
 
 from engine.tts import speak as _tts_speak
 from engine.stt import detect_text_language, transcribe_audio
+from engine.llm_client import ask_llm
 
 # Shared process-safe audio control events.
 _interrupt_event = None
@@ -131,7 +133,7 @@ def allCommands(message=1):
         query_language = detect_text_language(str(query))
 
     # Phase 3/5 conversation loop:
-    # If a Gemini response is interrupted by saying "Jarvis", the loop
+    # If an LLM response is interrupted by saying "Jarvis", the loop
     # listens for the next query and continues without another activation.
     while True:
         if query:
@@ -203,10 +205,9 @@ def allCommands(message=1):
                     )
 
             else:
-                from engine.gemini_client import gemini_client
                 from engine.mongo_store import save_chat_turn
 
-                print("🤖 Sending to Gemini... ✨")
+                print("🧠 Sending request to OmniRoute... ✨")
                 _safe_display("DisplayMessage", "Thinking...")
 
                 language_name = _language_name(query_language)
@@ -247,15 +248,24 @@ def allCommands(message=1):
         JARVIS:
         """
 
-                response = gemini_client.ask_gemini(enhanced_prompt)
-                print("Gemini:", response)
+                response = ask_llm(enhanced_prompt)
+                print("JARVIS:", response)
 
                 try:
                     save_chat_turn(
                         query,
                         response,
-                        model="gemini-2.5-flash-lite",
-                        meta={"language": query_language or "en"},
+                        model=os.getenv(
+                            "OMNIROUTE_MODEL",
+                            "Teamax",
+                        ),
+                        meta={
+                            "language": query_language or "en",
+                            "provider": os.getenv(
+                                "LLM_PROVIDER",
+                                "omniroute",
+                            ),
+                        },
                     )
                 except Exception as e:
                     print(f"Database save error: {e}")

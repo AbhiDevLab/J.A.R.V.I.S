@@ -2,7 +2,7 @@ import os
 import eel
 import subprocess
 
-from engine.gemini_client import init_gemini, is_available
+from engine.llm_client import get_llm_client
 from engine.auth import recognizer as recognize
 from engine.features import *
 from engine.command import *
@@ -45,17 +45,9 @@ def start(
             "from the OS. Install with `pip install python-dotenv` if needed."
         )
 
-    api_key = os.getenv('GEMINI_API_KEY')
-
-    if not api_key:
-        raise ValueError(
-            "GEMINI_API_KEY not found in environment variables"
-        )
-
-    # Always initialize the global gemini_client object so it's not None later.
-    # GeminiClient will set itself as 'unavailable' when
-    # google-generativeai is not installed.
-    init_gemini(api_key)
+    # Validate the local OmniRoute configuration.
+    llm_client = get_llm_client()
+    llm_client.validate_config()
 
     eel.init("www")
 

@@ -1,6 +1,7 @@
 import multiprocessing
 import subprocess
 import time
+import requests
 import os
 import sys
 from pathlib import Path
@@ -49,9 +50,72 @@ def ensure_env_loaded():
 # Ensure environment variables are loaded before creating child processes
 ensure_env_loaded()
 
-# make sure GEMINI_API_KEY exists so child won't crash with ValueError
-if not os.getenv('GEMINI_API_KEY'):
-    print("ERROR: GEMINI_API_KEY not found. Set it in the OS environment or create a .env file with GEMINI_API_KEY=<your_key>")
+# Make sure OmniRoute is configured before starting child processes.
+required_omniroute_vars = (
+    "OMNIROUTE_API_KEY",
+    "OMNIROUTE_BASE_URL",
+    "OMNIROUTE_MODEL",
+)
+
+missing_omniroute_vars = [
+    name
+    for name in required_omniroute_vars
+    if not os.getenv(name)
+]
+
+if missing_omniroute_vars:
+    print(
+        "ERROR: Missing OmniRoute environment variables: "
+        + ", ".join(missing_omniroute_vars)
+    )
+    sys.exit(1)
+
+def ensure_omniroute():
+    """Ensure the local OmniRoute server is running."""
+    base_url = os.getenv(
+        "OMNIROUTE_BASE_URL",
+        "http://localhost:20128/v1"
+    ).rstrip("/")
+
+    health_url = f"{base_url}/models"
+
+    # Check whether OmniRoute is already running.
+    try:
+        requests.get(health_url, timeout=2)
+        print("✓ OmniRoute is already running.")
+        return
+    except requests.RequestException:
+        pass
+
+    # OmniRoute is not running, so start it.
+    print("🧠 OmniRoute is not running. Starting OmniRoute...")
+
+    try:
+        subprocess.Popen(
+            ["omniroute"],
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    except FileNotFoundError:
+        print("❌ Could not find 'omniroute' in PATH.")
+        print("   Make sure OmniRoute can be started by typing:")
+        print("   omniroute")
+        sys.exit(1)
+    except Exception as exc:
+        print(f"❌ Failed to start OmniRoute: {exc}")
+        sys.exit(1)
+
+    # Wait for the server to become available.
+    print("⏳ Waiting for OmniRoute server...")
+
+    for _ in range(30):
+        try:
+            requests.get(health_url, timeout=2)
+            print("✓ OmniRoute server is ready.")
+            return
+        except requests.RequestException:
+            time.sleep(1)
+
+    print("❌ OmniRoute did not become ready within 30 seconds.")
     sys.exit(1)
 
 # To run Jarvis
@@ -88,6 +152,8 @@ def listenHotword(
 
 # Start all processes
 if __name__ == "__main__":
+    
+    ensure_omniroute()
     # Shared process-safe audio control signals.
     #
     # interrupt_event:
