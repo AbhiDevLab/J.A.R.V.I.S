@@ -391,3 +391,121 @@ svg {
         transform: rotate(360deg);
     }
 }
+
+/* =========================================================
+   FACE AUTH WEBCAM PREVIEW
+   ========================================================= */
+
+#FaceAuth {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#FaceAuth > lottie-player {
+    display: block;
+    width: 300px;
+    height: 300px;
+    margin: 0 auto 18px auto;
+}
+
+/* Webcam wrapper */
+#WebcamPreview {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-top: 4px;
+}
+
+/* Webcam frame */
+#WebcamContainer {
+    position: relative;
+    width: min(420px, 85vw);
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+
+    border: 2px solid #00aaff;
+    border-radius: 12px;
+
+    background: #050505;
+
+    box-shadow:
+        0 0 12px rgba(0, 170, 255, 0.55),
+        0 0 30px rgba(0, 170, 255, 0.18);
+
+    animation: webcamPulse 3s ease-in-out infinite alternate;
+}
+
+/* Actual streamed frame */
+#WebcamImage {
+    display: block;
+    width: 100%;
+    height: 100%;
+
+    object-fit: cover;
+
+    background: #000;
+}
+
+/* Status overlay */
+#WebcamStatus {
+    position: absolute;
+
+    left: 0;
+    right: 0;
+    bottom: 0;
+
+    padding: 7px 10px;
+
+    background: rgba(0, 0, 0, 0.68);
+
+    color: #00aaff;
+
+    text-align: center;
+    font-size: 14px;
+    font-family: monospace;
+
+    border-top: 1px solid rgba(0, 170, 255, 0.45);
+}
+
+/* Subtle JARVIS-style webcam glow */
+@keyframes webcamPulse {
+    0% {
+        box-shadow:
+            0 0 10px rgba(0, 170, 255, 0.40),
+            0 0 25px rgba(0, 170, 255, 0.12);
+    }
+
+    100% {
+        box-shadow:
+            0 0 18px rgba(0, 170, 255, 0.70),
+            0 0 38px rgba(0, 170, 255, 0.22);
+    }
+}
+
+/* Keep authentication screen usable on smaller displays */
+@media (max-height: 850px) {
+
+    #FaceAuth > lottie-player {
+        width: 230px !important;
+        height: 230px !important;
+        margin-bottom: 10px;
+    }
+
+    #WebcamContainer {
+        width: min(360px, 75vw);
+    }
+}
+
+@media (max-width: 600px) {
+
+    #FaceAuth > lottie-player {
+        width: 220px !important;
+        height: 220px !important;
+    }
+
+    #WebcamContainer {
+        width: 90vw;
+    }
+}

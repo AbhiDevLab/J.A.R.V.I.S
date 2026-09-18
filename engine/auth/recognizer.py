@@ -10,6 +10,7 @@ attempt recognition from a webcam feed.
 import os
 import pickle
 import time
+import base64
 from PIL import Image
 import numpy as np
 import torch
@@ -20,6 +21,10 @@ from facenet_pytorch import InceptionResnetV1, MTCNN
 
 EMBEDDINGS_FILE = os.path.join('engine', 'auth', 'trainer', 'embeddings.pkl')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+_DET_MODEL = None
+_REC_MODEL = None
+_MTCNN = None
+_GALLERY = None
 
 
 def load_models(device=device):
@@ -40,6 +45,37 @@ def load_embeddings(path=EMBEDDINGS_FILE):
     emb_map = {int(k): np.array(v) for k, v in embeddings.items()}
     return emb_map
 
+def get_runtime_models_and_gallery():
+    global _DET_MODEL
+    global _REC_MODEL
+    global _MTCNN
+    global _GALLERY
+
+    if _DET_MODEL is None:
+        print("Loading face detection model...")
+        _DET_MODEL = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+            pretrained=True
+        )
+        _DET_MODEL.to(device).eval()
+
+    if _REC_MODEL is None:
+        print("Loading FaceNet model...")
+        _REC_MODEL = InceptionResnetV1(
+            pretrained='vggface2'
+        ).eval().to(device)
+
+    if _MTCNN is None:
+        _MTCNN = MTCNN(
+            keep_all=False,
+            device=device
+        )
+
+    if _GALLERY is None:
+        print("Loading face embedding gallery...")
+        _GALLERY = load_embeddings()
+
+    return _DET_MODEL, _REC_MODEL, _MTCNN, _GALLERY
+
 
 def preprocess_for_facenet(pil_face):
     trans = transforms.Compose([
@@ -57,8 +93,7 @@ def cosine_similarity(a, b):
 
 
 def recognize_image(pil_img, top_k=1, threshold=0.6):
-    det_model, rec_model, mtcnn = load_models()
-    gallery = load_embeddings()
+    det_model, rec_model, mtcnn, gallery = get_runtime_models_and_gallery()
 
     # detect
     transform = transforms.ToTensor()
@@ -112,25 +147,35 @@ def AuthenticateFace(required_consecutive: int | None = None,
                      timeout: int | None = None,
                      threshold: float | None = None,
                      allowed_id: int | None = None,
-                     overlay_seconds: float | None = None) -> int:
-    """Compatibility wrapper: open webcam and require consecutive positive frames.
-    Reads defaults from environment variables when parameters are not provided.
-    Returns 1 on success, 0 on failure. Matches old `AuthenticateFace()` API.
-    Env vars supported:
-      - JARVIS_AUTH_ID (int)
-      - JARVIS_AUTH_FRAMES (int)
-      - JARVIS_AUTH_TIMEOUT (int)
-      - JARVIS_AUTH_THRESHOLD (float, 0-1)
-      - JARVIS_AUTH_OVERLAY_SECONDS (float)
+                     overlay_seconds: float | None = None,
+                     frame_callback=None) -> int:
+    """Open the existing OpenCV webcam and authenticate the user.
+
+    The webcam used here is also streamed to the Eel frontend through
+    ``frame_callback``. The browser therefore displays the exact camera feed
+    that is being used by the face-recognition pipeline.
+
+    Returns:
+        1 on successful authentication.
+        0 on authentication failure or camera failure.
+
+    Environment variables:
+        JARVIS_AUTH_ID (int)
+        JARVIS_AUTH_FRAMES (int)
+        JARVIS_AUTH_TIMEOUT (int)
+        JARVIS_AUTH_THRESHOLD (float, 0-1)
+        JARVIS_AUTH_OVERLAY_SECONDS (float)
+        JARVIS_AUTH_WEBCAM_FPS (int)
     """
     try:
         import cv2
-        from PIL import Image
     except Exception as e:
-        print('AuthenticateFace: missing dependency', e)
+        print('AuthenticateFace: missing OpenCV dependency', e)
         return 0
 
-    # load configurable defaults from environment when parameters are not provided
+    # ------------------------------------------------------------------
+    # Load configurable defaults from environment.
+    # ------------------------------------------------------------------
     try:
         if allowed_id is None:
             allowed_id = int(os.getenv('JARVIS_AUTH_ID', '1'))
@@ -139,85 +184,306 @@ def AuthenticateFace(required_consecutive: int | None = None,
 
     try:
         if required_consecutive is None:
-            required_consecutive = int(os.getenv('JARVIS_AUTH_FRAMES', '3'))
+            required_consecutive = int(
+                os.getenv('JARVIS_AUTH_FRAMES', '3')
+            )
     except Exception:
         required_consecutive = 3
 
     try:
         if timeout is None:
-            timeout = int(os.getenv('JARVIS_AUTH_TIMEOUT', '20'))
+            timeout = int(
+                os.getenv('JARVIS_AUTH_TIMEOUT', '20')
+            )
     except Exception:
         timeout = 20
 
     try:
         if threshold is None:
-            # default to 0.9 (90%) as requested; allow override via env
-            threshold = float(os.getenv('JARVIS_AUTH_THRESHOLD', '0.9'))
+            threshold = float(
+                os.getenv('JARVIS_AUTH_THRESHOLD', '0.9')
+            )
     except Exception:
         threshold = 0.9
 
+    # Kept for compatibility with the previous AuthenticateFace() API.
     try:
         if overlay_seconds is None:
-            overlay_seconds = float(os.getenv('JARVIS_AUTH_OVERLAY_SECONDS', '4'))
+            overlay_seconds = float(
+                os.getenv('JARVIS_AUTH_OVERLAY_SECONDS', '4')
+            )
     except Exception:
         overlay_seconds = 4.0
 
-    # open camera
+    # Number of webcam frames per second sent to the browser.
+    try:
+        webcam_fps = max(
+            1,
+            int(os.getenv('JARVIS_AUTH_WEBCAM_FPS', '15'))
+        )
+    except Exception:
+        webcam_fps = 15
+
+    preview_interval = 1.0 / webcam_fps
+    last_preview_time = 0.0
+
+    # ------------------------------------------------------------------
+    # Open the same webcam that the recognizer owns.
+    # ------------------------------------------------------------------
     try:
         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
         if not cap.isOpened():
+            cap.release()
             cap = cv2.VideoCapture(0)
-    except Exception:
+    except Exception as e:
+        print('Camera initialization error:', e)
         cap = None
 
     if cap is None or not cap.isOpened():
         print('Camera not available')
+
+        if frame_callback is not None:
+            try:
+                frame_callback(
+                    '',
+                    'Camera not available',
+                    None
+                )
+            except Exception as e:
+                print('Webcam UI update error:', e)
+
         return 0
 
     positives = 0
     start = time.time()
     last_frame = None
-    last_res = None
+    last_jpg_base64 = ''
+    frame_count = 0
 
-    while time.time() - start < timeout:
-        ret, frame = cap.read()
-        if not ret:
-            continue
-        last_frame = frame.copy()
-        pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    # Recognition is much more expensive than grabbing/displaying a frame.
+    # Run recognition once every 3 frames while keeping the camera preview
+    # smooth.
+    process_every = 3
+
+    print('Starting face authentication...')
+    print(f'Required consecutive frames: {required_consecutive}')
+    print(f'Threshold: {threshold}')
+    print(f'Timeout: {timeout}s')
+    print(f'Webcam preview FPS: {webcam_fps}')
+
+    try:
+        while time.time() - start < timeout:
+            ret, frame = cap.read()
+
+            if not ret:
+                continue
+
+            last_frame = frame.copy()
+            frame_count += 1
+
+            # ----------------------------------------------------------
+            # Stream the real OpenCV frame to the Eel frontend.
+            # ----------------------------------------------------------
+            now = time.time()
+
+            if (
+                frame_callback is not None
+                and now - last_preview_time >= preview_interval
+            ):
+                try:
+                    ok, buffer = cv2.imencode(
+                        '.jpg',
+                        frame,
+                        [cv2.IMWRITE_JPEG_QUALITY, 75]
+                    )
+
+                    if ok:
+                        last_jpg_base64 = base64.b64encode(
+                            buffer
+                        ).decode('utf-8')
+
+                        frame_callback(
+                            last_jpg_base64,
+                            'Scanning face...',
+                            None
+                        )
+
+                        last_preview_time = now
+
+                except Exception as e:
+                    print(f'Frame callback error: {e}')
+
+            # ----------------------------------------------------------
+            # Do not run the expensive recognition model on every frame.
+            # ----------------------------------------------------------
+            if frame_count % process_every != 0:
+                continue
+
+            pil = Image.fromarray(
+                cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            )
+
+            try:
+                res = recognize_image(
+                    pil,
+                    threshold=threshold
+                )
+            except Exception as e:
+                print('Recognition error:', e)
+                res = None
+
+            # ----------------------------------------------------------
+            # Valid identity match.
+            # ----------------------------------------------------------
+            if res and res.get('id') == allowed_id:
+                positives += 1
+
+                score = float(res.get('score', 0.0))
+
+                print(
+                    f'Positive frame '
+                    f'{positives}/{required_consecutive} '
+                    f'(score={score:.3f})'
+                )
+
+                # Send a recognition frame with the detected face box.
+                if frame_callback is not None:
+                    try:
+                        display_frame = frame.copy()
+
+                        box = res.get('box')
+
+                        if box:
+                            x1, y1, x2, y2 = map(int, box)
+
+                            cv2.rectangle(
+                                display_frame,
+                                (x1, y1),
+                                (x2, y2),
+                                (0, 200, 0),
+                                2
+                            )
+
+                        ok, buffer = cv2.imencode(
+                            '.jpg',
+                            display_frame,
+                            [cv2.IMWRITE_JPEG_QUALITY, 75]
+                        )
+
+                        if ok:
+                            last_jpg_base64 = base64.b64encode(
+                                buffer
+                            ).decode('utf-8')
+
+                            frame_callback(
+                                last_jpg_base64,
+                                (
+                                    f'Face recognized '
+                                    f'({positives}/{required_consecutive})'
+                                ),
+                                score
+                            )
+
+                            last_preview_time = time.time()
+
+                    except Exception as e:
+                        print(
+                            f'Recognition UI update error: {e}'
+                        )
+
+                # ------------------------------------------------------
+                # Authentication succeeds after the required number of
+                # consecutive positive frames.
+                # ------------------------------------------------------
+                if positives >= required_consecutive:
+                    if frame_callback is not None:
+                        try:
+                            if not last_jpg_base64:
+                                ok, buffer = cv2.imencode(
+                                    '.jpg',
+                                    frame,
+                                    [cv2.IMWRITE_JPEG_QUALITY, 75]
+                                )
+
+                                if ok:
+                                    last_jpg_base64 = base64.b64encode(
+                                        buffer
+                                    ).decode('utf-8')
+
+                            frame_callback(
+                                last_jpg_base64,
+                                'Authenticated',
+                                score
+                            )
+
+                        except Exception as e:
+                            print(
+                                f'Authentication UI update error: {e}'
+                            )
+
+                    cap.release()
+                    print('✓ ACCESS GRANTED')
+                    return 1
+
+            # ----------------------------------------------------------
+            # No valid match.
+            # ----------------------------------------------------------
+            else:
+                positives = 0
+
+                if frame_callback is not None:
+                    try:
+                        frame_callback(
+                            last_jpg_base64,
+                            'Face not recognized',
+                            None
+                        )
+                    except Exception as e:
+                        print(
+                            f'Recognition UI update error: {e}'
+                        )
+
+            # Prevent a tight CPU loop.
+            time.sleep(0.01)
+
+    finally:
+        # Always release the same OpenCV camera when authentication exits.
         try:
-            res = recognize_image(pil, threshold=threshold)
+            cap.release()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Authentication timed out.
+    # No separate cv2.imshow() window is opened here because the Eel
+    # frontend is the authentication UI.
+    # ------------------------------------------------------------------
+    if frame_callback is not None:
+        try:
+            if not last_jpg_base64 and last_frame is not None:
+                ok, buffer = cv2.imencode(
+                    '.jpg',
+                    last_frame,
+                    [cv2.IMWRITE_JPEG_QUALITY, 75]
+                )
+
+                if ok:
+                    last_jpg_base64 = base64.b64encode(
+                        buffer
+                    ).decode('utf-8')
+
+            frame_callback(
+                last_jpg_base64,
+                'Authentication timed out',
+                None
+            )
+
         except Exception as e:
-            print('Recognition error:', e)
-            res = None
+            print(f'Final webcam update error: {e}')
 
-        last_res = res
-
-        if res and res.get('id') == allowed_id:
-            positives += 1
-            print(f'Positive frame {positives}/{required_consecutive} (score={res.get("score"):.2f})')
-            if positives >= required_consecutive:
-                # show authenticated overlay for configured seconds
-                box = res.get('box')
-                show_overlay_and_wait(last_frame, box, 'Authenticated', color=(0, 200, 0), seconds=overlay_seconds)
-                cap.release()
-                print('\u2713 ACCESS GRANTED')
-                return 1
-        else:
-            positives = 0
-
-        # small delay to avoid busy-loop
-        cv2.waitKey(50)
-
-    # timed out - show unauthenticated overlay using last detection if available
-    if last_frame is not None:
-        box = last_res.get('box') if last_res else None
-        show_overlay_and_wait(last_frame, box, 'Unauthenticated', color=(0, 0, 200), seconds=overlay_seconds)
-
-    cap.release()
-    print('\u2717 ACCESS DENIED - Accuracy too low or timeout')
+    print('✗ ACCESS DENIED - Accuracy too low or timeout')
     return 0
-
 
 def show_overlay_and_wait(frame, box, text, color=(0, 255, 0), seconds=4):
     """Draw box and centered text on frame and display for `seconds` seconds."""

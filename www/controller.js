@@ -12,7 +12,7 @@ $(document).ready(function () {
         // restart textillate if initialized
         try {
           $(".siri-message").textillate("start");
-        } catch (e) {}
+        } catch (e) { }
       }
     } catch (e) {
       console.error("DisplayMessage error:", e);
@@ -38,8 +38,8 @@ $(document).ready(function () {
         chatBox.innerHTML += `<div class="row justify-content-end mb-4">
                     <div class = "width-size">
                         <div class = "sender_message">${$("<div>")
-                          .text(message)
-                          .html()}</div>
+            .text(message)
+            .html()}</div>
                     </div>
                 </div>`;
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -56,7 +56,7 @@ $(document).ready(function () {
           hood.prepend(t);
           setTimeout(() => t.fadeOut(400, () => t.remove()), 3000);
         }
-      } catch (e) {}
+      } catch (e) { }
     } catch (e) {
       console.error("senderText error:", e);
     }
@@ -70,8 +70,8 @@ $(document).ready(function () {
         chatBox.innerHTML += `<div class="row justify-content-start mb-4">
                     <div class = "width-size ">
                         <div class = "receiver_message"> ${$("<div>")
-                          .text(message)
-                          .html()} </div>
+            .text(message)
+            .html()} </div>
                     </div>
                 </div>`;
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -84,7 +84,7 @@ $(document).ready(function () {
           $(".siri-message").text(message);
           try {
             $(".siri-message").textillate("start");
-          } catch (e) {}
+          } catch (e) { }
           const hood = $("#JarvisHood");
           if (hood.length) {
             const t = $(
@@ -96,7 +96,7 @@ $(document).ready(function () {
             setTimeout(() => t.fadeOut(400, () => t.remove()), 5000);
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     } catch (e) {
       console.error("receiverText error:", e);
     }
@@ -113,6 +113,35 @@ $(document).ready(function () {
     }
   }
   eel.expose(hideLoader);
+
+  function updateWebcamFrame(jpgBase64, status, score) {
+    try {
+      const image = document.getElementById("WebcamImage");
+      const statusElement = document.getElementById("WebcamStatus");
+
+      if (!image) {
+        return;
+      }
+
+      if (jpgBase64) {
+        image.src = "data:image/jpeg;base64," + jpgBase64;
+      }
+
+      if (statusElement) {
+        if (score !== null && score !== undefined) {
+          statusElement.textContent =
+            status + " | Similarity: " + Number(score).toFixed(3);
+        } else {
+          statusElement.textContent = status || "Scanning...";
+        }
+      }
+
+    } catch (error) {
+      console.error("updateWebcamFrame error:", error);
+    }
+  }
+
+  eel.expose(updateWebcamFrame);
 
   // Hide Face auth and display Face Auth success animation
   function hideFaceAuth() {
