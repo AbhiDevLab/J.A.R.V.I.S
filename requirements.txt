@@ -13,3 +13,4 @@ SpeechRecognition>=3.8.1
 pipwin>=0.5.1
 edge-tts==7.2.8
 pygame-ce==2.5.8
+faster-whisper==1.2.1

@@ -2,6 +2,7 @@ import speech_recognition as sr
 import eel
 
 from engine.tts import speak as _tts_speak
+from engine.stt import detect_text_language, transcribe_audio
 
 # Shared process-safe audio control events.
 _interrupt_event = None
@@ -28,36 +29,32 @@ def _safe_display(fn, *args, **kwargs):
     try:
         f = getattr(eel, fn, None)
         if f:
-            # call without waiting (fire-and-forget)
             f(*args, **kwargs)
     except Exception:
         # swallow UI errors so speak/takecommand don't crash when UI isn't ready
         pass
 
 
-def speak(text, display=True):
-    """
-    Speak text through the configured TTS engine and allow the hotword
-    process to interrupt it.
-
-    Returns:
-        True  -> speech was interrupted by the JARVIS hotword.
-        False -> speech completed normally.
-    """
+def speak(text, display=True, language=None):
+    """Speak text through TTS and allow the hotword process to interrupt it."""
     if display:
-        _safe_display(
-            'receiverText',
-            text
-        )
+        _safe_display("receiverText", text)
 
     return _tts_speak(
         text,
+        language=language,
         interrupt_event=_interrupt_event,
         speaking_event=_speaking_event,
     )
 
 
-def takecommand():
+def takecommand(return_language=False):
+    """Capture one utterance and automatically detect English/Hindi.
+
+    Existing callers can keep using takecommand() -> string.
+    The conversation flow can use takecommand(return_language=True) ->
+    (query, detected_language).
+    """
     r = sr.Recognizer()
 
     if _mic_busy_event is not None:
@@ -66,77 +63,85 @@ def takecommand():
     try:
         with sr.Microphone() as source:
             print("Listening ....")
-            _safe_display(
-                'DisplayMessage',
-                "Listening ...."
-            )
+            _safe_display("DisplayMessage", "Listening ....")
 
             r.pause_threshold = 1
             r.adjust_for_ambient_noise(source)
+            audio = r.listen(source, 10, 6)
 
-            audio = r.listen(
-                source,
-                10,
-                6
-            )
+        print("Recognizing ....")
+        _safe_display("DisplayMessage", "Recognizing ....")
 
-        try:
-            print('Recognizing ....')
+        query, language, confidence = transcribe_audio(audio)
 
-            _safe_display(
-                'DisplayMessage',
-                "Recognizing ...."
-            )
-
-            query = r.recognize_google(
-                audio,
-                language='en-in'
-            )
-
-            print(f"User Said: {query}")
-
-            _safe_display(
-                'DisplayMessage',
-                query
-            )
-
-        except Exception:
+        if not query:
+            if return_language:
+                return "", ""
             return ""
 
+        if language not in {"en", "hi"}:
+            print(
+                f"Detected unsupported language: {language or 'unknown'}"
+            )
+            speak(
+                "I currently support English and Hindi.",
+                language="en",
+            )
+            if return_language:
+                return "", ""
+            return ""
+
+        print(f"User Said: {query}")
+        print(
+            f"Speech language: {language} "
+            f"(confidence={confidence:.2f})"
+        )
+        _safe_display("DisplayMessage", query)
+
+        if return_language:
+            return query.lower(), language
+
         return query.lower()
+
+    except Exception as e:
+        print("Speech recognition error:", e)
+        if return_language:
+            return "", ""
+        return ""
 
     finally:
         if _mic_busy_event is not None:
             _mic_busy_event.clear()
 
 
+def _language_name(language):
+    if language == "hi":
+        return "Hindi"
+    return "English"
+
+
 @eel.expose
 def allCommands(message=1):
     # Initial query comes either from the microphone or the text box.
     if message == 1:
-        query = takecommand()
+        query, query_language = takecommand(return_language=True)
         print(f"Recognized query: {query}")
     else:
         query = message
+        query_language = detect_text_language(str(query))
 
-    # Phase 3 conversation loop:
-    #
-    # A normal command runs once and returns to the Oval HUD.
-    #
+    # Phase 3/5 conversation loop:
     # If a Gemini response is interrupted by saying "Jarvis", the loop
-    # immediately listens for the next query and processes it without
-    # requiring another hotword activation.
+    # listens for the next query and continues without another activation.
     while True:
         if query:
-            _safe_display(
-                'senderText',
-                query
-            )
+            _safe_display("senderText", query)
 
         try:
             if query == "":
                 speak(
-                    "I didn't catch that. Please try again."
+                    "I didn't catch that. Please try again.",
+                    language="en",
                 )
                 break
 
@@ -160,9 +165,7 @@ def allCommands(message=1):
                     sendMessage,
                 )
 
-                contact_no, name = findContact(
-                    query
-                )
+                contact_no, name = findContact(query)
 
                 if contact_no != 0:
                     speak(
@@ -172,52 +175,31 @@ def allCommands(message=1):
                     print(preference)
 
                 if "mobile" in preference:
-                    if (
-                        "send message" in query
-                        or "send sms" in query
-                    ):
-                        speak(
-                            "What message to send, Sir?"
-                        )
+                    if "send message" in query or "send sms" in query:
+                        speak("What message to send, Sir?")
                         message = takecommand()
-                        sendMessage(
-                            message,
-                            contact_no,
-                            name
-                        )
-
+                        sendMessage(message, contact_no, name)
                     elif "phone call" in query:
-                        makeCall(
-                            name,
-                            contact_no
-                        )
-
+                        makeCall(name, contact_no)
                     else:
-                        speak(
-                            "Please try again"
-                        )
+                        speak("Please try again")
 
                 elif "WhatsApp" in preference:
                     message = ""
-
                     if "send message" in query:
-                        message = 'message'
-                        speak(
-                            "What message to send, Sir?"
-                        )
+                        message = "message"
+                        speak("What message to send, Sir?")
                         query = takecommand()
-
                     elif "phone call" in query:
-                        message = 'call'
-
+                        message = "call"
                     else:
-                        message = 'video call'
+                        message = "video call"
 
                     whatsApp(
                         contact_no,
                         query,
                         message,
-                        name
+                        name,
                     )
 
             else:
@@ -225,17 +207,25 @@ def allCommands(message=1):
                 from engine.mongo_store import save_chat_turn
 
                 print("🤖 Sending to Gemini... ✨")
+                _safe_display("DisplayMessage", "Thinking...")
 
-                # Show a clean processing state instead of exposing the internal prompt.
-                _safe_display(
-                    'DisplayMessage',
-                    "Thinking..."
-                )
+                language_name = _language_name(query_language)
 
                 enhanced_prompt = f"""
         You are JARVIS, a polished desktop AI assistant.
 
         Answer the user's query directly, accurately, and conversationally.
+
+        Language behavior:
+        - The user's detected speech language is: {language_name}.
+        - Respond in the same language as the user.
+        - For Hindi, use natural contemporary Indian Hindi suitable for an Indian speaker.
+        - Do not produce awkward literal translations from English.
+        - Keep standard technical terms, product names, programming identifiers,
+          acronyms, and commonly used English technical words in English when
+          that is natural for an Indian Hindi speaker.
+        - For English, use natural conversational English.
+        - Do not switch languages unless the user does.
 
         Formatting rules:
         - Return clean Markdown.
@@ -257,90 +247,68 @@ def allCommands(message=1):
         JARVIS:
         """
 
-                response = gemini_client.ask_gemini(
-                    enhanced_prompt
-                )
-
+                response = gemini_client.ask_gemini(enhanced_prompt)
                 print("Gemini:", response)
 
                 try:
                     save_chat_turn(
                         query,
                         response,
-                        model="gemini-2.5-flash-lite"
+                        model="gemini-2.5-flash-lite",
+                        meta={"language": query_language or "en"},
                     )
                 except Exception as e:
-                    print(
-                        f"Database save error: {e}"
-                    )
+                    print(f"Database save error: {e}")
 
-                # Display the response through the rich frontend renderer.
-                # TTS speaks the exact same response.
-                _safe_display(
-                    'assistantResponse',
-                    response
-                )
+                _safe_display("assistantResponse", response)
 
-                # Keep the response visible while JARVIS is speaking.
-                # If the user says "Jarvis", speak() stops and returns True.
                 interrupted = speak(
                     response,
-                    display=False
+                    display=False,
+                    language=query_language,
                 )
 
                 if interrupted:
                     print(
                         "Speech was interrupted by the JARVIS hotword."
                     )
+                    _safe_display("ShowHood")
 
-                    # Return to the normal HUD before listening again.
-                    _safe_display(
-                        'ShowHood'
-                    )
-
-                    # Give the hotword process a moment to notice
-                    # mic_busy_event and release its Portaudio stream.
                     import time
                     time.sleep(0.15)
 
-                    print(
-                        "Listening for the next query..."
-                    )
-
+                    print("Listening for the next query...")
                     _safe_display(
-                        'DisplayMessage',
-                        "Listening for your next query..."
+                        "DisplayMessage",
+                        "Listening for your next query...",
                     )
 
-                    query = takecommand()
+                    query, query_language = takecommand(
+                        return_language=True
+                    )
 
                     if query == "":
                         speak(
-                            "I didn't catch that. Please try again."
+                            "I didn't catch that. Please try again.",
+                            language="en",
                         )
                         break
 
-                    # Continue this same allCommands call with the new query.
                     continue
 
-                print(
-                    "Speech completed normally."
-                )
+                print("Speech completed normally.")
 
-            # Non-interrupted commands end the current interaction.
             break
 
         except Exception as e:
-            print(
-                f"Error in allCommands: {e}"
-            )
+            print(f"Error in allCommands: {e}")
             speak(
-                "There was an error processing your command"
+                "There was an error processing your command",
+                language="en",
             )
             break
 
-    # Always return to the normal JARVIS HUD once the interaction ends.
-    _safe_display('ShowHood')
+    _safe_display("ShowHood")
 
 
 if __name__ == "__main__":
