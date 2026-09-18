@@ -5,6 +5,9 @@ import eel
 from engine.tts import speak as _tts_speak
 from engine.stt import detect_text_language, transcribe_audio
 from engine.llm_client import ask_llm
+from engine.conversation import get_conversation_manager
+
+conversation_manager = get_conversation_manager()
 
 # Shared process-safe audio control events.
 _interrupt_event = None
@@ -211,11 +214,25 @@ def allCommands(message=1):
                 _safe_display("DisplayMessage", "Thinking...")
 
                 language_name = _language_name(query_language)
+                previous_context = conversation_manager.build_context()
+
+                context_section = ""
+
+                if previous_context:
+                    context_section = f"""
+                        {previous_context}
+
+                        Use the previous conversation only when it is relevant to the
+                        current query. Resolve references such as "it", "that", "this",
+                        "the previous one", and follow-up questions using that context.
+                    """
 
                 enhanced_prompt = f"""
         You are JARVIS, a polished desktop AI assistant.
 
         Answer the user's query directly, accurately, and conversationally.
+        
+        {context_section}
 
         Language behavior:
         - The user's detected speech language is: {language_name}.
@@ -266,9 +283,15 @@ def allCommands(message=1):
                                 "omniroute",
                             ),
                         },
+                        conversation_id=conversation_manager.conversation_id,
                     )
                 except Exception as e:
                     print(f"Database save error: {e}")
+                    
+                conversation_manager.add_turn(
+                    query,
+                    response,
+                )
 
                 _safe_display("assistantResponse", response)
 
