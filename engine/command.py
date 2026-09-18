@@ -1,6 +1,7 @@
 import pyttsx3
 import speech_recognition as sr
 import eel
+import time
 
 # Shared process-safe audio control events.
 _interrupt_event = None
@@ -22,6 +23,7 @@ def configure_audio_control(
     _speaking_event = speaking_event
     _mic_busy_event = mic_busy_event
 
+
 def _safe_display(fn, *args, **kwargs):
     try:
         f = getattr(eel, fn, None)
@@ -32,28 +34,82 @@ def _safe_display(fn, *args, **kwargs):
         # swallow UI errors so speak/takecommand don't crash when UI isn't ready
         pass
 
+
 def speak(text, display=True):
+    """
+    Speak text through SAPI5 and allow the hotword process to interrupt it.
+
+    Returns:
+        True  -> speech was interrupted by the JARVIS hotword.
+        False -> speech completed normally.
+    """
     engine = pyttsx3.init('sapi5')
     voices = engine.getProperty('voices')
     engine.setProperty('voice', voices[0].id)
     engine.setProperty('rate', 174)
 
-    # Send assistant reply once to the UI (receiverText). Avoid duplicate DisplayMessage here.
+    # Clear any stale interruption request left by an earlier speech cycle.
+    if _interrupt_event is not None:
+        _interrupt_event.clear()
+
+    # Send assistant reply once to the UI (receiverText). Avoid duplicate
+    # DisplayMessage calls here.
     if display:
         _safe_display('receiverText', text)
 
-    # speak aloud
-    # Mark JARVIS as speaking so the hotword process knows
-    # that "Jarvis" should be treated as an interruption signal.
     if _speaking_event is not None:
         _speaking_event.set()
 
+    interrupted = False
+    loop_started = False
+
     try:
         engine.say(text)
-        engine.runAndWait()
+
+        # Use pyttsx3's external loop so this thread can check the shared
+        # interrupt event while SAPI5 is speaking. This keeps engine.stop()
+        # on the same thread as the engine itself.
+        engine.startLoop(False)
+        loop_started = True
+
+        while engine.isBusy():
+            if (
+                _interrupt_event is not None
+                and _interrupt_event.is_set()
+            ):
+                interrupted = True
+                print("JARVIS speech interrupted.")
+
+                try:
+                    engine.stop()
+                except Exception as e:
+                    print("TTS stop error:", e)
+
+                # Pump SAPI5 events until the stop has actually completed.
+                while engine.isBusy():
+                    engine.iterate()
+                    time.sleep(0.01)
+
+                break
+
+            engine.iterate()
+            time.sleep(0.01)
+
     finally:
+        if loop_started:
+            try:
+                engine.endLoop()
+            except Exception:
+                pass
+
         if _speaking_event is not None:
             _speaking_event.clear()
+
+        if _interrupt_event is not None:
+            _interrupt_event.clear()
+
+    return interrupted
+
 
 # @eel.expose #for main.js file to access functions of backend
 def takecommand():
@@ -109,6 +165,7 @@ def takecommand():
         if _mic_busy_event is not None:
             _mic_busy_event.clear()
 
+
 @eel.expose
 def allCommands(message=1):
     return_to_oval = True
@@ -120,24 +177,39 @@ def allCommands(message=1):
     else:
         query = message
         _safe_display('senderText', query)
+
     try:
         if query == "":
             speak("I didn't catch that. Please try again.")
+            _safe_display('ShowHood')
             return
-        
+
         if "open" in query:
             from engine.features import openCommand
             openCommand(query)
-        
+
         elif "youtube" in query:
             from engine.features import PlayYoutube
-            PlayYoutube(query) 
-        
-        elif "send message" in query or "phone call" in query or "video call" in query:
-            from engine.features import findContact, whatsApp, makeCall, sendMessage
+            PlayYoutube(query)
+
+        elif (
+            "send message" in query
+            or "phone call" in query
+            or "video call" in query
+        ):
+            from engine.features import (
+                findContact,
+                whatsApp,
+                makeCall,
+                sendMessage,
+            )
+
             contact_no, name = findContact(query)
-            if (contact_no != 0):
-                speak("Sir, Which mode you would like to use WhatsApp or Mobile ?")
+
+            if contact_no != 0:
+                speak(
+                    "Sir, Which mode you would like to use WhatsApp or Mobile ?"
+                )
                 preference = takecommand()
                 print(preference)
 
@@ -146,23 +218,33 @@ def allCommands(message=1):
                     speak("What message to send, Sir?")
                     message = takecommand()
                     sendMessage(message, contact_no, name)
+
                 elif "phone call" in query:
                     makeCall(name, contact_no)
+
                 else:
                     speak("Please try again")
+
             elif "WhatsApp" in preference:
-                message=""
+                message = ""
+
                 if "send message" in query:
                     message = 'message'
                     speak("What message to send, Sir?")
-                    query=takecommand()
-                
+                    query = takecommand()
+
                 elif "phone call" in query:
                     message = 'call'
+
                 else:
                     message = 'video call'
 
-                whatsApp(contact_no, query, message, name)
+                whatsApp(
+                    contact_no,
+                    query,
+                    message,
+                    name
+                )
 
         else:
             from engine.gemini_client import gemini_client
@@ -212,27 +294,32 @@ def allCommands(message=1):
                 print(f"Database save error: {e}")
 
             # Display the response through the rich frontend renderer.
-            # TTS still speaks the exact same response, but receiverText()
-            # does not receive a second duplicate copy.
+            # TTS speaks the exact same response.
             _safe_display(
                 'assistantResponse',
                 response
             )
 
-            # Return to the main JARVIS HUD immediately.
-            # Do this BEFORE TTS because speak() blocks while
-            # pyttsx3.runAndWait() is speaking the response.
-          # Keep the response on the SiriWave screen.
-            return_to_oval = False
-
-            speak(
+            # Keep the response visible while JARVIS is speaking.
+            # After speech finishes OR is interrupted, return to the
+            # normal JARVIS Oval HUD.
+            interrupted = speak(
                 response,
                 display=False
             )
-        
+
+            if interrupted:
+                print("Speech was interrupted by the JARVIS hotword.")
+            else:
+                print("Speech completed normally.")
+
     except Exception as e:
         print(f"Error in allCommands: {e}")
         speak("There was an error processing your command")
-    
+
     if return_to_oval:
         _safe_display('ShowHood')
+
+
+if __name__ == "__main__":
+    pass
