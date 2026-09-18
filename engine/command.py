@@ -1,7 +1,7 @@
-import pyttsx3
 import speech_recognition as sr
 import eel
-import time
+
+from engine.tts import speak as _tts_speak
 
 # Shared process-safe audio control events.
 _interrupt_event = None
@@ -37,78 +37,24 @@ def _safe_display(fn, *args, **kwargs):
 
 def speak(text, display=True):
     """
-    Speak text through SAPI5 and allow the hotword process to interrupt it.
+    Speak text through the configured TTS engine and allow the hotword
+    process to interrupt it.
 
     Returns:
         True  -> speech was interrupted by the JARVIS hotword.
         False -> speech completed normally.
     """
-    engine = pyttsx3.init('sapi5')
-    voices = engine.getProperty('voices')
-    engine.setProperty('voice', voices[0].id)
-    engine.setProperty('rate', 174)
-
-    # Clear any stale interruption request left by an earlier speech cycle.
-    if _interrupt_event is not None:
-        _interrupt_event.clear()
-
-    # Send assistant reply once to the UI (receiverText). Avoid duplicate
-    # DisplayMessage calls here.
     if display:
-        _safe_display('receiverText', text)
+        _safe_display(
+            'receiverText',
+            text
+        )
 
-    if _speaking_event is not None:
-        _speaking_event.set()
-
-    interrupted = False
-    loop_started = False
-
-    try:
-        engine.say(text)
-
-        # Use pyttsx3's external loop so this thread can check the shared
-        # interrupt event while SAPI5 is speaking. This keeps engine.stop()
-        # on the same thread as the engine itself.
-        engine.startLoop(False)
-        loop_started = True
-
-        while engine.isBusy():
-            if (
-                _interrupt_event is not None
-                and _interrupt_event.is_set()
-            ):
-                interrupted = True
-                print("JARVIS speech interrupted.")
-
-                try:
-                    engine.stop()
-                except Exception as e:
-                    print("TTS stop error:", e)
-
-                # Pump SAPI5 events until the stop has actually completed.
-                while engine.isBusy():
-                    engine.iterate()
-                    time.sleep(0.01)
-
-                break
-
-            engine.iterate()
-            time.sleep(0.01)
-
-    finally:
-        if loop_started:
-            try:
-                engine.endLoop()
-            except Exception:
-                pass
-
-        if _speaking_event is not None:
-            _speaking_event.clear()
-
-        if _interrupt_event is not None:
-            _interrupt_event.clear()
-
-    return interrupted
+    return _tts_speak(
+        text,
+        interrupt_event=_interrupt_event,
+        speaking_event=_speaking_event,
+    )
 
 
 def takecommand():
@@ -182,11 +128,16 @@ def allCommands(message=1):
     # requiring another hotword activation.
     while True:
         if query:
-            _safe_display('senderText', query)
+            _safe_display(
+                'senderText',
+                query
+            )
 
         try:
             if query == "":
-                speak("I didn't catch that. Please try again.")
+                speak(
+                    "I didn't catch that. Please try again."
+                )
                 break
 
             if "open" in query:
@@ -209,7 +160,9 @@ def allCommands(message=1):
                     sendMessage,
                 )
 
-                contact_no, name = findContact(query)
+                contact_no, name = findContact(
+                    query
+                )
 
                 if contact_no != 0:
                     speak(
@@ -219,23 +172,39 @@ def allCommands(message=1):
                     print(preference)
 
                 if "mobile" in preference:
-                    if "send message" in query or "send sms" in query:
-                        speak("What message to send, Sir?")
+                    if (
+                        "send message" in query
+                        or "send sms" in query
+                    ):
+                        speak(
+                            "What message to send, Sir?"
+                        )
                         message = takecommand()
-                        sendMessage(message, contact_no, name)
+                        sendMessage(
+                            message,
+                            contact_no,
+                            name
+                        )
 
                     elif "phone call" in query:
-                        makeCall(name, contact_no)
+                        makeCall(
+                            name,
+                            contact_no
+                        )
 
                     else:
-                        speak("Please try again")
+                        speak(
+                            "Please try again"
+                        )
 
                 elif "WhatsApp" in preference:
                     message = ""
 
                     if "send message" in query:
                         message = 'message'
-                        speak("What message to send, Sir?")
+                        speak(
+                            "What message to send, Sir?"
+                        )
                         query = takecommand()
 
                     elif "phone call" in query:
@@ -258,7 +227,10 @@ def allCommands(message=1):
                 print("🤖 Sending to Gemini... ✨")
 
                 # Show a clean processing state instead of exposing the internal prompt.
-                _safe_display('DisplayMessage', "Thinking...")
+                _safe_display(
+                    'DisplayMessage',
+                    "Thinking..."
+                )
 
                 enhanced_prompt = f"""
         You are JARVIS, a polished desktop AI assistant.
@@ -285,7 +257,9 @@ def allCommands(message=1):
         JARVIS:
         """
 
-                response = gemini_client.ask_gemini(enhanced_prompt)
+                response = gemini_client.ask_gemini(
+                    enhanced_prompt
+                )
 
                 print("Gemini:", response)
 
@@ -296,7 +270,9 @@ def allCommands(message=1):
                         model="gemini-2.5-flash-lite"
                     )
                 except Exception as e:
-                    print(f"Database save error: {e}")
+                    print(
+                        f"Database save error: {e}"
+                    )
 
                 # Display the response through the rich frontend renderer.
                 # TTS speaks the exact same response.
@@ -318,13 +294,19 @@ def allCommands(message=1):
                     )
 
                     # Return to the normal HUD before listening again.
-                    _safe_display('ShowHood')
+                    _safe_display(
+                        'ShowHood'
+                    )
 
                     # Give the hotword process a moment to notice
                     # mic_busy_event and release its Portaudio stream.
+                    import time
                     time.sleep(0.15)
 
-                    print("Listening for the next query...")
+                    print(
+                        "Listening for the next query..."
+                    )
+
                     _safe_display(
                         'DisplayMessage',
                         "Listening for your next query..."
@@ -341,14 +323,20 @@ def allCommands(message=1):
                     # Continue this same allCommands call with the new query.
                     continue
 
-                print("Speech completed normally.")
+                print(
+                    "Speech completed normally."
+                )
 
             # Non-interrupted commands end the current interaction.
             break
 
         except Exception as e:
-            print(f"Error in allCommands: {e}")
-            speak("There was an error processing your command")
+            print(
+                f"Error in allCommands: {e}"
+            )
+            speak(
+                "There was an error processing your command"
+            )
             break
 
     # Always return to the normal JARVIS HUD once the interaction ends.
