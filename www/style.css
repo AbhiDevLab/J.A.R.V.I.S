@@ -1209,3 +1209,45 @@ svg {
     }
 
 }
+
+/* =========================================================
+   SIRIWAVE RESPONSE VIEW
+   ========================================================= */
+
+#SiriWave .hood-response-shell {
+    width: min(820px, 88vw);
+    margin: 0 auto;
+}
+
+#SiriWave .hood-response-card {
+    width: 100%;
+    max-height: min(62vh, 520px);
+}
+
+#SiriWave .hood-response-card .jarvis-response-body {
+    max-height: min(42vh, 340px);
+    overflow-y: auto;
+}
+
+#SiriWave .hood-response-refresh {
+    animation:
+        hoodResponseIn
+        0.42s
+        cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (max-width: 700px) {
+
+    #SiriWave .hood-response-shell {
+        width: 92vw;
+    }
+
+    #SiriWave .hood-response-card {
+        max-height: 65vh;
+    }
+
+    #SiriWave .hood-response-card
+    .jarvis-response-body {
+        max-height: 45vh;
+    }
+}

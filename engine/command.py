@@ -52,7 +52,7 @@ def takecommand():
 
 @eel.expose
 def allCommands(message=1):
-    hud_already_shown = False
+    return_to_oval = True
 
     if message == 1:
         query = takecommand()
@@ -163,9 +163,8 @@ def allCommands(message=1):
             # Return to the main JARVIS HUD immediately.
             # Do this BEFORE TTS because speak() blocks while
             # pyttsx3.runAndWait() is speaking the response.
-            _safe_display('ShowHood')
-
-            hud_already_shown = True
+          # Keep the response on the SiriWave screen.
+            return_to_oval = False
 
             speak(
                 response,
@@ -176,5 +175,5 @@ def allCommands(message=1):
         print(f"Error in allCommands: {e}")
         speak("There was an error processing your command")
     
-    if not hud_already_shown:
+    if return_to_oval:
         _safe_display('ShowHood')

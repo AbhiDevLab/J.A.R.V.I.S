@@ -14,7 +14,7 @@ $(document).ready(function () {
         // Restart textillate if initialized
         try {
           $(".siri-message").textillate("start");
-        } catch (e) {}
+        } catch (e) { }
       }
     } catch (e) {
       console.error("DisplayMessage error:", e);
@@ -72,7 +72,7 @@ $(document).ready(function () {
             3000
           );
         }
-      } catch (e) {}
+      } catch (e) { }
     } catch (e) {
       console.error("senderText error:", e);
     }
@@ -409,6 +409,11 @@ $(document).ready(function () {
           // Reveal the HUD response panel
           hoodResponse.hidden = false;
 
+          
+          // Replace the SiriWave processing view with the response view.
+          $("#SiriWave .siri-message").hide();
+          $("#SiriWave #siri-container").hide();
+
 
           // Restart response animation
           if (hoodCard) {
@@ -508,8 +513,8 @@ $(document).ready(function () {
             <div class="width-size">
               <div class="receiver_message">
                 ${$("<div>")
-                  .text(message)
-                  .html()}
+            .text(message)
+            .html()}
               </div>
             </div>
           </div>`;
@@ -542,7 +547,7 @@ $(document).ready(function () {
             $(".siri-message").textillate(
               "start"
             );
-          } catch (e) {}
+          } catch (e) { }
 
 
           const hood =
@@ -554,8 +559,8 @@ $(document).ready(function () {
             const t = $(
               `<div class="hood-transient receiver-transient">
                 ${$("<div>")
-                  .text(message)
-                  .html()}
+                .text(message)
+                .html()}
               </div>`
             );
 
@@ -573,7 +578,7 @@ $(document).ready(function () {
           }
         }
 
-      } catch (e) {}
+      } catch (e) { }
 
     } catch (e) {
       console.error(

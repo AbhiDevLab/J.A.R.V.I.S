@@ -1,4 +1,15 @@
-$(document).ready(function() {
+$(document).ready(function () {
+    function prepareSiriWave() {
+        $("#Oval").attr("hidden", true);
+        $("#SiriWave").attr("hidden", false);
+
+        // Hide previous response.
+        $("#HoodResponse").attr("hidden", true);
+
+        // Restore the processing UI.
+        $("#SiriWave .siri-message").show();
+        $("#SiriWave #siri-container").show();
+    }
 
     eel.init()()
 
@@ -41,10 +52,9 @@ $(document).ready(function() {
 
     // mic button click event
 
-    $("#MicBtn").click(function() {
+    $("#MicBtn").click(function () {
         eel.playAssistantSound()
-        $("#Oval").attr("hidden", true);
-        $("#SiriWave").attr("hidden", false);
+        prepareSiriWave();
         eel.allCommands()()
     });
 
@@ -53,8 +63,7 @@ $(document).ready(function() {
 
         if (e.key === 'j' && e.metaKey) {
             eel.playAssistantSound()
-            $("#Oval").attr("hidden", true);
-            $("#SiriWave").attr("hidden", false);
+            prepareSiriWave();
             eel.allCommands()()
         }
     }
@@ -62,8 +71,7 @@ $(document).ready(function() {
 
     function PlayAssistant(message) {
         if (message != "") {
-            $("#Oval").attr("hidden", true);
-            $("#SiriWave").attr("hidden", false);
+            prepareSiriWave();
             eel.allCommands(message);
             $("#chatbox").val("");
             $("#MicBtn").attr("hidden", false);
@@ -81,17 +89,17 @@ $(document).ready(function() {
         }
     }
 
-    $("#chatbox").keyup(function() {
+    $("#chatbox").keyup(function () {
         let message = $("#chatbox").val();
         ShowHideButton(message);
     });
 
-    $("#SendBtn").click(function() {
+    $("#SendBtn").click(function () {
         let message = $("#chatbox").val();
         PlayAssistant(message);
     });
 
-    $("#chatbox").keypress(function(e) {
+    $("#chatbox").keypress(function (e) {
         key = e.which;
         if (key == 13) {
             let message = $("#chatbox").val()
