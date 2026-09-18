@@ -111,9 +111,7 @@ def speak(text, display=True):
     return interrupted
 
 
-# @eel.expose #for main.js file to access functions of backend
 def takecommand():
-
     r = sr.Recognizer()
 
     if _mic_busy_event is not None:
@@ -168,94 +166,101 @@ def takecommand():
 
 @eel.expose
 def allCommands(message=1):
-    return_to_oval = True
-
+    # Initial query comes either from the microphone or the text box.
     if message == 1:
         query = takecommand()
         print(f"Recognized query: {query}")
-        _safe_display('senderText', query)
     else:
         query = message
-        _safe_display('senderText', query)
 
-    try:
-        if query == "":
-            speak("I didn't catch that. Please try again.")
-            _safe_display('ShowHood')
-            return
+    # Phase 3 conversation loop:
+    #
+    # A normal command runs once and returns to the Oval HUD.
+    #
+    # If a Gemini response is interrupted by saying "Jarvis", the loop
+    # immediately listens for the next query and processes it without
+    # requiring another hotword activation.
+    while True:
+        if query:
+            _safe_display('senderText', query)
 
-        if "open" in query:
-            from engine.features import openCommand
-            openCommand(query)
+        try:
+            if query == "":
+                speak("I didn't catch that. Please try again.")
+                break
 
-        elif "youtube" in query:
-            from engine.features import PlayYoutube
-            PlayYoutube(query)
+            if "open" in query:
+                from engine.features import openCommand
+                openCommand(query)
 
-        elif (
-            "send message" in query
-            or "phone call" in query
-            or "video call" in query
-        ):
-            from engine.features import (
-                findContact,
-                whatsApp,
-                makeCall,
-                sendMessage,
-            )
+            elif "youtube" in query:
+                from engine.features import PlayYoutube
+                PlayYoutube(query)
 
-            contact_no, name = findContact(query)
-
-            if contact_no != 0:
-                speak(
-                    "Sir, Which mode you would like to use WhatsApp or Mobile ?"
-                )
-                preference = takecommand()
-                print(preference)
-
-            if "mobile" in preference:
-                if "send message" in query or "send sms" in query:
-                    speak("What message to send, Sir?")
-                    message = takecommand()
-                    sendMessage(message, contact_no, name)
-
-                elif "phone call" in query:
-                    makeCall(name, contact_no)
-
-                else:
-                    speak("Please try again")
-
-            elif "WhatsApp" in preference:
-                message = ""
-
-                if "send message" in query:
-                    message = 'message'
-                    speak("What message to send, Sir?")
-                    query = takecommand()
-
-                elif "phone call" in query:
-                    message = 'call'
-
-                else:
-                    message = 'video call'
-
-                whatsApp(
-                    contact_no,
-                    query,
-                    message,
-                    name
+            elif (
+                "send message" in query
+                or "phone call" in query
+                or "video call" in query
+            ):
+                from engine.features import (
+                    findContact,
+                    whatsApp,
+                    makeCall,
+                    sendMessage,
                 )
 
-        else:
-            from engine.gemini_client import gemini_client
-            from engine.mongo_store import save_chat_turn
+                contact_no, name = findContact(query)
 
-            print("🤖 Sending to Gemini... ✨")
+                if contact_no != 0:
+                    speak(
+                        "Sir, Which mode you would like to use WhatsApp or Mobile ?"
+                    )
+                    preference = takecommand()
+                    print(preference)
 
-            # Show a clean processing state instead of exposing the internal prompt.
-            _safe_display('DisplayMessage', "Thinking...")
+                if "mobile" in preference:
+                    if "send message" in query or "send sms" in query:
+                        speak("What message to send, Sir?")
+                        message = takecommand()
+                        sendMessage(message, contact_no, name)
 
-            enhanced_prompt = f"""
+                    elif "phone call" in query:
+                        makeCall(name, contact_no)
+
+                    else:
+                        speak("Please try again")
+
+                elif "WhatsApp" in preference:
+                    message = ""
+
+                    if "send message" in query:
+                        message = 'message'
+                        speak("What message to send, Sir?")
+                        query = takecommand()
+
+                    elif "phone call" in query:
+                        message = 'call'
+
+                    else:
+                        message = 'video call'
+
+                    whatsApp(
+                        contact_no,
+                        query,
+                        message,
+                        name
+                    )
+
+            else:
+                from engine.gemini_client import gemini_client
+                from engine.mongo_store import save_chat_turn
+
+                print("🤖 Sending to Gemini... ✨")
+
+                # Show a clean processing state instead of exposing the internal prompt.
+                _safe_display('DisplayMessage', "Thinking...")
+
+                enhanced_prompt = f"""
         You are JARVIS, a polished desktop AI assistant.
 
         Answer the user's query directly, accurately, and conversationally.
@@ -280,45 +285,74 @@ def allCommands(message=1):
         JARVIS:
         """
 
-            response = gemini_client.ask_gemini(enhanced_prompt)
+                response = gemini_client.ask_gemini(enhanced_prompt)
 
-            print("Gemini:", response)
+                print("Gemini:", response)
 
-            try:
-                save_chat_turn(
-                    query,
-                    response,
-                    model="gemini-2.5-flash-lite"
+                try:
+                    save_chat_turn(
+                        query,
+                        response,
+                        model="gemini-2.5-flash-lite"
+                    )
+                except Exception as e:
+                    print(f"Database save error: {e}")
+
+                # Display the response through the rich frontend renderer.
+                # TTS speaks the exact same response.
+                _safe_display(
+                    'assistantResponse',
+                    response
                 )
-            except Exception as e:
-                print(f"Database save error: {e}")
 
-            # Display the response through the rich frontend renderer.
-            # TTS speaks the exact same response.
-            _safe_display(
-                'assistantResponse',
-                response
-            )
+                # Keep the response visible while JARVIS is speaking.
+                # If the user says "Jarvis", speak() stops and returns True.
+                interrupted = speak(
+                    response,
+                    display=False
+                )
 
-            # Keep the response visible while JARVIS is speaking.
-            # After speech finishes OR is interrupted, return to the
-            # normal JARVIS Oval HUD.
-            interrupted = speak(
-                response,
-                display=False
-            )
+                if interrupted:
+                    print(
+                        "Speech was interrupted by the JARVIS hotword."
+                    )
 
-            if interrupted:
-                print("Speech was interrupted by the JARVIS hotword.")
-            else:
+                    # Return to the normal HUD before listening again.
+                    _safe_display('ShowHood')
+
+                    # Give the hotword process a moment to notice
+                    # mic_busy_event and release its Portaudio stream.
+                    time.sleep(0.15)
+
+                    print("Listening for the next query...")
+                    _safe_display(
+                        'DisplayMessage',
+                        "Listening for your next query..."
+                    )
+
+                    query = takecommand()
+
+                    if query == "":
+                        speak(
+                            "I didn't catch that. Please try again."
+                        )
+                        break
+
+                    # Continue this same allCommands call with the new query.
+                    continue
+
                 print("Speech completed normally.")
 
-    except Exception as e:
-        print(f"Error in allCommands: {e}")
-        speak("There was an error processing your command")
+            # Non-interrupted commands end the current interaction.
+            break
 
-    if return_to_oval:
-        _safe_display('ShowHood')
+        except Exception as e:
+            print(f"Error in allCommands: {e}")
+            speak("There was an error processing your command")
+            break
+
+    # Always return to the normal JARVIS HUD once the interaction ends.
+    _safe_display('ShowHood')
 
 
 if __name__ == "__main__":
