@@ -8,6 +8,128 @@ from engine.llm_client import ask_llm
 from engine.conversation import get_conversation_manager
 
 conversation_manager = get_conversation_manager()
+@eel.expose
+def getConversationHistory(limit=20):
+    """Return recent saved conversations for the history UI."""
+    try:
+        from engine.conversation import list_saved_conversations
+
+        return list_saved_conversations(limit)
+
+    except Exception as exc:
+        print(
+            f"Conversation history error: {exc}"
+        )
+        return []
+
+
+@eel.expose
+def loadConversation(conversation_id):
+    """
+    Load a saved conversation into the active JARVIS session.
+
+    Returns the complete saved conversation for the frontend
+    while ConversationManager keeps only recent turns for LLM context.
+    """
+    try:
+        from engine.conversation import (
+            load_conversation,
+            load_saved_conversation,
+        )
+
+        if not conversation_id:
+            return {
+                "success": False,
+                "conversation_id": "",
+                "messages": [],
+            }
+
+        loaded = load_conversation(
+            conversation_id
+        )
+
+        if not loaded:
+            return {
+                "success": False,
+                "conversation_id": conversation_id,
+                "messages": [],
+            }
+
+        turns = load_saved_conversation(
+            conversation_id
+        )
+
+        messages = []
+
+        for turn in turns:
+            user_text = turn.get(
+                "user_text",
+                "",
+            )
+
+            assistant_text = turn.get(
+                "assistant_text",
+                "",
+            )
+
+            if user_text:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": str(user_text),
+                    }
+                )
+
+            if assistant_text:
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": str(assistant_text),
+                    }
+                )
+
+        return {
+            "success": True,
+            "conversation_id": conversation_id,
+            "messages": messages,
+        }
+
+    except Exception as exc:
+        print(
+            f"Conversation load API error: {exc}"
+        )
+
+        return {
+            "success": False,
+            "conversation_id": conversation_id or "",
+            "messages": [],
+        }
+
+
+@eel.expose
+def startNewConversation():
+    """Start a completely new active JARVIS conversation."""
+    try:
+        conversation_id = (
+            conversation_manager.start_new_conversation()
+        )
+
+        return {
+            "success": True,
+            "conversation_id": conversation_id,
+            "messages": [],
+        }
+
+    except Exception as exc:
+        print(
+            f"New conversation error: {exc}"
+        )
+
+        return {
+            "success": False,
+            "conversation_id": "",
+            "messages": [],
+        }
 
 # Shared process-safe audio control events.
 _interrupt_event = None
