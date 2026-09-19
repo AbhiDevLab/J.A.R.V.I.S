@@ -117,7 +117,7 @@ $(document).ready(function () {
             return;
         }
 
-        j
+        document.body.classList.add("history-open");
 
         sidebar.classList.add("is-open");
         backdrop.classList.add("is-visible");
@@ -535,8 +535,8 @@ $("#ConversationSendBtn").on(
     function () {
         const message =
             $("#ConversationChatbox")
-            .val()
-            .trim();
+                .val()
+                .trim();
 
         if (!message) {
             return;
@@ -560,8 +560,8 @@ $("#ConversationChatbox").on(
 
         const message =
             $(this)
-            .val()
-            .trim();
+                .val()
+                .trim();
 
         if (!message) {
             return;

@@ -2642,3 +2642,7 @@ body.history-open #ChatBtn {
 #ConversationTextInput {
     margin: 0;
 }
+
+.history-peek {
+    display: none !important;
+}

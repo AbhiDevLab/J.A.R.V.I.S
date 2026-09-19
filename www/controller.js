@@ -1408,3 +1408,6 @@ $(document).ready(function () {
 
   refreshConversationHistory();
 });
+
+window.refreshConversationHistory =
+  refreshConversationHistory;
