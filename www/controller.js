@@ -1,4 +1,5 @@
 $(document).ready(function () {
+  let activeConversationId = null;
 
   function escapeHtml(value) {
     return $("<div>")
@@ -113,11 +114,21 @@ $(document).ready(function () {
           ></i>
         `;
 
+        if (
+          conversation.conversation_id ===
+          activeConversationId
+        ) {
+          item.classList.add(
+            "active"
+          );
+        }
+
         item.addEventListener(
           "click",
           () => {
             loadConversationFromHistory(
-              conversation.conversation_id
+              conversation.conversation_id,
+              title
             );
           }
         );
@@ -167,7 +178,8 @@ $(document).ready(function () {
 
 
   async function loadConversationFromHistory(
-    conversationId
+    conversationId,
+    title
   ) {
     if (!conversationId) {
       return;
@@ -190,22 +202,27 @@ $(document).ready(function () {
         return;
       }
 
+      activeConversationId =
+        conversationId;
+
       renderLoadedConversation(
         result.messages || []
       );
 
-      const offcanvasElement =
-        document.getElementById(
-          "offcanvasScrolling"
+      if (
+        typeof window.openConversationViewer ===
+        "function"
+      ) {
+        window.openConversationViewer(
+          title || "Conversation"
         );
+      }
 
-      const offcanvasInstance =
-        bootstrap.Offcanvas.getInstance(
-          offcanvasElement
-        );
-
-      if (offcanvasInstance) {
-        offcanvasInstance.hide();
+      if (
+        typeof window.closeHistorySidebar ===
+        "function"
+      ) {
+        window.closeHistorySidebar();
       }
 
     } catch (e) {
@@ -220,49 +237,64 @@ $(document).ready(function () {
   function renderLoadedConversation(
     messages
   ) {
-    const chatBox =
+    const targets = [
       document.getElementById(
         "chat-canvas-body"
-      );
+      ),
 
-    if (!chatBox) {
-      return;
-    }
+      document.getElementById(
+        "ConversationViewerBody"
+      ),
+    ].filter(Boolean);
 
-    chatBox.innerHTML = "";
-
-    messages.forEach(
-      (message) => {
-        if (
-          message.role === "user"
-        ) {
-          appendHistoricalUserMessage(
-            message.content
-          );
-        } else if (
-          message.role === "assistant"
-        ) {
-          appendHistoricalAssistantMessage(
-            message.content
-          );
-        }
+    targets.forEach(
+      (target) => {
+        target.innerHTML = "";
       }
     );
 
-    chatBox.scrollTop =
-      chatBox.scrollHeight;
+    messages.forEach(
+      (message) => {
+
+        targets.forEach(
+          (target) => {
+
+            if (
+              message.role === "user"
+            ) {
+              appendHistoricalUserMessage(
+                message.content,
+                target
+              );
+
+            } else if (
+              message.role === "assistant"
+            ) {
+              appendHistoricalAssistantMessage(
+                message.content,
+                target
+              );
+            }
+
+          }
+        );
+      }
+    );
+
+    targets.forEach(
+      (target) => {
+        target.scrollTop =
+          target.scrollHeight;
+      }
+    );
   }
 
 
   function appendHistoricalUserMessage(
-    message
+    message,
+    target
   ) {
-    const chatBox =
-      document.getElementById(
-        "chat-canvas-body"
-      );
-
-    if (!chatBox) {
+    if (!target) {
       return;
     }
 
@@ -287,21 +319,25 @@ $(document).ready(function () {
     bubble.textContent =
       String(message || "");
 
-    width.appendChild(bubble);
-    row.appendChild(width);
-    chatBox.appendChild(row);
+    width.appendChild(
+      bubble
+    );
+
+    row.appendChild(
+      width
+    );
+
+    target.appendChild(
+      row
+    );
   }
 
 
   function appendHistoricalAssistantMessage(
-    message
+    message,
+    target
   ) {
-    const chatBox =
-      document.getElementById(
-        "chat-canvas-body"
-      );
-
-    if (!chatBox) {
+    if (!target) {
       return;
     }
 
@@ -317,11 +353,33 @@ $(document).ready(function () {
     width.className =
       "width-size";
 
+    width.style.maxWidth =
+      "100%";
+
     const card =
       document.createElement("article");
 
     card.className =
       "jarvis-response-card";
+
+    const header =
+      document.createElement("div");
+
+    header.className =
+      "jarvis-response-header";
+
+    header.innerHTML = `
+      <div class="jarvis-response-brand">
+        <div class="jarvis-response-icon">
+          <i class="bi bi-stars"></i>
+        </div>
+
+        <div class="jarvis-response-title">
+          <strong>JARVIS</strong>
+          <span>AI RESPONSE</span>
+        </div>
+      </div>
+    `;
 
     const body =
       document.createElement("div");
@@ -333,6 +391,7 @@ $(document).ready(function () {
       window.marked &&
       window.DOMPurify
     ) {
+
       const html =
         window.marked.parse(
           String(message || ""),
@@ -346,34 +405,35 @@ $(document).ready(function () {
         window.DOMPurify.sanitize(
           html
         );
+
     } else {
       body.textContent =
         String(message || "");
     }
 
-    card.innerHTML = `
-      <div class="jarvis-response-header">
-        <div class="jarvis-response-brand">
-          <div class="jarvis-response-icon">
-            <i class="bi bi-stars"></i>
-          </div>
+    card.appendChild(
+      header
+    );
 
-          <div class="jarvis-response-title">
-            <strong>JARVIS</strong>
-            <span>AI RESPONSE</span>
-          </div>
-        </div>
-      </div>
-    `;
+    card.appendChild(
+      body
+    );
 
-    card.appendChild(body);
+    width.appendChild(
+      card
+    );
 
-    width.appendChild(card);
-    row.appendChild(width);
+    row.appendChild(
+      width
+    );
 
-    chatBox.appendChild(row);
+    target.appendChild(
+      row
+    );
 
-    enhanceCodeBlocks(body);
+    enhanceCodeBlocks(
+      body
+    );
   }
 
   $("#NewConversationBtn").on(
@@ -401,6 +461,25 @@ $(document).ready(function () {
 
         if (chatBox) {
           chatBox.innerHTML = "";
+        }
+
+        const viewerBody =
+          document.getElementById(
+            "ConversationViewerBody"
+          );
+
+        if (viewerBody) {
+          viewerBody.innerHTML = "";
+        }
+
+        activeConversationId =
+          result.conversation_id;
+
+        if (
+          typeof window.closeConversationViewer ===
+          "function"
+        ) {
+          window.closeConversationViewer();
         }
 
         await refreshConversationHistory();

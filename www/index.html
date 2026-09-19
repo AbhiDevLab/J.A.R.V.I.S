@@ -435,6 +435,15 @@
       </section>
 
       <section id="Oval" class="mb-4" hidden>
+        <button
+          id="ChatBtn"
+          class="jarvis-history-toggle"
+          type="button"
+          aria-label="Open chat history"
+          title="Chat history"
+        >
+          <i class="bi bi-chat-dots"></i>
+        </button>
         <div class="row">
           <div class="col-md-1"></div>
           <div class="col-md-10">
@@ -475,15 +484,6 @@
                   <button id="MicBtn" class="glow-on-hover">
                     <i class="bi bi-mic"></i>
                   </button>
-                  <button
-                    id="ChatBtn"
-                    class="glow-on-hover"
-                    data-bs-toggle="offcanvas"
-                    data-bs-target="#offcanvasScrolling"
-                    aria-controls="offcanvasScrolling"
-                  >
-                    <i class="bi bi-chat-dots"></i>
-                  </button>
                   <button id="SettingsBtn" class="glow-on-hover">
                     <i class="bi bi-gear"></i>
                   </button>
@@ -493,6 +493,35 @@
           </div>
           <div class="col-md-1"></div>
         </div>
+        <!-- Conversation transcript viewer -->
+        <section
+          id="ConversationViewer"
+          class="conversation-viewer"
+          aria-hidden="true"
+        >
+          <header class="conversation-viewer-header">
+            <div class="conversation-viewer-heading">
+              <span>CONVERSATION</span>
+
+              <h2 id="ConversationViewerTitle">Selected conversation</h2>
+            </div>
+
+            <button
+              id="ConversationViewerClose"
+              class="conversation-viewer-close"
+              type="button"
+              aria-label="Close conversation"
+              title="Close conversation"
+            >
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </header>
+
+          <div
+            id="ConversationViewerBody"
+            class="conversation-viewer-body"
+          ></div>
+        </section>
       </section>
 
       <section id="SiriWave" class="mb-4" hidden>
@@ -565,54 +594,60 @@
       </section>
     </div>
 
-    <div
-      class="offcanvas offcanvas-start chat-canvas"
-      data-bs-scroll="true"
-      data-bs-backdrop="true"
-      data-bs-keyboard="true"
-      tabindex="-1"
-      id="offcanvasScrolling"
-      aria-labelledby="offcanvasScrollingLabel"
-    >
-      <div class="offcanvas-header">
-        <div>
-          <h5 class="offcanvas-title text-white" id="offcanvasScrollingLabel">
-            Chats
-          </h5>
+    <div id="HistoryBackdrop" class="history-backdrop" aria-hidden="true"></div>
 
-          <span class="jarvis-history-subtitle"> Conversation history </span>
+    <aside
+      id="HistorySidebar"
+      class="history-sidebar"
+      aria-hidden="true"
+      aria-label="Conversation history"
+    >
+      <div class="history-header">
+        <div class="history-heading">
+          <span class="history-eyebrow"> J.A.R.V.I.S </span>
+
+          <h2>Conversations</h2>
+
+          <span class="jarvis-history-subtitle">
+            Your conversation history
+          </span>
         </div>
 
         <button
+          id="HistoryCloseBtn"
+          class="history-close-btn"
           type="button"
-          class="btn-close text-reset"
-          data-bs-dismiss="offcanvas"
-          aria-label="close"
-        ></button>
+          aria-label="Close chat history"
+          title="Close"
+        >
+          <i class="bi bi-x-lg"></i>
+        </button>
       </div>
 
       <div class="history-toolbar">
         <button type="button" id="NewConversationBtn" class="history-new-btn">
           <i class="bi bi-plus-lg"></i>
-          New Conversation
+          <span>New Conversation</span>
         </button>
+      </div>
+
+      <div class="history-section-label">
+        <span>Recent conversations</span>
       </div>
 
       <div id="conversation-history" class="conversation-history">
         <div class="history-loading">
           <i class="bi bi-arrow-repeat"></i>
-          Loading conversations...
+          <span>Loading conversations...</span>
         </div>
       </div>
 
-      <div class="current-chat-divider">
-        <span>Current Chat</span>
+      <div class="history-current-divider">
+        <span>Current session</span>
       </div>
 
-      <div id="chat-canvas-body" class="offcanvas-body chat-messages">
-        <!-- Current conversation messages -->
-      </div>
-    </div>
+      <div id="chat-canvas-body" class="chat-messages"></div>
+    </aside>
 
     <!--Jquery  -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>

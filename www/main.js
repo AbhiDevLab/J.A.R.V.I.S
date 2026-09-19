@@ -1,4 +1,5 @@
 $(document).ready(function () {
+
     function prepareSiriWave() {
         $("#Oval").attr("hidden", true);
         $("#SiriWave").attr("hidden", false);
@@ -11,13 +12,242 @@ $(document).ready(function () {
         $("#SiriWave #siri-container").show();
     }
 
+
     function ShowSiriWave() {
         prepareSiriWave();
     }
 
     eel.expose(ShowSiriWave);
 
-    eel.init()()
+
+    /* =========================================================
+       HISTORY SIDEBAR
+       ========================================================= */
+
+    function openHistorySidebar() {
+        const sidebar =
+            document.getElementById("HistorySidebar");
+
+        const backdrop =
+            document.getElementById("HistoryBackdrop");
+
+        if (!sidebar || !backdrop) {
+            return;
+        }
+
+        document.body.classList.add("history-open");
+
+        sidebar.classList.add("is-open");
+        backdrop.classList.add("is-visible");
+
+        sidebar.setAttribute(
+            "aria-hidden",
+            "false"
+        );
+
+        backdrop.setAttribute(
+            "aria-hidden",
+            "false"
+        );
+
+        if (
+            typeof window.refreshConversationHistory ===
+            "function"
+        ) {
+            window.refreshConversationHistory();
+        }
+    }
+
+
+    function closeHistorySidebar() {
+        const sidebar =
+            document.getElementById("HistorySidebar");
+
+        const backdrop =
+            document.getElementById("HistoryBackdrop");
+
+        if (!sidebar || !backdrop) {
+            return;
+        }
+
+        document.body.classList.remove(
+            "history-open"
+        );
+
+        sidebar.classList.remove("is-open");
+        backdrop.classList.remove("is-visible");
+
+        sidebar.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+
+        backdrop.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+    }
+
+
+    function toggleHistorySidebar() {
+        const sidebar =
+            document.getElementById("HistorySidebar");
+
+        if (
+            sidebar &&
+            sidebar.classList.contains("is-open")
+        ) {
+            closeHistorySidebar();
+        } else {
+            openHistorySidebar();
+        }
+    }
+
+
+    window.openHistorySidebar =
+        openHistorySidebar;
+
+    window.closeHistorySidebar =
+        closeHistorySidebar;
+
+
+    $("#ChatBtn").on(
+        "click",
+        function () {
+            toggleHistorySidebar();
+        }
+    );
+
+
+    $("#HistoryCloseBtn").on(
+        "click",
+        function () {
+            closeHistorySidebar();
+        }
+    );
+
+
+    $("#HistoryBackdrop").on(
+        "click",
+        function () {
+            closeHistorySidebar();
+        }
+    );
+
+
+    /* =========================================================
+       CONVERSATION VIEWER
+       ========================================================= */
+
+    function openConversationViewer(title) {
+        const viewer =
+            document.getElementById(
+                "ConversationViewer"
+            );
+
+        const titleElement =
+            document.getElementById(
+                "ConversationViewerTitle"
+            );
+
+        if (!viewer) {
+            return;
+        }
+
+        if (titleElement) {
+            titleElement.textContent =
+                title || "Conversation";
+        }
+
+        viewer.classList.add(
+            "is-visible"
+        );
+
+        viewer.setAttribute(
+            "aria-hidden",
+            "false"
+        );
+    }
+
+
+    function closeConversationViewer() {
+        const viewer =
+            document.getElementById(
+                "ConversationViewer"
+            );
+
+        if (!viewer) {
+            return;
+        }
+
+        viewer.classList.remove(
+            "is-visible"
+        );
+
+        viewer.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+    }
+
+
+    window.openConversationViewer =
+        openConversationViewer;
+
+    window.closeConversationViewer =
+        closeConversationViewer;
+
+
+    $("#ConversationViewerClose").on(
+        "click",
+        function () {
+            closeConversationViewer();
+        }
+    );
+
+
+    $(document).on(
+        "keydown",
+        function (event) {
+
+            if (event.key !== "Escape") {
+                return;
+            }
+
+            const sidebar =
+                document.getElementById(
+                    "HistorySidebar"
+                );
+
+            if (
+                sidebar &&
+                sidebar.classList.contains("is-open")
+            ) {
+                closeHistorySidebar();
+                return;
+            }
+
+            const viewer =
+                document.getElementById(
+                    "ConversationViewer"
+                );
+
+            if (
+                viewer &&
+                viewer.classList.contains("is-visible")
+            ) {
+                closeConversationViewer();
+            }
+        }
+    );
+
+
+    /* =========================================================
+       SIRI WAVE
+       ========================================================= */
+
+    eel.init()();
+
 
     $(".text").textillate({
         loop: true,
@@ -30,10 +260,12 @@ $(document).ready(function () {
         },
     });
 
-    // Siri Configuration
 
     var siriWave = new SiriWave({
-        container: document.getElementById("siri-container"),
+        container:
+            document.getElementById(
+                "siri-container"
+            ),
         width: 800,
         height: 200,
         style: "ios9",
@@ -42,8 +274,8 @@ $(document).ready(function () {
         autostart: true,
     });
 
-    // Siri Wave Animation
-    $('.siri-message').textillate({
+
+    $(".siri-message").textillate({
         loop: true,
         sync: true,
         in: {
@@ -56,61 +288,132 @@ $(document).ready(function () {
         },
     });
 
-    // mic button click event
 
-    $("#MicBtn").click(function () {
-        eel.playAssistantSound()
-        prepareSiriWave();
-        eel.allCommands()()
-    });
+    /* =========================================================
+       MICROPHONE
+       ========================================================= */
+
+    $("#MicBtn").click(
+        function () {
+            eel.playAssistantSound();
+
+            prepareSiriWave();
+
+            eel.allCommands()();
+        }
+    );
+
 
     function doc_keyUp(e) {
-        //this would test for whichever key is 40 (down arrow) and the ctrl key at the same time
 
-        if (e.key === 'j' && e.metaKey) {
-            eel.playAssistantSound()
+        if (
+            e.key === "j" &&
+            e.metaKey
+        ) {
+            eel.playAssistantSound();
+
             prepareSiriWave();
-            eel.allCommands()()
+
+            eel.allCommands()();
         }
     }
-    document.addEventListener('keyup', doc_keyUp, false);
+
+    document.addEventListener(
+        "keyup",
+        doc_keyUp,
+        false
+    );
+
+
+    /* =========================================================
+       TEXT INPUT
+       ========================================================= */
 
     function PlayAssistant(message) {
+
         if (message != "") {
+
             prepareSiriWave();
+
             eel.allCommands(message);
+
             $("#chatbox").val("");
-            $("#MicBtn").attr("hidden", false);
-            $("#SendBtn").attr("hidden", true);
+
+            $("#MicBtn").attr(
+                "hidden",
+                false
+            );
+
+            $("#SendBtn").attr(
+                "hidden",
+                true
+            );
         }
     }
+
 
     function ShowHideButton(message) {
+
         if (message.length == 0) {
-            $("#MicBtn").attr("hidden", false);
-            $("#SendBtn").attr("hidden", true);
+
+            $("#MicBtn").attr(
+                "hidden",
+                false
+            );
+
+            $("#SendBtn").attr(
+                "hidden",
+                true
+            );
+
         } else {
-            $("#MicBtn").attr("hidden", true);
-            $("#SendBtn").attr("hidden", false);
+
+            $("#MicBtn").attr(
+                "hidden",
+                true
+            );
+
+            $("#SendBtn").attr(
+                "hidden",
+                false
+            );
         }
     }
 
-    $("#chatbox").keyup(function () {
-        let message = $("#chatbox").val();
-        ShowHideButton(message);
-    });
 
-    $("#SendBtn").click(function () {
-        let message = $("#chatbox").val();
-        PlayAssistant(message);
-    });
+    $("#chatbox").keyup(
+        function () {
+            let message =
+                $("#chatbox").val();
 
-    $("#chatbox").keypress(function (e) {
-        key = e.which;
-        if (key == 13) {
-            let message = $("#chatbox").val()
+            ShowHideButton(message);
+        }
+    );
+
+
+    $("#SendBtn").click(
+        function () {
+            let message =
+                $("#chatbox").val();
+
             PlayAssistant(message);
         }
-    });
+    );
+
+
+    $("#chatbox").keypress(
+        function (e) {
+
+            let key = e.which;
+
+            if (key == 13) {
+
+                let message =
+                    $("#chatbox").val();
+
+                PlayAssistant(message);
+            }
+        }
+    );
 
 });

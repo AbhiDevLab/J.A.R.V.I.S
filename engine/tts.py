@@ -36,6 +36,140 @@ def _env_flag(name: str, default: bool = True) -> bool:
 def _contains_devanagari(text: str) -> bool:
     return any("\u0900" <= char <= "\u097F" for char in text)
 
+def _prepare_speech_text(text: str) -> str:
+    """
+    Convert Markdown/technical formatting into natural speech.
+
+    The frontend keeps the original Markdown response for rich rendering.
+    TTS receives a cleaned speech-only representation.
+    """
+    import re
+    from html import unescape
+
+    if not text:
+        return ""
+
+    spoken = str(text)
+
+    # Decode any HTML entities first.
+    spoken = unescape(spoken)
+
+    # Replace fenced code blocks with a short spoken cue.
+    # Code remains fully visible in the frontend.
+    spoken = re.sub(
+        r"```[\s\S]*?```",
+        " I've included a code example in the response. ",
+        spoken,
+    )
+
+    # Markdown images -> alt text.
+    spoken = re.sub(
+        r"!\[([^\]]*)\]\([^)]+\)",
+        r"\1",
+        spoken,
+    )
+
+    # Markdown links -> visible text only.
+    spoken = re.sub(
+        r"\[([^\]]+)\]\([^)]+\)",
+        r"\1",
+        spoken,
+    )
+
+    # Remove Markdown heading markers.
+    spoken = re.sub(
+        r"^\s{0,3}#{1,6}\s*",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Remove blockquote markers.
+    spoken = re.sub(
+        r"^\s*>\s?",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Remove unordered-list markers.
+    spoken = re.sub(
+        r"^\s*[-*+]\s+",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Remove numbered-list markers.
+    spoken = re.sub(
+        r"^\s*\d+[.)]\s+",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Remove horizontal-rule-only lines.
+    spoken = re.sub(
+        r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Remove bold / italic / strike Markdown markers.
+    spoken = spoken.replace("**", "")
+    spoken = spoken.replace("__", "")
+    spoken = spoken.replace("~~", "")
+
+    # Remove inline-code markers.
+    spoken = spoken.replace("`", "")
+
+    # Convert common technical symbols to speech-friendly wording.
+    spoken = spoken.replace("→", " to ")
+    spoken = spoken.replace("⇒", " implies ")
+    spoken = spoken.replace("↔", " is equivalent to ")
+    spoken = spoken.replace("•", " ")
+    spoken = spoken.replace("×", " times ")
+
+    # Remove Markdown table separator lines.
+    spoken = re.sub(
+        r"^\s*\|?(?:\s*:?-+:?\s*\|)+\s*$",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Turn table cell separators into pauses.
+    spoken = spoken.replace("|", ". ")
+
+    # Remove simple HTML tags.
+    spoken = re.sub(
+        r"<[^>]+>",
+        " ",
+        spoken,
+    )
+
+    # Remove escaped Markdown punctuation.
+    spoken = re.sub(
+        r"\\([\\`*_\[\]{}()#+.!>|~-])",
+        r"\1",
+        spoken,
+    )
+
+    # Collapse whitespace.
+    spoken = re.sub(
+        r"[ \t]+",
+        " ",
+        spoken,
+    )
+
+    spoken = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        spoken,
+    )
+
+    return spoken.strip()
 
 def _select_voice(text: str, language: str | None = None) -> str:
     detected = (language or "").strip().lower()
@@ -59,6 +193,128 @@ def _select_voice(text: str, language: str | None = None) -> str:
 
     return os.getenv("JARVIS_TTS_EN_VOICE", "en-US-GuyNeural")
 
+def _prepare_speech_text(text: str) -> str:
+    """
+    Convert Markdown/technical formatting into natural speech text.
+
+    The visual frontend keeps the original Markdown response.
+    TTS receives only the cleaned spoken representation.
+    """
+    import re
+
+    if not text:
+        return ""
+
+    spoken = str(text)
+
+    # Remove fenced code blocks completely.
+    # Code is useful visually but usually should not be spoken.
+    spoken = re.sub(
+        r"```[\s\S]*?```",
+        " ",
+        spoken,
+    )
+
+    # Images -> alt text.
+    spoken = re.sub(
+        r"!\[([^\]]*)\]\([^)]+\)",
+        r"\1",
+        spoken,
+    )
+
+    # Links -> visible link text.
+    spoken = re.sub(
+        r"\[([^\]]+)\]\([^)]+\)",
+        r"\1",
+        spoken,
+    )
+
+    # Headings: remove Markdown heading markers.
+    spoken = re.sub(
+        r"^\s{0,3}#{1,6}\s*",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Blockquotes.
+    spoken = re.sub(
+        r"^\s*>\s?",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Bullet points.
+    spoken = re.sub(
+        r"^\s*[-*+]\s+",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Numbered lists.
+    spoken = re.sub(
+        r"^\s*\d+[.)]\s+",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Horizontal rules.
+    spoken = re.sub(
+        r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    # Bold / italic / strike markers.
+    spoken = spoken.replace("**", "")
+    spoken = spoken.replace("__", "")
+    spoken = spoken.replace("~~", "")
+
+    # Inline code.
+    spoken = spoken.replace("`", "")
+
+    # Table separators/pipes.
+    spoken = re.sub(
+        r"^\s*\|?(?:\s*:?-+:?\s*\|)+\s*$",
+        "",
+        spoken,
+        flags=re.MULTILINE,
+    )
+
+    spoken = spoken.replace("|", ". ")
+
+    # Remove simple HTML tags if any appear.
+    spoken = re.sub(
+        r"<[^>]+>",
+        " ",
+        spoken,
+    )
+
+    # Markdown escape characters.
+    spoken = re.sub(
+        r"\\([\\`*_\[\]{}()#+.!>|~-])",
+        r"\1",
+        spoken,
+    )
+
+    # Collapse excessive whitespace.
+    spoken = re.sub(
+        r"[ \t]+",
+        " ",
+        spoken,
+    )
+
+    spoken = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        spoken,
+    )
+
+    return spoken.strip()
 
 def _safe_unlink(path: Path) -> None:
     for _ in range(5):
@@ -199,20 +455,46 @@ def _speak_with_sapi(text: str, interrupt_event=None, speaking_event=None) -> bo
     return interrupted
 
 
-def speak(text: str, language: str | None = None, interrupt_event=None, speaking_event=None) -> bool:
+def speak(
+    text: str,
+    language: str | None = None,
+    interrupt_event=None,
+    speaking_event=None,
+) -> bool:
     if not text:
         return False
 
-    if not _env_flag("JARVIS_TTS_ENABLED", True):
-        return _speak_with_sapi(text, interrupt_event, speaking_event)
+    spoken_text = _prepare_speech_text(text)
+
+    if not spoken_text:
+        return False
+
+    if not _env_flag(
+        "JARVIS_TTS_ENABLED",
+        True,
+    ):
+        return _speak_with_sapi(
+            spoken_text,
+            interrupt_event,
+            speaking_event,
+        )
 
     try:
         return _speak_with_edge(
-            text,
+            spoken_text,
             language=language,
             interrupt_event=interrupt_event,
             speaking_event=speaking_event,
         )
+
     except Exception as e:
-        print("Neural TTS unavailable; falling back to SAPI5:", e)
-        return _speak_with_sapi(text, interrupt_event, speaking_event)
+        print(
+            "Neural TTS unavailable; "
+            f"falling back to SAPI5: {e}"
+        )
+
+        return _speak_with_sapi(
+            spoken_text,
+            interrupt_event,
+            speaking_event,
+        )
