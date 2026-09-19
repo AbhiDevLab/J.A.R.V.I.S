@@ -1,4 +1,425 @@
 $(document).ready(function () {
+
+  function escapeHtml(value) {
+    return $("<div>")
+      .text(String(value ?? ""))
+      .html();
+  }
+
+
+  function formatHistoryDate(timestamp) {
+    if (!timestamp) {
+      return "";
+    }
+
+    try {
+      const date = new Date(timestamp);
+
+      if (Number.isNaN(date.getTime())) {
+        return "";
+      }
+
+      return date.toLocaleDateString(
+        undefined,
+        {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }
+      );
+    } catch (e) {
+      return "";
+    }
+  }
+
+
+  function renderConversationHistory(conversations) {
+    const history =
+      document.getElementById(
+        "conversation-history"
+      );
+
+    if (!history) {
+      return;
+    }
+
+    history.innerHTML = "";
+
+    if (
+      !conversations ||
+      conversations.length === 0
+    ) {
+      history.innerHTML = `
+        <div class="history-empty">
+          <i class="bi bi-chat-square-text"></i>
+
+          <strong>No saved conversations</strong>
+
+          <span>
+            Your conversations will appear here.
+          </span>
+        </div>
+      `;
+
+      return;
+    }
+
+    conversations.forEach(
+      (conversation) => {
+        const item =
+          document.createElement("button");
+
+        item.type = "button";
+
+        item.className =
+          "conversation-history-item";
+
+        item.dataset.conversationId =
+          conversation.conversation_id;
+
+        const title =
+          conversation.title ||
+          "Untitled conversation";
+
+        const date =
+          formatHistoryDate(
+            conversation.updated_at ||
+            conversation.created_at
+          );
+
+        const count =
+          Number(
+            conversation.message_count || 0
+          );
+
+        item.innerHTML = `
+          <span class="conversation-history-icon">
+            <i class="bi bi-chat-left-text"></i>
+          </span>
+
+          <span class="conversation-history-content">
+            <strong>
+              ${escapeHtml(title)}
+            </strong>
+
+            <span>
+              ${count} message${count === 1 ? "" : "s"}
+              ${date ? ` · ${escapeHtml(date)}` : ""}
+            </span>
+          </span>
+
+          <i
+            class="bi bi-chevron-right conversation-history-arrow"
+          ></i>
+        `;
+
+        item.addEventListener(
+          "click",
+          () => {
+            loadConversationFromHistory(
+              conversation.conversation_id
+            );
+          }
+        );
+
+        history.appendChild(item);
+      }
+    );
+  }
+
+
+  async function refreshConversationHistory() {
+    try {
+      const result =
+        await eel.getConversationHistory(20)();
+
+      renderConversationHistory(
+        result || []
+      );
+    } catch (e) {
+      console.error(
+        "Conversation history loading failed:",
+        e
+      );
+
+      const history =
+        document.getElementById(
+          "conversation-history"
+        );
+
+      if (history) {
+        history.innerHTML = `
+          <div class="history-empty history-error">
+            <i class="bi bi-exclamation-triangle"></i>
+
+            <strong>
+              Unable to load history
+            </strong>
+
+            <span>
+              Check MongoDB connection.
+            </span>
+          </div>
+        `;
+      }
+    }
+  }
+
+
+  async function loadConversationFromHistory(
+    conversationId
+  ) {
+    if (!conversationId) {
+      return;
+    }
+
+    try {
+      const result =
+        await eel.loadConversation(
+          conversationId
+        )();
+
+      if (
+        !result ||
+        !result.success
+      ) {
+        console.error(
+          "Failed to load conversation."
+        );
+
+        return;
+      }
+
+      renderLoadedConversation(
+        result.messages || []
+      );
+
+      const offcanvasElement =
+        document.getElementById(
+          "offcanvasScrolling"
+        );
+
+      const offcanvasInstance =
+        bootstrap.Offcanvas.getInstance(
+          offcanvasElement
+        );
+
+      if (offcanvasInstance) {
+        offcanvasInstance.hide();
+      }
+
+    } catch (e) {
+      console.error(
+        "Conversation loading failed:",
+        e
+      );
+    }
+  }
+
+
+  function renderLoadedConversation(
+    messages
+  ) {
+    const chatBox =
+      document.getElementById(
+        "chat-canvas-body"
+      );
+
+    if (!chatBox) {
+      return;
+    }
+
+    chatBox.innerHTML = "";
+
+    messages.forEach(
+      (message) => {
+        if (
+          message.role === "user"
+        ) {
+          appendHistoricalUserMessage(
+            message.content
+          );
+        } else if (
+          message.role === "assistant"
+        ) {
+          appendHistoricalAssistantMessage(
+            message.content
+          );
+        }
+      }
+    );
+
+    chatBox.scrollTop =
+      chatBox.scrollHeight;
+  }
+
+
+  function appendHistoricalUserMessage(
+    message
+  ) {
+    const chatBox =
+      document.getElementById(
+        "chat-canvas-body"
+      );
+
+    if (!chatBox) {
+      return;
+    }
+
+    const row =
+      document.createElement("div");
+
+    row.className =
+      "row justify-content-end mb-4";
+
+    const width =
+      document.createElement("div");
+
+    width.className =
+      "width-size";
+
+    const bubble =
+      document.createElement("div");
+
+    bubble.className =
+      "sender_message";
+
+    bubble.textContent =
+      String(message || "");
+
+    width.appendChild(bubble);
+    row.appendChild(width);
+    chatBox.appendChild(row);
+  }
+
+
+  function appendHistoricalAssistantMessage(
+    message
+  ) {
+    const chatBox =
+      document.getElementById(
+        "chat-canvas-body"
+      );
+
+    if (!chatBox) {
+      return;
+    }
+
+    const row =
+      document.createElement("div");
+
+    row.className =
+      "row justify-content-start mb-4";
+
+    const width =
+      document.createElement("div");
+
+    width.className =
+      "width-size";
+
+    const card =
+      document.createElement("article");
+
+    card.className =
+      "jarvis-response-card";
+
+    const body =
+      document.createElement("div");
+
+    body.className =
+      "jarvis-response-body";
+
+    if (
+      window.marked &&
+      window.DOMPurify
+    ) {
+      const html =
+        window.marked.parse(
+          String(message || ""),
+          {
+            gfm: true,
+            breaks: true,
+          }
+        );
+
+      body.innerHTML =
+        window.DOMPurify.sanitize(
+          html
+        );
+    } else {
+      body.textContent =
+        String(message || "");
+    }
+
+    card.innerHTML = `
+      <div class="jarvis-response-header">
+        <div class="jarvis-response-brand">
+          <div class="jarvis-response-icon">
+            <i class="bi bi-stars"></i>
+          </div>
+
+          <div class="jarvis-response-title">
+            <strong>JARVIS</strong>
+            <span>AI RESPONSE</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    card.appendChild(body);
+
+    width.appendChild(card);
+    row.appendChild(width);
+
+    chatBox.appendChild(row);
+
+    enhanceCodeBlocks(body);
+  }
+
+  $("#NewConversationBtn").on(
+    "click",
+    async function () {
+      try {
+        const result =
+          await eel.startNewConversation()();
+
+        if (
+          !result ||
+          !result.success
+        ) {
+          console.error(
+            "Unable to create new conversation."
+          );
+
+          return;
+        }
+
+        const chatBox =
+          document.getElementById(
+            "chat-canvas-body"
+          );
+
+        if (chatBox) {
+          chatBox.innerHTML = "";
+        }
+
+        await refreshConversationHistory();
+
+        console.log(
+          "New conversation:",
+          result.conversation_id
+        );
+
+      } catch (e) {
+        console.error(
+          "New conversation error:",
+          e
+        );
+      }
+    }
+  );
+
+
   // Define handlers first, then expose them to Python via eel.expose.
   // This ensures the visual hood updates (big-screen) as well as chat (offcanvas).
 
@@ -409,7 +830,7 @@ $(document).ready(function () {
           // Reveal the HUD response panel
           hoodResponse.hidden = false;
 
-          
+
           // Replace the SiriWave processing view with the response view.
           $("#SiriWave .siri-message").hide();
           $("#SiriWave #siri-container").hide();
@@ -910,4 +1331,5 @@ $(document).ready(function () {
     hideTryAgain
   );
 
+  refreshConversationHistory();
 });

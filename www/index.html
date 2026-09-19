@@ -557,8 +557,6 @@
                       </div>
                     </article>
                   </div>
-
-                  
                 </div>
               </div>
             </div>
@@ -576,9 +574,14 @@
       aria-labelledby="offcanvasScrollingLabel"
     >
       <div class="offcanvas-header">
-        <h5 class="offcanvas-title text-white" id="offcanvasScrollingLabel">
-          Chats
-        </h5>
+        <div>
+          <h5 class="offcanvas-title text-white" id="offcanvasScrollingLabel">
+            Chats
+          </h5>
+
+          <span class="jarvis-history-subtitle"> Conversation history </span>
+        </div>
+
         <button
           type="button"
           class="btn-close text-reset"
@@ -586,8 +589,27 @@
           aria-label="close"
         ></button>
       </div>
-      <div id="chat-canvas-body" class="offcanvas-body">
-        <!-- Chatting Code Here -->
+
+      <div class="history-toolbar">
+        <button type="button" id="NewConversationBtn" class="history-new-btn">
+          <i class="bi bi-plus-lg"></i>
+          New Conversation
+        </button>
+      </div>
+
+      <div id="conversation-history" class="conversation-history">
+        <div class="history-loading">
+          <i class="bi bi-arrow-repeat"></i>
+          Loading conversations...
+        </div>
+      </div>
+
+      <div class="current-chat-divider">
+        <span>Current Chat</span>
+      </div>
+
+      <div id="chat-canvas-body" class="offcanvas-body chat-messages">
+        <!-- Current conversation messages -->
       </div>
     </div>
 
