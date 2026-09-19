@@ -1,5 +1,87 @@
 $(document).ready(function () {
 
+    const chatButton =
+        document.getElementById("ChatBtn");
+
+    const historyPeek =
+        document.getElementById("HistoryPeek");
+
+    let historyPeekTimer = null;
+
+
+    function showHistoryPeek() {
+        if (
+            !historyPeek ||
+            document.body.classList.contains(
+                "history-open"
+            )
+        ) {
+            return;
+        }
+
+        clearTimeout(historyPeekTimer);
+
+        historyPeek.classList.add(
+            "is-visible"
+        );
+
+        historyPeek.setAttribute(
+            "aria-hidden",
+            "false"
+        );
+    }
+
+
+    function hideHistoryPeekDelayed() {
+        clearTimeout(historyPeekTimer);
+
+        historyPeekTimer = setTimeout(
+            () => {
+                if (
+                    historyPeek &&
+                    !historyPeek.matches(":hover") &&
+                    !chatButton.matches(":hover")
+                ) {
+                    historyPeek.classList.remove(
+                        "is-visible"
+                    );
+
+                    historyPeek.setAttribute(
+                        "aria-hidden",
+                        "true"
+                    );
+                }
+            },
+            180
+        );
+    }
+
+
+    if (chatButton) {
+        chatButton.addEventListener(
+            "mouseenter",
+            showHistoryPeek
+        );
+
+        chatButton.addEventListener(
+            "mouseleave",
+            hideHistoryPeekDelayed
+        );
+    }
+
+
+    if (historyPeek) {
+        historyPeek.addEventListener(
+            "mouseenter",
+            showHistoryPeek
+        );
+
+        historyPeek.addEventListener(
+            "mouseleave",
+            hideHistoryPeekDelayed
+        );
+    }
+
     function prepareSiriWave() {
         $("#Oval").attr("hidden", true);
         $("#SiriWave").attr("hidden", false);
@@ -35,7 +117,7 @@ $(document).ready(function () {
             return;
         }
 
-        document.body.classList.add("history-open");
+        j
 
         sidebar.classList.add("is-open");
         backdrop.classList.add("is-visible");
@@ -159,6 +241,15 @@ $(document).ready(function () {
                 title || "Conversation";
         }
 
+        const oval =
+            document.getElementById("Oval");
+
+        if (oval) {
+            oval.classList.add(
+                "conversation-mode"
+            );
+        }
+
         viewer.classList.add(
             "is-visible"
         );
@@ -178,6 +269,15 @@ $(document).ready(function () {
 
         if (!viewer) {
             return;
+        }
+
+        const oval =
+            document.getElementById("Oval");
+
+        if (oval) {
+            oval.classList.remove(
+                "conversation-mode"
+            );
         }
 
         viewer.classList.remove(
@@ -417,3 +517,58 @@ $(document).ready(function () {
     );
 
 });
+
+$("#ConversationMicBtn").on(
+    "click",
+    function () {
+        eel.playAssistantSound();
+
+        prepareSiriWave();
+
+        eel.allCommands()();
+    }
+);
+
+
+$("#ConversationSendBtn").on(
+    "click",
+    function () {
+        const message =
+            $("#ConversationChatbox")
+            .val()
+            .trim();
+
+        if (!message) {
+            return;
+        }
+
+        eel.allCommands(message);
+
+        $("#ConversationChatbox")
+            .val("");
+    }
+);
+
+
+$("#ConversationChatbox").on(
+    "keypress",
+    function (event) {
+
+        if (event.which !== 13) {
+            return;
+        }
+
+        const message =
+            $(this)
+            .val()
+            .trim();
+
+        if (!message) {
+            return;
+        }
+
+        eel.allCommands(message);
+
+        $(this).val("");
+    }
+);

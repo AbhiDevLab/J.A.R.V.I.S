@@ -239,10 +239,6 @@ $(document).ready(function () {
   ) {
     const targets = [
       document.getElementById(
-        "chat-canvas-body"
-      ),
-
-      document.getElementById(
         "ConversationViewerBody"
       ),
     ].filter(Boolean);

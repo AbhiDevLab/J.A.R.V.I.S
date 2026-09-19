@@ -444,6 +444,16 @@
         >
           <i class="bi bi-chat-dots"></i>
         </button>
+        <div id="HistoryPeek" class="history-peek" aria-hidden="true">
+          <div class="history-peek-header">
+            <span>J.A.R.V.I.S</span>
+            <strong>Recent chats</strong>
+          </div>
+
+          <div id="HistoryPeekList" class="history-peek-list"></div>
+
+          <div class="history-peek-hint">Click to open full history</div>
+        </div>
         <div class="row">
           <div class="col-md-1"></div>
           <div class="col-md-10">
@@ -521,6 +531,37 @@
             id="ConversationViewerBody"
             class="conversation-viewer-body"
           ></div>
+          <div class="conversation-input-dock">
+            <div id="ConversationTextInput" class="d-flex">
+              <input
+                type="text"
+                class="input-field"
+                id="ConversationChatbox"
+                placeholder="Continue this conversation..."
+                autocomplete="off"
+              />
+
+              <button id="ConversationSendBtn" class="glow-on-hover" hidden>
+                <i class="bi bi-send"></i>
+              </button>
+
+              <button
+                id="ConversationMicBtn"
+                class="glow-on-hover"
+                type="button"
+              >
+                <i class="bi bi-mic"></i>
+              </button>
+
+              <button
+                id="ConversationSettingsBtn"
+                class="glow-on-hover"
+                type="button"
+              >
+                <i class="bi bi-gear"></i>
+              </button>
+            </div>
+          </div>
         </section>
       </section>
 
@@ -645,8 +686,6 @@
       <div class="history-current-divider">
         <span>Current session</span>
       </div>
-
-      <div id="chat-canvas-body" class="chat-messages"></div>
     </aside>
 
     <!--Jquery  -->
