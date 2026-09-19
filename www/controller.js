@@ -34,10 +34,91 @@ $(document).ready(function () {
   }
 
 
+  function renderHistoryPeek(conversations) {
+    const preview =
+      document.getElementById(
+        "HistoryPeekList"
+      );
+
+    if (!preview) {
+      return;
+    }
+
+    preview.innerHTML = "";
+
+    if (
+      !conversations ||
+      conversations.length === 0
+    ) {
+      preview.innerHTML = `
+      <div class="history-peek-empty">
+        <i class="bi bi-chat-square-text"></i>
+        <span>No recent conversations</span>
+      </div>
+    `;
+
+      return;
+    }
+
+    const recent =
+      conversations.slice(0, 4);
+
+    recent.forEach(
+      (conversation) => {
+        const title =
+          conversation.title ||
+          "Untitled conversation";
+
+        const count =
+          Number(
+            conversation.message_count || 0
+          );
+
+        const date =
+          formatHistoryDate(
+            conversation.updated_at ||
+            conversation.created_at
+          );
+
+        const item =
+          document.createElement("div");
+
+        item.className =
+          "history-peek-item";
+
+        item.innerHTML = `
+        <span class="history-peek-item-icon">
+          <i class="bi bi-chat-left-text"></i>
+        </span>
+
+        <span class="history-peek-item-content">
+          <strong>
+            ${escapeHtml(title)}
+          </strong>
+
+          <span>
+            ${count} message${count === 1 ? "" : "s"}
+            ${date ? ` · ${escapeHtml(date)}` : ""}
+          </span>
+        </span>
+
+        <i class="bi bi-chevron-right history-peek-item-arrow"></i>
+      `;
+
+        preview.appendChild(item);
+      }
+    );
+  }
+
   function renderConversationHistory(conversations) {
     const history =
       document.getElementById(
         "conversation-history"
+      );
+
+    const preview =
+      document.getElementById(
+        "HistoryPeekList"
       );
 
     if (!history) {
@@ -45,6 +126,10 @@ $(document).ready(function () {
     }
 
     history.innerHTML = "";
+    
+    renderHistoryPeek(
+      conversations
+    );
 
     if (
       !conversations ||
@@ -179,7 +264,7 @@ $(document).ready(function () {
   window.refreshConversationHistory =
     refreshConversationHistory;
 
-    
+
   async function loadConversationFromHistory(
     conversationId,
     title
@@ -497,26 +582,301 @@ $(document).ready(function () {
     }
   );
 
+  function showThinkingIndicator() {
+    try {
+      const chatBox =
+        getActiveConversationTarget();
 
+      if (
+        !chatBox ||
+        chatBox.id !== "ConversationViewerBody"
+      ) {
+        return;
+      }
+
+      // Remove an existing indicator first.
+      const existing =
+        document.getElementById(
+          "jarvis-thinking-row"
+        );
+
+      if (existing) {
+        existing.remove();
+      }
+
+      const row =
+        document.createElement("div");
+
+      row.id =
+        "jarvis-thinking-row";
+
+      row.className =
+        "row justify-content-start mb-4";
+
+      const width =
+        document.createElement("div");
+
+      width.className =
+        "width-size";
+
+      width.style.maxWidth =
+        "100%";
+
+      const card =
+        document.createElement("article");
+
+      card.className =
+        "jarvis-response-card jarvis-thinking-card";
+
+      card.innerHTML = `
+      <div class="jarvis-response-header">
+        <div class="jarvis-response-brand">
+
+          <div class="jarvis-response-icon">
+            <i class="bi bi-stars"></i>
+          </div>
+
+          <div class="jarvis-response-title">
+            <strong>JARVIS</strong>
+            <span>AI RESPONSE</span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="jarvis-response-body">
+        <div
+          class="jarvis-thinking-indicator"
+          aria-live="polite"
+        >
+          <span>Thinking</span>
+
+          <span class="jarvis-thinking-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </div>
+      </div>
+    `;
+
+      width.appendChild(card);
+      row.appendChild(width);
+      chatBox.appendChild(row);
+
+      chatBox.scrollTop =
+        chatBox.scrollHeight;
+
+    } catch (e) {
+      console.error(
+        "showThinkingIndicator error:",
+        e
+      );
+    }
+  }
+
+
+  function hideThinkingIndicator() {
+    try {
+      const indicator =
+        document.getElementById(
+          "jarvis-thinking-row"
+        );
+
+      if (indicator) {
+        indicator.remove();
+      }
+    } catch (e) {
+      console.error(
+        "hideThinkingIndicator error:",
+        e
+      );
+    }
+  }
+
+  function showConversationVoiceStatus(
+    message
+  ) {
+    try {
+      const viewer =
+        document.getElementById(
+          "ConversationViewer"
+        );
+
+      const chatBox =
+        document.getElementById(
+          "ConversationViewerBody"
+        );
+
+      if (
+        !viewer ||
+        !chatBox ||
+        !viewer.classList.contains(
+          "is-visible"
+        )
+      ) {
+        return;
+      }
+
+      let status =
+        document.getElementById(
+          "conversation-voice-status"
+        );
+
+      if (!status) {
+        status =
+          document.createElement("div");
+
+        status.id =
+          "conversation-voice-status";
+
+        status.className =
+          "conversation-voice-status";
+
+        chatBox.appendChild(status);
+      }
+
+      status.innerHTML = `
+      <div class="conversation-voice-status-icon">
+        <i class="bi bi-mic-fill"></i>
+      </div>
+
+      <div class="conversation-voice-status-content">
+        <strong>JARVIS</strong>
+        <span></span>
+      </div>
+
+      <div class="conversation-voice-status-wave">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    `;
+
+      const textElement =
+        status.querySelector(
+          ".conversation-voice-status-content span"
+        );
+
+      if (textElement) {
+        textElement.textContent =
+          message || "Listening...";
+      }
+
+      status.classList.add(
+        "is-visible"
+      );
+
+      chatBox.scrollTop =
+        chatBox.scrollHeight;
+
+    } catch (e) {
+      console.error(
+        "showConversationVoiceStatus error:",
+        e
+      );
+    }
+  }
+
+
+  function hideConversationVoiceStatus() {
+    try {
+      const status =
+        document.getElementById(
+          "conversation-voice-status"
+        );
+
+      if (status) {
+        status.remove();
+      }
+    } catch (e) {
+      console.error(
+        "hideConversationVoiceStatus error:",
+        e
+      );
+    }
+  }
+
+
+  window.showConversationVoiceStatus =
+    showConversationVoiceStatus;
+
+  window.hideConversationVoiceStatus =
+    hideConversationVoiceStatus;
   // Define handlers first, then expose them to Python via eel.expose.
   // This ensures the visual hood updates (big-screen) as well as chat (offcanvas).
 
   function DisplayMessage(message) {
     try {
-      // Update big hood message area (visible on main screen)
-      if (message && message.trim() !== "") {
-        $("#WishMessage").text(message);
-
-        // Also update siri-message container so textillate/animation picks it up
-        $(".siri-message").text(message);
-
-        // Restart textillate if initialized
-        try {
-          $(".siri-message").textillate("start");
-        } catch (e) { }
+      if (!message || message.trim() === "") {
+        return;
       }
+
+      const status =
+        String(message).trim();
+
+      const conversationViewer =
+        document.getElementById(
+          "ConversationViewer"
+        );
+
+      const inConversation =
+        conversationViewer &&
+        conversationViewer.classList.contains(
+          "is-visible"
+        );
+
+      if (inConversation) {
+        if (
+          status === "Listening ...." ||
+          status === "Listening..."
+        ) {
+          showConversationVoiceStatus(
+            "Listening..."
+          );
+          hideThinkingIndicator();
+        } else if (
+          status === "Recognizing ...." ||
+          status === "Recognizing..."
+        ) {
+          showConversationVoiceStatus(
+            "Recognizing..."
+          );
+          hideThinkingIndicator();
+        } else if (
+          status === "Thinking..."
+        ) {
+          hideConversationVoiceStatus();
+          showThinkingIndicator();
+        }
+      }
+
+      // Conversation viewer has its own processing state.
+      if (
+        status === "Thinking..." &&
+        document
+          .getElementById("ConversationViewer")
+          ?.classList.contains("is-visible")
+      ) {
+        showThinkingIndicator();
+      } else {
+        hideThinkingIndicator();
+      }
+
+      // Keep the normal JARVIS HUD behavior unchanged.
+      $("#WishMessage").text(status);
+
+      $(".siri-message").text(status);
+
+      try {
+        $(".siri-message").textillate("start");
+      } catch (e) { }
     } catch (e) {
-      console.error("DisplayMessage error:", e);
+      console.error(
+        "DisplayMessage error:",
+        e
+      );
     }
   }
 
@@ -526,21 +886,85 @@ $(document).ready(function () {
 
   function ShowHood() {
     try {
-      $("#Oval").attr("hidden", false);
-      $("#SiriWave").attr("hidden", true);
+      const conversationViewer =
+        document.getElementById(
+          "ConversationViewer"
+        );
+
+      // When a saved conversation is active, keep the
+      // conversation workspace visible. Do not restore
+      // the Oval HUD after every response.
+      if (
+        conversationViewer &&
+        conversationViewer.classList.contains(
+          "is-visible"
+        )
+      ) {
+        $("#Oval").attr(
+          "hidden",
+          true
+        );
+
+        $("#SiriWave").attr(
+          "hidden",
+          true
+        );
+
+        return;
+      }
+
+      // Normal JARVIS mode.
+      $("#Oval").attr(
+        "hidden",
+        false
+      );
+
+      $("#SiriWave").attr(
+        "hidden",
+        true
+      );
+
     } catch (e) {
-      console.error("ShowHood error:", e);
+      console.error(
+        "ShowHood error:",
+        e
+      );
     }
   }
 
   eel.expose(ShowHood);
 
+  function getActiveConversationTarget() {
+    const viewer =
+      document.getElementById(
+        "ConversationViewer"
+      );
+
+    if (
+      viewer &&
+      viewer.classList.contains(
+        "is-visible"
+      )
+    ) {
+      return document.getElementById(
+        "ConversationViewerBody"
+      );
+    }
+
+    return document.getElementById(
+      "chat-canvas-body"
+    );
+  }
 
   function senderText(message) {
     try {
-      var chatBox = document.getElementById("chat-canvas-body");
+      var chatBox = getActiveConversationTarget();
 
-      if (message && message.trim() !== "") {
+      if (
+        chatBox &&
+        message &&
+        message.trim() !== ""
+      ) {
         chatBox.innerHTML += `
           <div class="row justify-content-end mb-4">
             <div class="width-size">
@@ -683,12 +1107,13 @@ $(document).ready(function () {
 
   function assistantResponse(message) {
     try {
-      const chatBox =
-        document.getElementById(
-          "chat-canvas-body"
-        );
+      hideConversationVoiceStatus();
+      hideThinkingIndicator();
 
-      if (!chatBox || !message) {
+      const chatBox =
+        getActiveConversationTarget();
+
+      if (!message) {
         return;
       }
 
@@ -709,6 +1134,18 @@ $(document).ready(function () {
 
       width.className =
         "width-size";
+
+      if (
+        chatBox &&
+        chatBox.id ===
+        "ConversationViewerBody"
+      ) {
+        width.style.width =
+          "100%";
+
+        width.style.maxWidth =
+          "100%";
+      }
 
 
       const card =
@@ -810,8 +1247,12 @@ $(document).ready(function () {
       width.appendChild(card);
       row.appendChild(width);
 
-      chatBox.appendChild(row);
+      if (chatBox) {
+        chatBox.appendChild(row);
 
+        chatBox.scrollTop =
+          chatBox.scrollHeight;
+      }
 
       // Chat response copy button
       const copyButton =
@@ -842,10 +1283,6 @@ $(document).ready(function () {
 
 
       enhanceCodeBlocks(body);
-
-
-      chatBox.scrollTop =
-        chatBox.scrollHeight;
 
 
       // =========================================================
@@ -997,12 +1434,11 @@ $(document).ready(function () {
 
   function receiverText(message) {
     try {
-      var chatBox =
-        document.getElementById(
-          "chat-canvas-body"
-        );
+      const chatBox =
+        getActiveConversationTarget();
 
       if (
+        chatBox &&
         message &&
         message.trim() !== ""
       ) {

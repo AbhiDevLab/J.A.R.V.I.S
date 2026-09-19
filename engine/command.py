@@ -7,7 +7,57 @@ from engine.stt import detect_text_language, transcribe_audio
 from engine.llm_client import ask_llm
 from engine.conversation import get_conversation_manager
 
+from engine.settings_store import (
+    load_settings,
+    update_settings,
+)
+
 conversation_manager = get_conversation_manager()
+
+@eel.expose
+def getSettings():
+    """Return persistent JARVIS user settings."""
+    try:
+        return load_settings()
+
+    except Exception as exc:
+        print(
+            f"Settings API error: {exc}"
+        )
+
+        return {
+            "voice_enabled": True,
+            "response_language": "auto",
+        }
+
+
+@eel.expose
+def saveSettings(settings):
+    """Persist user settings and return the saved state."""
+    try:
+        if not isinstance(settings, dict):
+            return {
+                "success": False,
+                "settings": load_settings(),
+            }
+
+        saved =  update_settings(settings)
+
+        return {
+            "success": True,
+            "settings": saved,
+        }
+
+    except Exception as exc:
+        print(
+            f"Settings save API error: {exc}"
+        )
+
+        return {
+            "success": False,
+            "settings": load_settings(),
+        }
+
 @eel.expose
 def getConversationHistory(limit=20):
     """Return recent saved conversations for the history UI."""
@@ -162,10 +212,27 @@ def _safe_display(fn, *args, **kwargs):
         pass
 
 
-def speak(text, display=True, language=None):
-    """Speak text through TTS and allow the hotword process to interrupt it."""
+def speak(
+    text,
+    display=True,
+    language=None,
+    respect_voice_setting=False
+):
+    """Speak text through TTS when voice responses are enabled."""
     if display:
-        _safe_display("receiverText", text)
+        _safe_display(
+            "receiverText",
+            text,
+        )
+
+    if respect_voice_setting:
+        settings = load_settings()
+
+    if not settings.get(
+        "voice_enabled",
+        True,
+    ):
+        return False
 
     return _tts_speak(
         text,
@@ -173,7 +240,6 @@ def speak(text, display=True, language=None):
         interrupt_event=_interrupt_event,
         speaking_event=_speaking_event,
     )
-
 
 def takecommand(return_language=False):
     """Capture one utterance and automatically detect English/Hindi.
@@ -335,7 +401,25 @@ def allCommands(message=1):
                 print("🧠 Sending request to OmniRoute... ✨")
                 _safe_display("DisplayMessage", "Thinking...")
 
-                language_name = _language_name(query_language)
+                settings = load_settings()
+
+                configured_language = settings.get(
+                    "response_language",
+                    "auto",
+                )
+
+                response_language = query_language
+
+                if configured_language in {
+                    "en",
+                    "hi",
+                }:
+                    response_language = configured_language
+
+                language_name = _language_name(
+                    response_language
+                )
+                               
                 previous_context = conversation_manager.build_context()
 
                 context_section = ""
@@ -420,7 +504,8 @@ def allCommands(message=1):
                 interrupted = speak(
                     response,
                     display=False,
-                    language=query_language,
+                    language=response_language,
+                    respect_voice_setting=True,
                 )
 
                 if interrupted:

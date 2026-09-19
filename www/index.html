@@ -504,7 +504,7 @@
           <div class="col-md-1"></div>
         </div>
       </section>
-      
+
       <!-- Conversation transcript viewer -->
       <section
         id="ConversationViewer"
@@ -629,6 +629,84 @@
       </section>
     </div>
 
+    <div
+      id="SettingsBackdrop"
+      class="settings-backdrop"
+      aria-hidden="true"
+    ></div>
+
+    <aside
+      id="SettingsPanel"
+      class="settings-panel"
+      aria-hidden="true"
+      aria-label="JARVIS settings"
+    >
+      <div class="settings-header">
+        <div class="settings-heading">
+          <span>J.A.R.V.I.S</span>
+
+          <h2>Settings</h2>
+
+          <small>Personalize your assistant</small>
+        </div>
+
+        <button
+          id="SettingsCloseBtn"
+          class="settings-close-btn"
+          type="button"
+          aria-label="Close settings"
+          title="Close"
+        >
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <div class="settings-body">
+        <section class="settings-group">
+          <span class="settings-group-label"> Voice </span>
+
+          <div class="settings-item">
+            <div class="settings-item-content">
+              <strong>Voice responses</strong>
+
+              <span> Allow JARVIS to speak responses aloud. </span>
+            </div>
+
+            <label class="settings-switch">
+              <input type="checkbox" id="SettingsVoiceEnabled" />
+
+              <span class="settings-switch-slider"></span>
+            </label>
+          </div>
+        </section>
+
+        <section class="settings-group">
+          <span class="settings-group-label"> Language </span>
+
+          <div class="settings-item settings-item-column">
+            <div class="settings-item-content">
+              <strong>Response language</strong>
+
+              <span> Choose how JARVIS should respond. </span>
+            </div>
+
+            <select id="SettingsResponseLanguage" class="settings-select">
+              <option value="auto">Auto — follow user</option>
+
+              <option value="en">English</option>
+
+              <option value="hi">Hindi</option>
+            </select>
+          </div>
+        </section>
+
+        <div
+          id="SettingsSaveStatus"
+          class="settings-save-status"
+          aria-live="polite"
+        ></div>
+      </div>
+    </aside>
     <div id="HistoryBackdrop" class="history-backdrop" aria-hidden="true"></div>
 
     <aside

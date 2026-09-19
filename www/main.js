@@ -40,7 +40,8 @@ $(document).ready(function () {
                 if (
                     historyPeek &&
                     !historyPeek.matches(":hover") &&
-                    !chatButton.matches(":hover")
+                    (!chatButton ||
+                        !chatButton.matches(":hover"))
                 ) {
                     historyPeek.classList.remove(
                         "is-visible"
@@ -82,14 +83,51 @@ $(document).ready(function () {
         );
     }
 
+    if (historyPeek) {
+        historyPeek.addEventListener(
+            "click",
+            function () {
+                openHistorySidebar();
+            }
+        );
+    }
+
     function prepareSiriWave() {
+        const conversationViewer =
+            document.getElementById(
+                "ConversationViewer"
+            );
+
+        const inConversation =
+            conversationViewer &&
+            conversationViewer.classList.contains(
+                "is-visible"
+            );
+
+        /*
+         * When continuing an existing conversation,
+         * keep the conversation viewer on screen.
+         * Do not switch to the legacy full-screen SiriWave UI.
+         */
+        if (inConversation) {
+            if (
+                typeof window.showConversationVoiceStatus ===
+                "function"
+            ) {
+                window.showConversationVoiceStatus(
+                    "Listening..."
+                );
+            }
+
+            return;
+        }
+
+        // Normal JARVIS HUD microphone behavior.
         $("#Oval").attr("hidden", true);
         $("#SiriWave").attr("hidden", false);
 
-        // Hide previous response.
         $("#HoodResponse").attr("hidden", true);
 
-        // Restore the processing UI.
         $("#SiriWave .siri-message").show();
         $("#SiriWave #siri-container").show();
     }
@@ -314,6 +352,20 @@ $(document).ready(function () {
                 return;
             }
 
+            const settings =
+                document.getElementById(
+                    "SettingsPanel"
+                );
+
+            if (
+                settings &&
+                settings.classList.contains(
+                    "is-open"
+                )
+            ) {
+                closeSettingsPanel();
+                return;
+            }
             const sidebar =
                 document.getElementById(
                     "HistorySidebar"
@@ -341,6 +393,226 @@ $(document).ready(function () {
         }
     );
 
+    /* =========================================================
+   SETTINGS
+   ========================================================= */
+
+    const settingsPanel =
+        document.getElementById(
+            "SettingsPanel"
+        );
+
+    const settingsBackdrop =
+        document.getElementById(
+            "SettingsBackdrop"
+        );
+
+
+    async function loadSettings() {
+        try {
+            const settings =
+                await eel.getSettings()();
+
+            if (!settings) {
+                return;
+            }
+
+            $("#SettingsVoiceEnabled").prop(
+                "checked",
+                settings.voice_enabled !== false
+            );
+
+            $("#SettingsResponseLanguage").val(
+                settings.response_language ||
+                "auto"
+            );
+
+        } catch (error) {
+            console.error(
+                "Settings loading failed:",
+                error
+            );
+        }
+    }
+
+
+    async function saveSettings() {
+        try {
+            const settings = {
+                voice_enabled:
+                    $("#SettingsVoiceEnabled")
+                        .prop("checked"),
+
+                response_language:
+                    $("#SettingsResponseLanguage")
+                        .val(),
+            };
+
+            const result =
+                await eel.saveSettings(
+                    settings
+                )();
+
+            const status =
+                document.getElementById(
+                    "SettingsSaveStatus"
+                );
+
+            if (
+                result &&
+                result.success
+            ) {
+                if (status) {
+                    status.textContent =
+                        "Settings saved";
+
+                    status.classList.add(
+                        "is-visible"
+                    );
+
+                    setTimeout(() => {
+                        status.classList.remove(
+                            "is-visible"
+                        );
+                    }, 1800);
+                }
+            } else {
+                console.error(
+                    "Settings were not saved."
+                );
+            }
+
+        } catch (error) {
+            console.error(
+                "Settings save failed:",
+                error
+            );
+        }
+    }
+
+
+    function openSettingsPanel() {
+        if (
+            !settingsPanel ||
+            !settingsBackdrop
+        ) {
+            return;
+        }
+
+        loadSettings();
+
+        settingsPanel.classList.add(
+            "is-open"
+        );
+
+        settingsBackdrop.classList.add(
+            "is-visible"
+        );
+
+        settingsPanel.setAttribute(
+            "aria-hidden",
+            "false"
+        );
+
+        settingsBackdrop.setAttribute(
+            "aria-hidden",
+            "false"
+        );
+
+        document.body.classList.add(
+            "settings-open"
+        );
+    }
+
+
+    function closeSettingsPanel() {
+        if (
+            !settingsPanel ||
+            !settingsBackdrop
+        ) {
+            return;
+        }
+
+        settingsPanel.classList.remove(
+            "is-open"
+        );
+
+        settingsBackdrop.classList.remove(
+            "is-visible"
+        );
+
+        settingsPanel.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+
+        settingsBackdrop.setAttribute(
+            "aria-hidden",
+            "true"
+        );
+
+        document.body.classList.remove(
+            "settings-open"
+        );
+    }
+
+
+    window.openSettingsPanel =
+        openSettingsPanel;
+
+    window.closeSettingsPanel =
+        closeSettingsPanel;
+
+
+    $("#SettingsBtn").on(
+        "click",
+        function () {
+            openSettingsPanel();
+        }
+    );
+
+
+    $("#ConversationSettingsBtn").on(
+        "click",
+        function () {
+            openSettingsPanel();
+        }
+    );
+
+
+    $("#SettingsCloseBtn").on(
+        "click",
+        function () {
+            closeSettingsPanel();
+        }
+    );
+
+
+    $("#SettingsBackdrop").on(
+        "click",
+        function () {
+            closeSettingsPanel();
+        }
+    );
+
+
+    $("#SettingsVoiceEnabled").on(
+        "change",
+        function () {
+            saveSettings();
+        }
+    );
+
+
+    $("#SettingsResponseLanguage").on(
+        "change",
+        function () {
+            saveSettings();
+        }
+    );
+
+
+    loadSettings();
 
     /* =========================================================
        SIRI WAVE
@@ -516,59 +788,109 @@ $(document).ready(function () {
         }
     );
 
-});
+    /* =========================================================
+       CONVERSATION INPUT
+       ========================================================= */
 
-$("#ConversationMicBtn").on(
-    "click",
-    function () {
-        eel.playAssistantSound();
-
-        prepareSiriWave();
-
-        eel.allCommands()();
-    }
-);
-
-
-$("#ConversationSendBtn").on(
-    "click",
-    function () {
+    function updateConversationInputButtons() {
         const message =
             $("#ConversationChatbox")
                 .val()
                 .trim();
 
-        if (!message) {
-            return;
+        if (message.length === 0) {
+            $("#ConversationMicBtn").attr(
+                "hidden",
+                false
+            );
+
+            $("#ConversationSendBtn").attr(
+                "hidden",
+                true
+            );
+        } else {
+            $("#ConversationMicBtn").attr(
+                "hidden",
+                true
+            );
+
+            $("#ConversationSendBtn").attr(
+                "hidden",
+                false
+            );
         }
-
-        eel.allCommands(message);
-
-        $("#ConversationChatbox")
-            .val("");
     }
-);
 
 
-$("#ConversationChatbox").on(
-    "keypress",
-    function (event) {
-
-        if (event.which !== 13) {
-            return;
-        }
+    function sendConversationMessage() {
+        const chatBox =
+            $("#ConversationChatbox");
 
         const message =
-            $(this)
-                .val()
-                .trim();
+            chatBox.val().trim();
 
         if (!message) {
+            updateConversationInputButtons();
             return;
         }
 
+        // Send the message to JARVIS.
         eel.allCommands(message);
 
-        $(this).val("");
+        // Clear the input.
+        chatBox.val("");
+
+        // Return to microphone state.
+        updateConversationInputButtons();
+
+        // Keep focus in the conversation input.
+        chatBox.trigger("focus");
     }
-);
+
+
+    $("#ConversationChatbox").on(
+        "input",
+        function () {
+            updateConversationInputButtons();
+        }
+    );
+
+
+    $("#ConversationSendBtn").on(
+        "click",
+        function () {
+            sendConversationMessage();
+        }
+    );
+
+
+    $("#ConversationChatbox").on(
+        "keypress",
+        function (event) {
+
+            if (event.which !== 13) {
+                return;
+            }
+
+            event.preventDefault();
+
+            sendConversationMessage();
+        }
+    );
+
+
+    $("#ConversationMicBtn").on(
+        "click",
+        function () {
+            eel.playAssistantSound();
+
+            prepareSiriWave();
+
+            eel.allCommands()();
+        }
+    );
+
+
+    // Ensure the correct button is visible on startup.
+    updateConversationInputButtons();
+});

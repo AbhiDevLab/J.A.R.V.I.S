@@ -97,8 +97,8 @@ def start(
             eel.hideFaceAuth()
 
             speak(
-                "Face Authentication Successful. "
-                "System is fully operational now."
+                "Face Authentication Successful! "
+                "System is Operational Now."
             )
 
             eel.hideFaceAuthSuccess()
