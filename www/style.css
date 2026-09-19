@@ -174,8 +174,67 @@ body {
 
 /* Chat Box */
 
+/* =========================================================
+   GLASSMORPHIC CHAT PANEL
+   ========================================================= */
+
 .chat-canvas {
-    background-color: #191919;
+    width: min(390px, 88vw) !important;
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(18, 20, 26, 0.82),
+            rgba(20, 14, 20, 0.76)
+        ) !important;
+
+    backdrop-filter: blur(22px) saturate(135%);
+    -webkit-backdrop-filter: blur(22px) saturate(135%);
+
+    border-right:
+        1px solid rgba(255, 255, 255, 0.10);
+
+    box-shadow:
+        10px 0 40px rgba(0, 0, 0, 0.45),
+        0 0 35px rgba(0, 140, 255, 0.06),
+        inset -1px 0 0 rgba(255, 64, 64, 0.08);
+}
+
+
+/* =========================================================
+   GLASS BACKDROP
+   ========================================================= */
+
+.offcanvas-backdrop.show {
+    background:
+        linear-gradient(
+            135deg,
+            rgba(0, 0, 0, 0.52),
+            rgba(10, 15, 25, 0.42)
+        ) !important;
+
+    opacity: 1 !important;
+
+    backdrop-filter: blur(11px) saturate(115%);
+    -webkit-backdrop-filter: blur(11px) saturate(115%);
+}
+
+
+/* =========================================================
+   CHAT PANEL OPEN/CLOSE ANIMATION
+   ========================================================= */
+
+.chat-canvas {
+    transition:
+        transform 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.38s ease;
+}
+
+.offcanvas.show.chat-canvas {
+    box-shadow:
+        10px 0 50px rgba(0, 0, 0, 0.55),
+        0 0 32px rgba(0, 140, 255, 0.08),
+        inset -1px 0 0 rgba(255, 64, 64, 0.10);
 }
 
 

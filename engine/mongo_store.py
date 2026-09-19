@@ -179,7 +179,7 @@ def save_chat_turn(
     interrupted.
     """
 
-    if not (_MONGO_AVAILABLE and _collection):
+    if not _MONGO_AVAILABLE or _collection is None:
         return
 
     try:
@@ -234,7 +234,7 @@ def get_chat_turns(
     if not conversation_id:
         return []
 
-    if not (_MONGO_AVAILABLE and _collection):
+    if not _MONGO_AVAILABLE or _collection is None:
         return []
 
     try:
@@ -291,7 +291,7 @@ def get_recent_conversations(
     Conversations are ordered from newest activity to oldest.
     """
 
-    if not (_MONGO_AVAILABLE and _collection):
+    if not _MONGO_AVAILABLE or _collection is None:
         return []
 
     try:
@@ -376,7 +376,7 @@ def get_conversation(
     if not conversation_id:
         return []
 
-    if not (_MONGO_AVAILABLE and _collection):
+    if not _MONGO_AVAILABLE or _collection is None:
         return []
 
     try:
