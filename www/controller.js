@@ -176,7 +176,10 @@ $(document).ready(function () {
     }
   }
 
+  window.refreshConversationHistory =
+    refreshConversationHistory;
 
+    
   async function loadConversationFromHistory(
     conversationId,
     title
@@ -1249,41 +1252,33 @@ $(document).ready(function () {
 
   // Hide Start Page and display blob
   function hideStart() {
-
     try {
+      const start = document.getElementById("Start");
+      const oval = document.getElementById("Oval");
 
-      $("#Start").attr(
-        "hidden",
-        true
-      );
+      if (start) {
+        start.hidden = true;
+        start.style.display = "none";
+      }
 
+      if (oval) {
+        oval.hidden = false;
 
-      setTimeout(
-        function () {
+        oval.classList.add(
+          "animate__animated",
+          "animate__zoomIn"
+        );
+      }
 
-          $("#Oval").addClass(
-            "animate__animated animate__zoomIn"
-          );
+      const wishMessage =
+        document.getElementById("WishMessage");
 
-        },
-        1000
-      );
-
-
-      setTimeout(
-        function () {
-
-          $("#Oval").attr(
-            "hidden",
-            false
-          );
-
-        },
-        1000
-      );
+      if (wishMessage) {
+        wishMessage.textContent =
+          "Ask me anything";
+      }
 
     } catch (e) {
-
       console.error(
         "hideStart error:",
         e
@@ -1408,6 +1403,3 @@ $(document).ready(function () {
 
   refreshConversationHistory();
 });
-
-window.refreshConversationHistory =
-  refreshConversationHistory;
