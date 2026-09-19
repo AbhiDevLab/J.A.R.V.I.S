@@ -44,19 +44,19 @@ class ConversationManager:
         self.conversation_id = self._new_conversation_id()
         self._messages.clear()
         return self.conversation_id
-    
-        def load_conversation(
+
+
+    def load_conversation(
         self,
         conversation_id: str,
     ) -> bool:
-            """
-            Load an existing persisted conversation and make it
-            the active conversation.
+        """
+        Load an existing persisted conversation and make it
+        the active conversation.
 
-            The full conversation is fetched from MongoDB, while
-            only the configured number of recent turns are retained
-            in memory for LLM context.
-            """
+        Only the configured number of recent turns are retained
+        in memory for LLM context.
+        """
         if not conversation_id:
             return False
 
