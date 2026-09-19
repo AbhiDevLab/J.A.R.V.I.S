@@ -17,13 +17,6 @@ from shlex import quote
 
 from engine.helper import extract_yt_term, remove_words
 
-# Gemini API import
-try:
-    from engine.gemini_client import gemini_client
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-    print("Gemini client not available")
 
 con = sqlite3.connect("jarvis.db")
 cursor = con.cursor()
@@ -324,22 +317,3 @@ def sendMessage(message, mobileNo, name):
     # send
     tapEvents(984, 1348.4)
     speak("Message sent successfully to "+name)
-
-# Gemini API processing function
-def process_with_gemini(command):
-    """
-    Process command using Gemini API
-    """
-    if not GEMINI_AVAILABLE:
-        speak("Gemini API is not configured properly")
-        return
-        
-    prompt = f"""
-    You are JARVIS, an AI assistant. Respond to the user query helpfully and concisely.
-    
-    User: {command}
-    JARVIS:
-    """
-    
-    response = gemini_client.ask_gemini(prompt)
-    speak(response)

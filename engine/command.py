@@ -228,11 +228,8 @@ def speak(
     if respect_voice_setting:
         settings = load_settings()
 
-    if not settings.get(
-        "voice_enabled",
-        True,
-    ):
-        return False
+        if not settings.get("voice_enabled",True):
+            return False
 
     return _tts_speak(
         text,

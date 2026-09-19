@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import tempfile
 import time
 import uuid
+from html import unescape
 from pathlib import Path
 from threading import Lock
 
@@ -38,38 +40,35 @@ def _contains_devanagari(text: str) -> bool:
 
 def _prepare_speech_text(text: str) -> str:
     """
-    Convert Markdown/technical formatting into natural speech.
+    Convert Markdown, HTML, and technical formatting into natural speech.
 
     The frontend keeps the original Markdown response for rich rendering.
-    TTS receives a cleaned speech-only representation.
+    TTS receives a cleaned, speech-friendly representation.
     """
-    import re
-    from html import unescape
-
     if not text:
         return ""
 
     spoken = str(text)
 
-    # Decode any HTML entities first.
+    # Decode HTML entities such as &amp;, &lt;, &gt;, etc.
     spoken = unescape(spoken)
 
     # Replace fenced code blocks with a short spoken cue.
-    # Code remains fully visible in the frontend.
+    # The actual code remains visible in the frontend.
     spoken = re.sub(
-        r"```[\s\S]*?```",
+        r"```[\w+-]*\s*[\s\S]*?```",
         " I've included a code example in the response. ",
         spoken,
     )
 
-    # Markdown images -> alt text.
+    # Convert Markdown images to their alt text.
     spoken = re.sub(
         r"!\[([^\]]*)\]\([^)]+\)",
         r"\1",
         spoken,
     )
 
-    # Markdown links -> visible text only.
+    # Convert Markdown links to their visible text.
     spoken = re.sub(
         r"\[([^\]]+)\]\([^)]+\)",
         r"\1",
@@ -116,22 +115,28 @@ def _prepare_speech_text(text: str) -> str:
         flags=re.MULTILINE,
     )
 
-    # Remove bold / italic / strike Markdown markers.
+    # Remove Markdown emphasis markers.
     spoken = spoken.replace("**", "")
     spoken = spoken.replace("__", "")
     spoken = spoken.replace("~~", "")
 
-    # Remove inline-code markers.
+    # Remove inline-code markers while keeping their contents.
     spoken = spoken.replace("`", "")
 
-    # Convert common technical symbols to speech-friendly wording.
+    # Convert common technical symbols into natural spoken equivalents.
     spoken = spoken.replace("→", " to ")
     spoken = spoken.replace("⇒", " implies ")
     spoken = spoken.replace("↔", " is equivalent to ")
-    spoken = spoken.replace("•", " ")
+    spoken = spoken.replace("←", " from ")
+    spoken = spoken.replace("≤", " less than or equal to ")
+    spoken = spoken.replace("≥", " greater than or equal to ")
+    spoken = spoken.replace("≠", " not equal to ")
+    spoken = spoken.replace("≈", " approximately ")
     spoken = spoken.replace("×", " times ")
+    spoken = spoken.replace("÷", " divided by ")
+    spoken = spoken.replace("•", " ")
 
-    # Remove Markdown table separator lines.
+    # Remove Markdown table separator rows.
     spoken = re.sub(
         r"^\s*\|?(?:\s*:?-+:?\s*\|)+\s*$",
         "",
@@ -139,7 +144,7 @@ def _prepare_speech_text(text: str) -> str:
         flags=re.MULTILINE,
     )
 
-    # Turn table cell separators into pauses.
+    # Turn remaining table separators into natural pauses.
     spoken = spoken.replace("|", ". ")
 
     # Remove simple HTML tags.
@@ -149,20 +154,21 @@ def _prepare_speech_text(text: str) -> str:
         spoken,
     )
 
-    # Remove escaped Markdown punctuation.
+    # Unescape escaped Markdown punctuation.
     spoken = re.sub(
-        r"\\([\\`*_\[\]{}()#+.!>|~-])",
+        r"\\([\\`*_\[\]{}()#+.!>|~\-])",
         r"\1",
         spoken,
     )
 
-    # Collapse whitespace.
+    # Normalize whitespace within lines.
     spoken = re.sub(
         r"[ \t]+",
         " ",
         spoken,
     )
 
+    # Prevent excessive blank lines from creating awkward pauses.
     spoken = re.sub(
         r"\n{3,}",
         "\n\n",
@@ -192,129 +198,6 @@ def _select_voice(text: str, language: str | None = None) -> str:
         return os.getenv("JARVIS_TTS_HI_VOICE", "hi-IN-MadhurNeural")
 
     return os.getenv("JARVIS_TTS_EN_VOICE", "en-US-GuyNeural")
-
-def _prepare_speech_text(text: str) -> str:
-    """
-    Convert Markdown/technical formatting into natural speech text.
-
-    The visual frontend keeps the original Markdown response.
-    TTS receives only the cleaned spoken representation.
-    """
-    import re
-
-    if not text:
-        return ""
-
-    spoken = str(text)
-
-    # Remove fenced code blocks completely.
-    # Code is useful visually but usually should not be spoken.
-    spoken = re.sub(
-        r"```[\s\S]*?```",
-        " ",
-        spoken,
-    )
-
-    # Images -> alt text.
-    spoken = re.sub(
-        r"!\[([^\]]*)\]\([^)]+\)",
-        r"\1",
-        spoken,
-    )
-
-    # Links -> visible link text.
-    spoken = re.sub(
-        r"\[([^\]]+)\]\([^)]+\)",
-        r"\1",
-        spoken,
-    )
-
-    # Headings: remove Markdown heading markers.
-    spoken = re.sub(
-        r"^\s{0,3}#{1,6}\s*",
-        "",
-        spoken,
-        flags=re.MULTILINE,
-    )
-
-    # Blockquotes.
-    spoken = re.sub(
-        r"^\s*>\s?",
-        "",
-        spoken,
-        flags=re.MULTILINE,
-    )
-
-    # Bullet points.
-    spoken = re.sub(
-        r"^\s*[-*+]\s+",
-        "",
-        spoken,
-        flags=re.MULTILINE,
-    )
-
-    # Numbered lists.
-    spoken = re.sub(
-        r"^\s*\d+[.)]\s+",
-        "",
-        spoken,
-        flags=re.MULTILINE,
-    )
-
-    # Horizontal rules.
-    spoken = re.sub(
-        r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$",
-        "",
-        spoken,
-        flags=re.MULTILINE,
-    )
-
-    # Bold / italic / strike markers.
-    spoken = spoken.replace("**", "")
-    spoken = spoken.replace("__", "")
-    spoken = spoken.replace("~~", "")
-
-    # Inline code.
-    spoken = spoken.replace("`", "")
-
-    # Table separators/pipes.
-    spoken = re.sub(
-        r"^\s*\|?(?:\s*:?-+:?\s*\|)+\s*$",
-        "",
-        spoken,
-        flags=re.MULTILINE,
-    )
-
-    spoken = spoken.replace("|", ". ")
-
-    # Remove simple HTML tags if any appear.
-    spoken = re.sub(
-        r"<[^>]+>",
-        " ",
-        spoken,
-    )
-
-    # Markdown escape characters.
-    spoken = re.sub(
-        r"\\([\\`*_\[\]{}()#+.!>|~-])",
-        r"\1",
-        spoken,
-    )
-
-    # Collapse excessive whitespace.
-    spoken = re.sub(
-        r"[ \t]+",
-        " ",
-        spoken,
-    )
-
-    spoken = re.sub(
-        r"\n{3,}",
-        "\n\n",
-        spoken,
-    )
-
-    return spoken.strip()
 
 def _safe_unlink(path: Path) -> None:
     for _ in range(5):
