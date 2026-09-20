@@ -81,10 +81,31 @@ def ensure_omniroute():
 
     # Check whether OmniRoute is already running.
     try:
-        requests.get(health_url, timeout=2)
-        print("✓ OmniRoute is already running.")
-        return
-    except requests.RequestException:
+        response = requests.get(
+            health_url,
+            headers={
+                "Authorization": (
+                    f"Bearer {os.getenv('OMNIROUTE_API_KEY', '').strip()}"
+                )
+            },
+            timeout=2,
+        )
+
+        response.raise_for_status()
+
+        payload = response.json()
+
+        if (
+            isinstance(payload, dict)
+            and isinstance(payload.get("data"), list)
+        ):
+            print("✓ OmniRoute is already running and responding.")
+            return
+
+    except (
+        requests.RequestException,
+        ValueError,
+    ):
         pass
 
     # OmniRoute is not running, so start it.
@@ -104,11 +125,34 @@ def ensure_omniroute():
 
     for _ in range(30):
         try:
-            requests.get(health_url, timeout=2)
-            print("✓ OmniRoute server is ready.")
-            return
-        except requests.RequestException:
-            time.sleep(1)
+            response = requests.get(
+                health_url,
+                headers={
+                    "Authorization": (
+                        f"Bearer {os.getenv('OMNIROUTE_API_KEY', '').strip()}"
+                    )
+                },
+                timeout=2,
+            )
+
+            response.raise_for_status()
+
+            payload = response.json()
+
+            if (
+                isinstance(payload, dict)
+                and isinstance(payload.get("data"), list)
+            ):
+                print("✓ OmniRoute server is ready.")
+                return
+
+        except (
+            requests.RequestException,
+            ValueError,
+        ):
+            pass
+
+        time.sleep(1)
 
     print("❌ OmniRoute did not become ready within 30 seconds.")
     sys.exit(1)

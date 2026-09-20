@@ -1,4 +1,4 @@
 {
-  "voice_enabled": false,
+  "voice_enabled": true,
   "response_language": "auto"
 }
