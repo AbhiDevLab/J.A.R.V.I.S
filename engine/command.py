@@ -12,6 +12,11 @@ from engine.settings_store import (
     update_settings,
 )
 
+from engine.automation import (
+    route_command,
+    execute_action,
+)
+
 conversation_manager = get_conversation_manager()
 
 @eel.expose
@@ -333,6 +338,34 @@ def allCommands(message=1):
                     "I didn't catch that. Please try again.",
                     language="en",
                 )
+                break
+            
+            automation_action = route_command(
+                query
+            )
+
+            if automation_action is not None:
+                automation_result = execute_action(
+                    automation_action
+                )
+
+                if automation_result.get(
+                    "success"
+                ):
+                    speak(
+                        automation_result.get(
+                            "message",
+                            "Action completed successfully.",
+                        )
+                    )
+                else:
+                    speak(
+                        automation_result.get(
+                            "message",
+                            "The action could not be completed.",
+                        )
+                    )
+
                 break
 
             if "open" in query:
