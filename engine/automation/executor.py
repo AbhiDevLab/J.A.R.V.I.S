@@ -7,6 +7,7 @@ from .actions import (
     AutomationAction,
     requires_confirmation,
 )
+from .applications import resolve_application
 from .security import request_authorization
 
 
@@ -93,6 +94,62 @@ def _execute_shell_command(
             "The shell command could not be executed.",
         )
 
+def _execute_open_application(
+    action: AutomationAction,
+) -> Dict[str, Any]:
+    application = str(
+        action.parameters.get("application", "")
+    ).strip()
+    executable = str(
+        action.parameters.get("executable", "")
+    ).strip()
+
+    if not application:
+        return _result(
+            False,
+            "No application was specified.",
+        )
+
+    resolved = resolve_application(application)
+
+    if resolved:
+        executable = resolved
+
+    if not executable:
+        return _result(
+            False,
+            f"I could not find {application}.",
+        )
+
+    print(f"🖥️ Opening application: {application}")
+    print(f"Executable: {executable}")
+
+    try:
+        if application == {"command prompt", "cmd"}:
+            subprocess.Popen(
+                [executable, "/K"],
+                shell=False,
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+        else:
+            subprocess.Popen(
+                [executable],
+                shell=False,
+            )
+
+        return _result(
+            True,
+            f"Opening {application}.",
+        )
+
+    except Exception as exc:
+        print(
+            f"Application launch error: {exc}"
+        )
+        return _result(
+            False,
+            f"I could not open {application}.",
+        )
 
 def execute_action(
     action: AutomationAction,
@@ -116,6 +173,7 @@ def execute_action(
             )
 
     handlers = {
+        "open_application": _execute_open_application,
         "shell_command": _execute_shell_command,
     }
 
