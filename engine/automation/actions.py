@@ -34,8 +34,6 @@ HIGH_RISK_ACTIONS = {
     "python_script",
     "delete_file",
     "delete_folder",
-    "move_file",
-    "copy_file",
     "kill_process",
     "system_power",
     "modify_system_settings",

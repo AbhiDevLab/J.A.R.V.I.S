@@ -8,6 +8,18 @@ from .actions import (
     requires_confirmation,
 )
 from .applications import resolve_application
+from .filesystem import (
+    copy_file,
+    create_file,
+    create_folder,
+    delete_file,
+    delete_folder,
+    find_file,
+    list_directory,
+    move_file,
+    open_folder,
+    rename_path,
+)
 from .security import request_authorization
 
 
@@ -151,6 +163,86 @@ def _execute_open_application(
             f"I could not open {application}.",
         )
 
+def _execute_filesystem_action(
+    action: AutomationAction,
+) -> Dict[str, Any]:
+    parameters = action.parameters
+    action_type = action.action_type
+
+    if action_type == "open_folder":
+        success, message = open_folder(
+            parameters.get("path", "")
+        )
+
+    elif action_type == "list_directory":
+        success, message = list_directory(
+            parameters.get("path", "")
+        )
+
+    elif action_type == "find_file":
+        success, message = find_file(
+            parameters.get("name", ""),
+            parameters.get("directory", ""),
+        )
+
+    elif action_type == "create_file":
+        success, message = create_file(
+            parameters.get("path", ""),
+            parameters.get("content", ""),
+        )
+        
+    elif action_type == "create_folder":
+        success, message = create_folder(
+            parameters.get("path", "")
+        )
+
+    elif action_type == "rename_file":
+        success, message = rename_path(
+            parameters.get("source", ""),
+            parameters.get("target", ""),
+            "file",
+        )
+
+    elif action_type == "rename_folder":
+        success, message = rename_path(
+            parameters.get("source", ""),
+            parameters.get("target", ""),
+            "folder",
+        )
+
+    elif action_type == "move_file":
+        success, message = move_file(
+            parameters.get("source", ""),
+            parameters.get("destination", ""),
+        )
+
+    elif action_type == "copy_file":
+        success, message = copy_file(
+            parameters.get("source", ""),
+            parameters.get("destination", ""),
+        )
+
+    elif action_type == "delete_file":
+        success, message = delete_file(
+            parameters.get("path", "")
+        )
+
+    elif action_type == "delete_folder":
+        success, message = delete_folder(
+            parameters.get("path", "")
+        )
+
+    else:
+        return _result(
+            False,
+            f"Unsupported filesystem action: {action_type}",
+        )
+
+    return _result(
+        success,
+        message,
+    )
+
 def execute_action(
     action: AutomationAction,
 ) -> Dict[str, Any]:
@@ -175,6 +267,17 @@ def execute_action(
     handlers = {
         "open_application": _execute_open_application,
         "shell_command": _execute_shell_command,
+        "open_folder": _execute_filesystem_action,
+        "list_directory": _execute_filesystem_action,
+        "find_file": _execute_filesystem_action,
+        "create_file": _execute_filesystem_action,
+        "create_folder": _execute_filesystem_action,
+        "rename_file": _execute_filesystem_action,
+        "rename_folder": _execute_filesystem_action,
+        "move_file": _execute_filesystem_action,
+        "copy_file": _execute_filesystem_action,
+        "delete_file": _execute_filesystem_action,
+        "delete_folder": _execute_filesystem_action,
     }
 
     handler = handlers.get(
