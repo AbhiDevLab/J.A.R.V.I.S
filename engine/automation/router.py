@@ -71,6 +71,8 @@ def _clean_name(
         "filename ",
         "file named ",
         "the file named ",
+        "named ",
+        "called ",
     ):
         if result.lower().startswith(
             prefix
@@ -280,6 +282,7 @@ def _route_delete_all(
             "delete every occurrence of",
             "delete every instance of",
             "delete every copy of",
+            "delete all copies of",
         ),
     )
 

@@ -233,7 +233,8 @@ def _choose_delete_target(
     speak(
         f"I found {len(preview)} matching files. "
         "Say the number to delete a specific file, "
-        "or say all to delete every occurrence."
+        "or say all to delete every occurrence.",
+        display=False
     )
 
     response = str(
@@ -947,7 +948,7 @@ def _complete_delete_all(
     matches = search_paths(
         name,
         expected_type="file",
-        max_results=1000,
+        max_results=None,
     )
 
     if not matches:
@@ -984,12 +985,6 @@ def _complete_delete_all(
             f"All {len(matches)} matching files "
             f"will be deleted."
         ),
-    )
-
-    speak(
-        f"I found {len(matches)} matching files. "
-        "Say 'confirm' to continue.",
-        display=False
     )
 
     parameters["name"] = name

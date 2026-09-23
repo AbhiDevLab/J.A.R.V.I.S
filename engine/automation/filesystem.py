@@ -196,7 +196,16 @@ def _matches_expected_type(
     return path.exists()
 
 
+
 def _search_roots() -> List[Path]:
+    """
+    Return filesystem roots used by J.A.R.V.I.S.
+
+    Fast/common locations are searched first.
+    The Windows Dev and Users trees are then searched
+    recursively as broader project/user scopes.
+    """
+
     roots = [
         Path.cwd(),
         SPECIAL_DIRECTORIES["desktop"],
@@ -208,6 +217,19 @@ def _search_roots() -> List[Path]:
         Path.home(),
     ]
 
+    # Windows system drive, e.g. C:\
+    drive_root = Path(
+        Path.home().anchor
+    )
+
+    if drive_root:
+        roots.extend(
+            [
+                drive_root / "Dev",
+                drive_root / "Users",
+            ]
+        )
+
     unique_roots = []
     seen = set()
 
@@ -216,6 +238,12 @@ def _search_roots() -> List[Path]:
             resolved = root.resolve(
                 strict=False
             )
+
+            if (
+                not resolved.exists()
+                or not resolved.is_dir()
+            ):
+                continue
 
             if resolved in seen:
                 continue
@@ -230,18 +258,49 @@ def _search_roots() -> List[Path]:
 
     return unique_roots
 
+def _is_full_search_root(
+    root: Path,
+) -> bool:
+    """
+    C:\Dev and C:\Users are intentionally scanned
+    recursively without the normal application/system
+    exclusion list.
+    """
+
+    drive_root = Path(
+        Path.home().anchor
+    )
+
+    if not drive_root:
+        return False
+
+    full_roots = {
+        (
+            drive_root / "Dev"
+        ).resolve(
+            strict=False
+        ),
+        (
+            drive_root / "Users"
+        ).resolve(
+            strict=False
+        ),
+    }
+
+    return root.resolve(
+        strict=False
+    ) in full_roots
 
 def search_paths(
     name: str,
     expected_type: Optional[str] = None,
-    max_results: int = 10,
+    max_results: Optional[int] = 10,
+    search_roots: Optional[List[Path]] = None,
 ) -> List[Path]:
     """
     Search for an exact file or folder name.
 
-    Matching is case-insensitive.
-
-    Search locations:
+    Search scope:
         - Current working directory
         - Desktop
         - Downloads
@@ -249,9 +308,14 @@ def search_paths(
         - Pictures
         - Videos
         - Music
-        - User home directory
+        - User home
+        - C:\\Dev recursively
+        - C:\\Users recursively
 
-    System/application directories are excluded.
+    C:\\Dev and C:\\Users are intentionally searched
+    without the normal excluded-directory filter.
+
+    max_results=None means exhaustive search.
     """
 
     target = _clean_reference(
@@ -271,8 +335,8 @@ def search_paths(
     ):
         return [direct]
 
-    # Explicit paths should not trigger a
-    # broad recursive search.
+    # Explicit paths should not trigger
+    # a broad recursive search.
     if (
         "\\" in target
         or "/" in target
@@ -285,12 +349,22 @@ def search_paths(
     matches: List[Path] = []
     seen = set()
 
-    for root in _search_roots():
+    roots = (
+        search_roots
+        if search_roots is not None
+        else _search_roots()
+    )
+
+    for root in roots:
         if (
             not root.exists()
             or not root.is_dir()
         ):
             continue
+
+        full_scope = _is_full_search_root(
+            root
+        )
 
         try:
             for (
@@ -301,12 +375,13 @@ def search_paths(
                 root,
                 topdown=True,
             ):
-                dir_names[:] = [
-                    directory
-                    for directory in dir_names
-                    if directory.casefold()
-                    not in SEARCH_EXCLUDED_DIRECTORIES
-                ]
+                if not full_scope:
+                    dir_names[:] = [
+                        directory
+                        for directory in dir_names
+                        if directory.casefold()
+                        not in SEARCH_EXCLUDED_DIRECTORIES
+                    ]
 
                 current_path = Path(
                     current_root
@@ -335,7 +410,8 @@ def search_paths(
                         matches.append(match)
 
                         if (
-                            len(matches)
+                            max_results is not None
+                            and len(matches)
                             >= max_results
                         ):
                             return matches
@@ -363,7 +439,8 @@ def search_paths(
                         matches.append(match)
 
                         if (
-                            len(matches)
+                            max_results is not None
+                            and len(matches)
                             >= max_results
                         ):
                             return matches
@@ -374,7 +451,6 @@ def search_paths(
             )
 
     return matches
-
 
 def resolve_existing_path(
     reference: str,
@@ -616,73 +692,34 @@ def find_file(
         )
 
     if directory:
-        root = resolve_path(
-            directory
+        directory_path, resolution_error = (
+            resolve_existing_path(
+                directory,
+                "folder",
+            )
         )
+
+        if directory_path is None:
+            return (
+                False,
+                resolution_error
+                or f"I could not find {directory}.",
+            )
+
+        matches = search_paths(
+            target_name,
+            expected_type="file",
+            max_results=50,
+            search_roots=[
+                directory_path,
+            ],
+        )
+
     else:
-        root = Path.home()
-
-    if not root.exists():
-        return (
-            False,
-            f"I could not find {directory}.",
-        )
-
-    if not root.is_dir():
-        return (
-            False,
-            f"{directory} is not a folder.",
-        )
-
-    matches: List[Path] = []
-
-    normalized_target = (
-        target_name.casefold()
-    )
-
-    try:
-        for (
-            current_root,
-            dir_names,
-            file_names,
-        ) in os.walk(
-            root,
-            topdown=True,
-            onerror=lambda error: print(
-                f"File search warning: {error}"
-            ),
-        ):
-            dir_names[:] = [
-                dirname
-                for dirname in dir_names
-                if dirname.casefold()
-                not in SEARCH_EXCLUDED_DIRECTORIES
-            ]
-
-            for filename in file_names:
-                if (
-                    filename.casefold()
-                    == normalized_target
-                ):
-                    matches.append(
-                        Path(current_root)
-                        / filename
-                    )
-
-                    if len(matches) >= 10:
-                        break
-
-            if len(matches) >= 10:
-                break
-
-    except Exception as exc:
-        print(
-            f"File search error: {exc}"
-        )
-
-        return (
-            False,
-            f"I could not search for {target_name}.",
+        matches = search_paths(
+            target_name,
+            expected_type="file",
+            max_results=50,
         )
 
     if not matches:
@@ -707,7 +744,6 @@ def find_file(
         f"I found {len(matches)} matches "
         f"for {target_name}: {locations}.",
     )
-
 
 def create_folder(
     path_text: str,

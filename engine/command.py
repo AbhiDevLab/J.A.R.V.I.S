@@ -20,6 +20,7 @@ from engine.automation import (
 
 conversation_manager = get_conversation_manager()
 
+
 @eel.expose
 def getSettings():
     """Return persistent JARVIS user settings."""
@@ -47,7 +48,7 @@ def saveSettings(settings):
                 "settings": load_settings(),
             }
 
-        saved =  update_settings(settings)
+        saved = update_settings(settings)
 
         return {
             "success": True,
@@ -63,6 +64,7 @@ def saveSettings(settings):
             "success": False,
             "settings": load_settings(),
         }
+
 
 @eel.expose
 def getConversationHistory(limit=20):
@@ -187,6 +189,7 @@ def startNewConversation():
             "messages": [],
         }
 
+
 # Shared process-safe audio control events.
 _interrupt_event = None
 _speaking_event = None
@@ -211,8 +214,10 @@ def configure_audio_control(
 def _safe_display(fn, *args, **kwargs):
     try:
         f = getattr(eel, fn, None)
+
         if f:
             f(*args, **kwargs)
+
     except Exception:
         # swallow UI errors so speak/takecommand don't crash when UI isn't ready
         pass
@@ -222,7 +227,7 @@ def speak(
     text,
     display=True,
     language=None,
-    respect_voice_setting=False
+    respect_voice_setting=False,
 ):
     """Speak text through TTS when voice responses are enabled."""
     if display:
@@ -234,7 +239,10 @@ def speak(
     if respect_voice_setting:
         settings = load_settings()
 
-        if not settings.get("voice_enabled",True):
+        if not settings.get(
+            "voice_enabled",
+            True,
+        ):
             return False
 
     return _tts_speak(
@@ -243,6 +251,7 @@ def speak(
         interrupt_event=_interrupt_event,
         speaking_event=_speaking_event,
     )
+
 
 def takecommand(return_language=False):
     """Capture one utterance and automatically detect English/Hindi.
@@ -259,40 +268,67 @@ def takecommand(return_language=False):
     try:
         with sr.Microphone() as source:
             print("Listening ....")
-            _safe_display("DisplayMessage", "Listening ....")
+            _safe_display(
+                "DisplayMessage",
+                "Listening ....",
+            )
 
             r.pause_threshold = 1
             r.adjust_for_ambient_noise(source)
-            audio = r.listen(source, 10, 6)
+            audio = r.listen(
+                source,
+                10,
+                6,
+            )
 
         print("Recognizing ....")
-        _safe_display("DisplayMessage", "Recognizing ....")
+        _safe_display(
+            "DisplayMessage",
+            "Recognizing ....",
+        )
 
-        query, language, confidence = transcribe_audio(audio)
+        query, language, confidence = transcribe_audio(
+            audio
+        )
 
         if not query:
             if return_language:
                 return "", ""
+
             return ""
 
-        if language not in {"en", "hi"}:
+        if language not in {
+            "en",
+            "hi",
+        }:
             print(
-                f"Detected unsupported language: {language or 'unknown'}"
+                "Detected unsupported language: "
+                f"{language or 'unknown'}"
             )
+
             speak(
                 "I currently support English and Hindi.",
                 language="en",
             )
+
             if return_language:
                 return "", ""
+
             return ""
 
-        print(f"User Said: {query}")
+        print(
+            f"User Said: {query}"
+        )
+
         print(
             f"Speech language: {language} "
             f"(confidence={confidence:.2f})"
         )
-        _safe_display("DisplayMessage", query)
+
+        _safe_display(
+            "DisplayMessage",
+            query,
+        )
 
         if return_language:
             return query.lower(), language
@@ -300,9 +336,14 @@ def takecommand(return_language=False):
         return query.lower()
 
     except Exception as e:
-        print("Speech recognition error:", e)
+        print(
+            "Speech recognition error:",
+            e,
+        )
+
         if return_language:
             return "", ""
+
         return ""
 
     finally:
@@ -313,6 +354,7 @@ def takecommand(return_language=False):
 def _language_name(language):
     if language == "hi":
         return "Hindi"
+
     return "English"
 
 
@@ -320,18 +362,29 @@ def _language_name(language):
 def allCommands(message=1):
     # Initial query comes either from the microphone or the text box.
     if message == 1:
-        query, query_language = takecommand(return_language=True)
-        print(f"Recognized query: {query}")
+        query, query_language = takecommand(
+            return_language=True
+        )
+
+        print(
+            f"Recognized query: {query}"
+        )
+
     else:
         query = message
-        query_language = detect_text_language(str(query))
+        query_language = detect_text_language(
+            str(query)
+        )
 
     # Phase 3/5 conversation loop:
     # If an LLM response is interrupted by saying "Jarvis", the loop
     # listens for the next query and continues without another activation.
     while True:
         if query:
-            _safe_display("senderText", query)
+            _safe_display(
+                "senderText",
+                query,
+            )
 
         try:
             if query == "":
@@ -340,7 +393,7 @@ def allCommands(message=1):
                     language="en",
                 )
                 break
-            
+
             automation_action = route_command(
                 query
             )
@@ -366,6 +419,7 @@ def allCommands(message=1):
                             "Action completed successfully.",
                         )
                     )
+
                 else:
                     speak(
                         automation_result.get(
@@ -378,10 +432,12 @@ def allCommands(message=1):
 
             if "open" in query:
                 from engine.features import openCommand
+
                 openCommand(query)
 
             elif "youtube" in query:
                 from engine.features import PlayYoutube
+
                 PlayYoutube(query)
 
             elif (
@@ -396,33 +452,71 @@ def allCommands(message=1):
                     sendMessage,
                 )
 
-                contact_no, name = findContact(query)
+                contact_no, name = findContact(
+                    query
+                )
 
-                if contact_no != 0:
+                if contact_no == 0:
                     speak(
-                        "Sir, Which mode you would like to use WhatsApp or Mobile ?"
+                        "I could not find that contact."
                     )
-                    preference = takecommand()
-                    print(preference)
+                    break
+
+                speak(
+                    "Sir, Which mode you would like "
+                    "to use WhatsApp or Mobile?"
+                )
+
+                preference = takecommand()
+
+                print(
+                    f"Call/message preference: "
+                    f"{preference}"
+                )
 
                 if "mobile" in preference:
-                    if "send message" in query or "send sms" in query:
-                        speak("What message to send, Sir?")
-                        message = takecommand()
-                        sendMessage(message, contact_no, name)
-                    elif "phone call" in query:
-                        makeCall(name, contact_no)
-                    else:
-                        speak("Please try again")
+                    if (
+                        "send message" in query
+                        or "send sms" in query
+                    ):
+                        speak(
+                            "What message to send, Sir?"
+                        )
 
-                elif "WhatsApp" in preference:
+                        message = takecommand()
+
+                        sendMessage(
+                            message,
+                            contact_no,
+                            name,
+                        )
+
+                    elif "phone call" in query:
+                        makeCall(
+                            name,
+                            contact_no,
+                        )
+
+                    else:
+                        speak(
+                            "Please try again."
+                        )
+
+                elif "whatsapp" in preference:
                     message = ""
+
                     if "send message" in query:
                         message = "message"
-                        speak("What message to send, Sir?")
+
+                        speak(
+                            "What message to send, Sir?"
+                        )
+
                         query = takecommand()
+
                     elif "phone call" in query:
                         message = "call"
+
                     else:
                         message = "video call"
 
@@ -433,11 +527,23 @@ def allCommands(message=1):
                         name,
                     )
 
+                else:
+                    speak(
+                        "I didn't recognize the mode. "
+                        "Please say WhatsApp or Mobile."
+                    )
+
             else:
                 from engine.mongo_store import save_chat_turn
 
-                print("🧠 Sending request to OmniRoute... ✨")
-                _safe_display("DisplayMessage", "Thinking...")
+                print(
+                    "🧠 Sending request to OmniRoute... ✨"
+                )
+
+                _safe_display(
+                    "DisplayMessage",
+                    "Thinking...",
+                )
 
                 settings = load_settings()
 
@@ -452,13 +558,17 @@ def allCommands(message=1):
                     "en",
                     "hi",
                 }:
-                    response_language = configured_language
+                    response_language = (
+                        configured_language
+                    )
 
                 language_name = _language_name(
                     response_language
                 )
-                               
-                previous_context = conversation_manager.build_context()
+
+                previous_context = (
+                    conversation_manager.build_context()
+                )
 
                 context_section = ""
 
@@ -475,7 +585,7 @@ def allCommands(message=1):
         You are JARVIS, a polished desktop AI assistant.
 
         Answer the user's query directly, accurately, and conversationally.
-        
+
         {context_section}
 
         Language behavior:
@@ -509,8 +619,14 @@ def allCommands(message=1):
         JARVIS:
         """
 
-                response = ask_llm(enhanced_prompt)
-                print("JARVIS:", response)
+                response = ask_llm(
+                    enhanced_prompt
+                )
+
+                print(
+                    "JARVIS:",
+                    response,
+                )
 
                 try:
                     save_chat_turn(
@@ -521,23 +637,35 @@ def allCommands(message=1):
                             "Teamax",
                         ),
                         meta={
-                            "language": query_language or "en",
+                            "language": (
+                                query_language
+                                or "en"
+                            ),
                             "provider": os.getenv(
                                 "LLM_PROVIDER",
                                 "omniroute",
                             ),
                         },
-                        conversation_id=conversation_manager.conversation_id,
+                        conversation_id=(
+                            conversation_manager
+                            .conversation_id
+                        ),
                     )
+
                 except Exception as e:
-                    print(f"Database save error: {e}")
-                    
+                    print(
+                        f"Database save error: {e}"
+                    )
+
                 conversation_manager.add_turn(
                     query,
                     response,
                 )
 
-                _safe_display("assistantResponse", response)
+                _safe_display(
+                    "assistantResponse",
+                    response,
+                )
 
                 interrupted = speak(
                     response,
@@ -548,14 +676,24 @@ def allCommands(message=1):
 
                 if interrupted:
                     print(
-                        "Speech was interrupted by the JARVIS hotword."
+                        "Speech was interrupted by "
+                        "the JARVIS hotword."
                     )
-                    _safe_display("ShowSiriWave")
+
+                    _safe_display(
+                        "ShowSiriWave"
+                    )
 
                     import time
-                    time.sleep(0.15)
 
-                    print("Listening for the next query...")
+                    time.sleep(
+                        0.15
+                    )
+
+                    print(
+                        "Listening for the next query..."
+                    )
+
                     _safe_display(
                         "DisplayMessage",
                         "Listening for your next query...",
@@ -567,26 +705,35 @@ def allCommands(message=1):
 
                     if query == "":
                         speak(
-                            "I didn't catch that. Please try again.",
+                            "I didn't catch that. "
+                            "Please try again.",
                             language="en",
                         )
                         break
 
                     continue
 
-                print("Speech completed normally.")
+                print(
+                    "Speech completed normally."
+                )
 
             break
 
         except Exception as e:
-            print(f"Error in allCommands: {e}")
+            print(
+                f"Error in allCommands: {e}"
+            )
+
             speak(
                 "There was an error processing your command",
                 language="en",
             )
+
             break
 
-    _safe_display("ShowHood")
+    _safe_display(
+        "ShowHood"
+    )
 
 
 if __name__ == "__main__":
