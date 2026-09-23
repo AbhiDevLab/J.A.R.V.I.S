@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import re
 from engine.auth import recognizer
 
 
@@ -24,11 +24,18 @@ CANCELLATION_PHRASES = {
 
 
 def _normalize(text: str) -> str:
+    normalized = str(
+        text or ""
+    ).strip().lower()
+
+    normalized = re.sub(
+        r"[^\w\s]",
+        " ",
+        normalized,
+    )
+
     return " ".join(
-        str(text or "")
-        .strip()
-        .lower()
-        .split()
+        normalized.split()
     )
 
 

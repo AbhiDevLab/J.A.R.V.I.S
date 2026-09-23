@@ -93,6 +93,7 @@ def _choose_match(
     description: str,
 ) -> Optional[Path]:
     from engine.command import (
+        _safe_display,
         speak,
         takecommand,
     )
@@ -103,29 +104,51 @@ def _choose_match(
     if len(matches) == 1:
         return matches[0]
 
-    speak(
-        f"I found {len(matches)} matches "
-        f"for {description}."
-    )
+    preview = matches[:10]
 
-    for index, match in enumerate(
-        matches[:10],
-        start=1,
-    ):
-        speak(
-            f"{index}. {match}"
+    location_lines = [
+        f"{index}. {match}"
+        for index, match in enumerate(
+            preview,
+            start=1,
         )
+    ]
 
+    # Show the complete paths in the UI.
+    _safe_display(
+        "receiverText",
+        (
+            f"I found these multiple locations "
+            f"for {description}:\n\n"
+            + "\n".join(location_lines)
+            + "\n\n"
+            "Say the number to select a specific "
+            "file."
+        ),
+    )
+
+    # Keep the spoken response short.
     speak(
-        "Please say the number of the one "
-        "you mean."
+        f"I found {len(matches)} matching "
+        f"locations for {description}. "
+        "Say the number of the one you mean.",
+        display=False
     )
 
-    response = _normalize(
+    response = str(
         takecommand()
-    )
+    ).strip().lower()
 
-    if _cancelled(response):
+    response = response.rstrip(
+        ".,!?;:"
+    ).strip()
+
+    if response in {
+        "cancel",
+        "stop",
+        "abort",
+        "no",
+    }:
         speak("Action cancelled.")
         return None
 
@@ -133,19 +156,146 @@ def _choose_match(
         index = int(response)
 
         if (
-            1 <= index <= len(matches)
+            1 <= index <= len(preview)
         ):
-            return matches[
-                index - 1
-            ]
+            return preview[index - 1]
+
+    number_words = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+
+    if response in number_words:
+        index = number_words[
+            response
+        ]
+
+        if index <= len(preview):
+            return preview[index - 1]
 
     speak(
         "I could not determine which "
-        "one you meant."
+        "location you meant."
     )
 
     return None
 
+def _choose_delete_target(
+    matches: List[Path],
+    description: str,
+) -> tuple[str, Optional[Path]]:
+    from engine.command import (
+        _safe_display,
+        speak,
+        takecommand,
+    )
+
+    if not matches:
+        return "none", None
+
+    if len(matches) == 1:
+        return "single", matches[0]
+
+    preview = matches[:]
+
+    location_lines = [
+        f"{index}. {match}"
+        for index, match in enumerate(
+            preview,
+            start=1,
+        )
+    ]
+
+    all_option = (
+        f"{len(preview) + 1}. All"
+    )
+
+    display_text = (
+        f"I found these multiple locations "
+        f"for {description}:\n\n"
+        + "\n".join(location_lines)
+        + f"\n{all_option}"
+    )
+
+    _safe_display(
+        "receiverText",
+        display_text,
+    )
+
+    speak(
+        f"I found {len(preview)} matching files. "
+        "Say the number to delete a specific file, "
+        "or say all to delete every occurrence."
+    )
+
+    response = str(
+        takecommand()
+    ).strip().lower()
+
+    response = response.rstrip(
+        ".,!?;:"
+    ).strip()
+
+    if response in {
+        "cancel",
+        "stop",
+        "abort",
+        "no",
+    }:
+        speak("Action cancelled.")
+        return "cancelled", None
+
+    if response == "all":
+        return "all", None
+
+    number_words = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+
+    if response in number_words:
+        index = number_words[
+            response
+        ]
+    elif response.isdigit():
+        index = int(response)
+    else:
+        speak(
+            "I could not determine which "
+            "file you meant."
+        )
+        return "invalid", None
+
+    if 1 <= index <= len(preview):
+        return (
+            "single",
+            preview[index - 1],
+        )
+
+    if index == len(preview) + 1:
+        return "all", None
+
+    speak(
+        "That selection is not valid."
+    )
+
+    return "invalid", None
 
 def _resolve_directory(
     reference: str,
@@ -627,38 +777,149 @@ def _complete_delete(
         matches = (
             [candidate]
             if candidate.exists()
+            and (
+                (
+                    expected_type == "file"
+                    and candidate.is_file()
+                )
+                or (
+                    expected_type == "folder"
+                    and candidate.is_dir()
+                )
+            )
             else []
         )
+
     else:
         matches = search_paths(
             target,
             expected_type=expected_type,
-            max_results=10,
+            max_results=100,
         )
 
-    resolved = _choose_match(
-        matches,
-        target,
-    )
-
-    if resolved is None:
+    if not matches:
         from engine.command import speak
 
         speak(
-            f"I could not uniquely locate "
+            f"I could not find "
             f"{target}."
         )
+
         return None
 
-    parameters["path"] = str(
-        resolved
+    if len(matches) == 1:
+        parameters["path"] = str(
+            matches[0]
+        )
+
+        return replace(
+            action,
+            parameters=parameters,
+        )
+
+    # Multiple matches:
+    # provide selection only for a normal delete request.
+    if expected_type != "file":
+        from engine.command import (
+            _safe_display,
+            speak,
+            takecommand,
+        )
+
+        location_lines = [
+            f"{index}. {match}"
+            for index, match in enumerate(
+                matches,
+                start=1,
+            )
+        ]
+
+        _safe_display(
+            "receiverText",
+            (
+                f"I found these multiple locations "
+                f"for {target}:\n\n"
+                + "\n".join(
+                    location_lines
+                )
+            ),
+        )
+
+        speak(
+            f"I found {len(matches)} matching "
+            f"{expected_type}s. "
+            "Please say the number of the one "
+            "you want to delete."
+        )
+
+        response = str(
+            takecommand()
+        ).strip().lower()
+
+        response = response.rstrip(
+            ".,!?;:"
+        ).strip()
+
+        if not response.isdigit():
+            speak(
+                "I could not determine "
+                "which one you meant."
+            )
+            return None
+
+        index = int(response)
+
+        if not (
+            1 <= index <= len(matches)
+        ):
+            speak(
+                "That selection is not valid."
+            )
+            return None
+
+        parameters["path"] = str(
+            matches[index - 1]
+        )
+
+        return replace(
+            action,
+            parameters=parameters,
+        )
+
+    selection, selected = (
+        _choose_delete_target(
+            matches,
+            target,
+        )
     )
 
-    return replace(
-        action,
-        parameters=parameters,
-    )
+    if selection == "cancelled":
+        return None
 
+    if selection == "single":
+        parameters["path"] = str(
+            selected
+        )
+
+        return replace(
+            action,
+            parameters=parameters,
+        )
+
+    if selection == "all":
+        return replace(
+            action,
+            action_type="delete_all_matches",
+            parameters={
+                "name": target,
+                "paths": [
+                    str(match)
+                    for match in matches
+                ],
+            },
+        )
+
+    return None
 
 def _complete_delete_all(
     action: AutomationAction,
@@ -698,19 +959,37 @@ def _complete_delete_all(
         )
         return None
 
-    from engine.command import speak
-
-    speak(
-        f"I found {len(matches)} files "
-        f"named {name}."
+    from engine.command import (
+        _safe_display,
+        speak,
     )
 
-    for match in matches:
-        speak(str(match))
+    location_lines = [
+        f"{index}. {match}"
+        for index, match in enumerate(
+            matches,
+            start=1,
+        )
+    ]
+
+    _safe_display(
+        "receiverText",
+        (
+            f"I found these locations "
+            f"for {name}:\n\n"
+            + "\n".join(
+                location_lines
+            )
+            + "\n\n"
+            f"All {len(matches)} matching files "
+            f"will be deleted."
+        ),
+    )
 
     speak(
-        f"These {len(matches)} files are "
-        f"ready to be deleted."
+        f"I found {len(matches)} matching files. "
+        "Say 'confirm' to continue.",
+        display=False
     )
 
     parameters["name"] = name
