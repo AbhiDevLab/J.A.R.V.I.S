@@ -521,7 +521,7 @@ def resolve_existing_path(
     matches = search_paths(
         target,
         expected_type=expected_type,
-        max_results=10,
+        max_results=50,
     )
 
     if len(matches) == 1:

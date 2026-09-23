@@ -578,7 +578,7 @@ def _complete_rename(
         matches = search_paths(
             source,
             expected_type=expected_type,
-            max_results=10,
+            max_results=50,
         )
 
     resolved = _choose_match(
@@ -680,7 +680,7 @@ def _complete_transfer(
         matches = search_paths(
             source,
             expected_type="file",
-            max_results=10,
+            max_results=50,
         )
 
     resolved = _choose_match(
@@ -795,7 +795,7 @@ def _complete_delete(
         matches = search_paths(
             target,
             expected_type=expected_type,
-            max_results=100,
+            max_results=500,
         )
 
     if not matches:
@@ -850,7 +850,8 @@ def _complete_delete(
             f"I found {len(matches)} matching "
             f"{expected_type}s. "
             "Please say the number of the one "
-            "you want to delete."
+            "you want to delete.",
+            display=False
         )
 
         response = str(
