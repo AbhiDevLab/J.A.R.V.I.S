@@ -122,6 +122,479 @@ def resolve_path(
         strict=False
     )
 
+SEARCH_EXCLUDED_DIRECTORIES = {
+    "$recycle.bin",
+    "system volume information",
+    "windows",
+    "program files",
+    "program files (x86)",
+    "programdata",
+    "appdata",
+    "application data",
+    "local settings",
+    "node_modules",
+    ".git",
+    "__pycache__",
+    "envjarvis",
+    "venv",
+    ".venv",
+}
+
+
+def _clean_reference(
+    value: str,
+) -> str:
+    text = str(
+        value or ""
+    ).strip()
+
+    while (
+        len(text) >= 2
+        and text[0] == text[-1]
+        and text[0] in {'"', "'"}
+    ):
+        text = text[1:-1].strip()
+
+    return text.rstrip(
+        ".,!?;:"
+    ).strip()
+
+
+def _matches_expected_type(
+    path: Path,
+    expected_type: Optional[str],
+) -> bool:
+    if expected_type == "file":
+        return path.is_file()
+
+    if expected_type == "folder":
+        return path.is_dir()
+
+    return path.exists()
+
+
+def _search_roots() -> List[Path]:
+    roots = [
+        Path.cwd(),
+        SPECIAL_DIRECTORIES["desktop"],
+        SPECIAL_DIRECTORIES["downloads"],
+        SPECIAL_DIRECTORIES["documents"],
+        SPECIAL_DIRECTORIES["pictures"],
+        SPECIAL_DIRECTORIES["videos"],
+        SPECIAL_DIRECTORIES["music"],
+        Path.home(),
+    ]
+
+    unique_roots = []
+    seen = set()
+
+    for root in roots:
+        try:
+            resolved = root.resolve(
+                strict=False
+            )
+
+            if resolved in seen:
+                continue
+
+            seen.add(resolved)
+            unique_roots.append(resolved)
+
+        except Exception:
+            continue
+
+    return unique_roots
+
+
+def search_paths(
+    name: str,
+    expected_type: Optional[str] = None,
+    max_results: int = 10,
+) -> List[Path]:
+    """
+    Search for an exact file/folder name in common
+    user locations.
+
+    Matching is case-insensitive.
+    """
+
+    target = _clean_reference(
+        name
+    )
+
+    if not target:
+        return []
+
+    direct = resolve_path(target)
+
+    if _matches_expected_type(
+        direct,
+        expected_type,
+    ):
+        return [direct]
+
+    # Explicit paths should not trigger a broad search.
+    if (
+        "\\" in target
+        or "/" in target
+        or ":" in target
+    ):
+        return []
+
+    target_lower = target.casefold()
+
+    matches: List[Path] = []
+    seen = set()
+
+    for root in _search_roots():
+        if (
+            not root.exists()
+            or not root.is_dir()
+        ):
+            continue
+
+        try:
+            for (
+                current_root,
+                dir_names,
+                file_names,
+            ) in os.walk(
+                root,
+                topdown=True,
+            ):
+                dir_names[:] = [
+                    directory
+                    for directory in dir_names
+                    if directory.casefold()
+                    not in SEARCH_EXCLUDED_DIRECTORIES
+                ]
+
+                current_path = Path(
+                    current_root
+                )
+
+                if expected_type != "file":
+                    for directory in dir_names:
+                        if (
+                            directory.casefold()
+                            != target_lower
+                        ):
+                            continue
+
+                        match = (
+                            current_path / directory
+                        ).resolve(
+                            strict=False
+                        )
+
+                        if match in seen:
+                            continue
+
+                        seen.add(match)
+                        matches.append(match)
+
+                        if len(matches) >= max_results:
+                            return matches
+
+                if expected_type != "folder":
+                    for filename in file_names:
+                        if (
+                            filename.casefold()
+                            != target_lower
+                        ):
+                            continue
+
+                        match = (
+                            current_path / filename
+                        ).resolve(
+                            strict=False
+                        )
+
+                        if match in seen:
+                            continue
+
+                        seen.add(match)
+                        matches.append(match)
+
+                        if len(matches) >= max_results:
+                            return matches
+
+        except Exception as exc:
+            print(
+                f"Filesystem search warning: {exc}"
+            )
+
+    return matches
+
+
+def resolve_existing_path(
+    reference: str,
+    expected_type: str,
+) -> tuple[Optional[Path], str]:
+    """
+    Resolve a user-provided file/folder reference.
+
+    Resolution order:
+        1. Explicit/direct path
+        2. Ancestor folder with the requested name
+        3. Common filesystem search
+    """
+
+    target = _clean_reference(
+        reference
+    )
+
+    if not target:
+        return (
+            None,
+            "No path was provided.",
+        )
+
+    direct = resolve_path(target)
+
+    if _matches_expected_type(
+        direct,
+        expected_type,
+    ):
+        return direct, ""
+
+    # A very useful case for commands such as:
+    # "create folder X in Dev"
+    # when JARVIS itself is running inside C:\Dev\...
+    if (
+        expected_type == "folder"
+        and "\\" not in target
+        and "/" not in target
+        and ":" not in target
+    ):
+        current = Path.cwd().resolve(
+            strict=False
+        )
+
+        for parent in [
+            current,
+            *current.parents,
+        ]:
+            if (
+                parent.name.casefold()
+                == target.casefold()
+            ):
+                return parent, ""
+
+    matches = search_paths(
+        target,
+        expected_type=expected_type,
+        max_results=10,
+    )
+
+    if len(matches) == 1:
+        return matches[0], ""
+
+    if len(matches) > 1:
+        locations = "; ".join(
+            str(match)
+            for match in matches
+        )
+
+        return (
+            None,
+            f"I found multiple matches for "
+            f"{target}: {locations}.",
+        )
+
+    return (
+        None,
+        f"I could not find {target}.",
+    )
+
+def search_paths(
+    name: str,
+    expected_type: Optional[str] = None,
+    max_results: int = 10,
+) -> List[Path]:
+    """
+    Search common user locations for an exact filename/folder name.
+
+    Search order:
+        1. Current working directory
+        2. Desktop
+        3. Downloads
+        4. Documents
+        5. Pictures
+        6. Videos
+        7. Music
+        8. User home directory
+
+    Matching is case-insensitive.
+    """
+
+    target = str(name or "").strip()
+
+    while (
+        len(target) >= 2
+        and target[0] == target[-1]
+        and target[0] in {'"', "'"}
+    ):
+        target = target[1:-1].strip()
+
+    target = target.rstrip(".,!?;:")
+
+    if not target:
+        return []
+
+    direct = resolve_path(target)
+
+    if direct.exists():
+        if (
+            expected_type == "file"
+            and not direct.is_file()
+        ):
+            return []
+
+        if (
+            expected_type == "folder"
+            and not direct.is_dir()
+        ):
+            return []
+
+        return [direct]
+
+    # Do not recursively search for an explicit path.
+    if (
+        "\\" in target
+        or "/" in target
+        or ":" in target
+    ):
+        return []
+
+    excluded_directories = {
+        "$recycle.bin",
+        "system volume information",
+        "appdata",
+        "application data",
+        "local settings",
+        "node_modules",
+        ".git",
+        "__pycache__",
+        "envjarvis",
+        "venv",
+        ".venv",
+    }
+
+    roots = [
+        Path.cwd(),
+        SPECIAL_DIRECTORIES["desktop"],
+        SPECIAL_DIRECTORIES["downloads"],
+        SPECIAL_DIRECTORIES["documents"],
+        SPECIAL_DIRECTORIES["pictures"],
+        SPECIAL_DIRECTORIES["videos"],
+        SPECIAL_DIRECTORIES["music"],
+        Path.home(),
+    ]
+
+    unique_roots = []
+
+    seen_roots = set()
+
+    for root in roots:
+        try:
+            resolved_root = root.resolve(
+                strict=False
+            )
+
+            if resolved_root in seen_roots:
+                continue
+
+            seen_roots.add(resolved_root)
+            unique_roots.append(resolved_root)
+
+        except Exception:
+            continue
+
+    target_lower = target.casefold()
+    matches: List[Path] = []
+    seen_matches = set()
+
+    for root in unique_roots:
+        if not root.exists() or not root.is_dir():
+            continue
+
+        try:
+            for (
+                current_root,
+                dir_names,
+                file_names,
+            ) in os.walk(
+                root,
+                topdown=True,
+            ):
+                dir_names[:] = [
+                    directory
+                    for directory in dir_names
+                    if directory.casefold()
+                    not in excluded_directories
+                ]
+
+                current_path = Path(
+                    current_root
+                )
+
+                if expected_type != "file":
+                    for directory in dir_names:
+                        if (
+                            directory.casefold()
+                            != target_lower
+                        ):
+                            continue
+
+                        match = current_path / directory
+                        resolved_match = match.resolve(
+                            strict=False
+                        )
+
+                        if (
+                            resolved_match
+                            not in seen_matches
+                        ):
+                            matches.append(match)
+                            seen_matches.add(
+                                resolved_match
+                            )
+
+                        if len(matches) >= max_results:
+                            return matches
+
+                if expected_type != "folder":
+                    for filename in file_names:
+                        if (
+                            filename.casefold()
+                            != target_lower
+                        ):
+                            continue
+
+                        match = current_path / filename
+                        resolved_match = match.resolve(
+                            strict=False
+                        )
+
+                        if (
+                            resolved_match
+                            not in seen_matches
+                        ):
+                            matches.append(match)
+                            seen_matches.add(
+                                resolved_match
+                            )
+
+                        if len(matches) >= max_results:
+                            return matches
+
+        except Exception as exc:
+            print(
+                f"Filesystem search warning: {exc}"
+            )
+
+    return matches
 
 def open_folder(
     path_text: str,
@@ -384,12 +857,16 @@ def rename_path(
     target_text: str,
     expected_type: str,
 ):
-    source = resolve_path(source_text)
+    source, resolution_error = resolve_existing_path(
+        source_text,
+        expected_type,
+    )
 
-    if not source.exists():
+    if source is None:
         return (
             False,
-            f"I could not find {source_text}.",
+            resolution_error
+            or f"I could not find {source_text}.",
         )
 
     if (
@@ -465,9 +942,18 @@ def copy_file(
     source_text: str,
     destination_text: str,
 ):
-    source = resolve_path(
-        source_text
+    source, resolution_error = resolve_existing_path(
+        source_text,
+        "file",
     )
+
+    if source is None:
+        return (
+            False,
+            resolution_error
+            or f"I could not find {source_text}.",
+        )
+        
     destination = resolve_path(
         destination_text
     )
@@ -529,9 +1015,18 @@ def move_file(
     source_text: str,
     destination_text: str,
 ):
-    source = resolve_path(
-        source_text
+    source, resolution_error = resolve_existing_path(
+        source_text,
+        "file",
     )
+
+    if source is None:
+        return (
+            False,
+            resolution_error
+            or f"I could not find {source_text}.",
+        )
+        
     destination = resolve_path(
         destination_text
     )
@@ -592,9 +1087,17 @@ def move_file(
 def delete_file(
     path_text: str,
 ):
-    path = resolve_path(
-        path_text
+    path, resolution_error = resolve_existing_path(
+        path_text,
+        "file",
     )
+
+    if path is None:
+        return (
+            False,
+            resolution_error
+            or f"I could not find {path_text}.",
+        )
 
     if not path.exists():
         return (
@@ -629,9 +1132,12 @@ def delete_file(
 def delete_folder(
     path_text: str,
 ):
-    path = resolve_path(
-        path_text
+    path, resolution_error = resolve_existing_path(
+        path_text,
+        "folder"
     )
+    if path is None:
+        return (False, resolution_error or f"I could not find {path_text}.",)
 
     if not path.exists():
         return (

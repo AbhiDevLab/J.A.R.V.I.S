@@ -34,6 +34,7 @@ HIGH_RISK_ACTIONS = {
     "python_script",
     "delete_file",
     "delete_folder",
+    "delete_all_matches",
     "kill_process",
     "system_power",
     "modify_system_settings",

@@ -10,11 +10,7 @@ from .applications import (
     normalize_application_name,
     resolve_application,
 )
-from .filesystem import (
-    is_known_directory_reference,
-    normalize_filesystem_text,
-    resolve_path,
-)
+from .filesystem import search_paths
 
 
 OPEN_PREFIXES = (
@@ -25,133 +21,419 @@ OPEN_PREFIXES = (
 )
 
 
-def _extract_after_prefix(
-    query: str,
+def _extract(
+    text: str,
     prefixes: tuple[str, ...],
 ) -> Optional[str]:
-    text = str(
-        query or ""
-    ).strip()
-
     lowered = text.lower()
 
     for prefix in prefixes:
+        if lowered == prefix.strip():
+            return ""
+
         if lowered.startswith(prefix):
-            value = text[
+            return text[
                 len(prefix):
             ].strip()
-
-            if value:
-                return value
 
     return None
 
 
-def _split_clause(
+def _split_right(
     value: str,
     marker: str,
-) -> Optional[tuple[str, str]]:
+) -> tuple[str, str]:
     lowered = value.lower()
     index = lowered.rfind(marker)
 
     if index == -1:
-        return None
+        return (
+            value.strip(),
+            "",
+        )
 
-    left = value[:index].strip()
-    right = value[
-        index + len(marker):
-    ].strip()
-
-    if not left or not right:
-        return None
-
-    return left, right
-
-
-def _looks_like_folder(
-    value: str,
-) -> bool:
-    if is_known_directory_reference(
-        value
-    ):
-        return True
-
-    normalized = normalize_filesystem_text(
-        value
+    return (
+        value[:index].strip(),
+        value[
+            index + len(marker):
+        ].strip(),
     )
 
-    if normalized.endswith(
-        (" folder", " directory")
+
+def _clean_name(
+    value: str,
+) -> str:
+    result = str(
+        value or ""
+    ).strip()
+
+    for prefix in (
+        "filename ",
+        "file named ",
+        "the file named ",
     ):
-        return True
+        if result.lower().startswith(
+            prefix
+        ):
+            result = result[
+                len(prefix):
+            ].strip()
+            break
 
-    try:
-        return resolve_path(value).is_dir()
-    except Exception:
-        return False
+    return result.rstrip(
+        ".,!?;:"
+    ).strip()
 
 
-def _route_open_folder(
+def _route_create(
+    text: str,
+    action_type: str,
+) -> Optional[AutomationAction]:
+    if action_type == "create_file":
+        target = _extract(
+            text,
+            (
+                "create a file",
+                "create file",
+            ),
+        )
+
+        if target is None:
+            return None
+
+        content = ""
+
+        content_marker = (
+            " with content "
+        )
+
+        index = target.lower().find(
+            content_marker
+        )
+
+        if index != -1:
+            content = target[
+                index
+                + len(content_marker):
+            ].strip()
+
+            target = target[:index].strip()
+
+    else:
+        target = _extract(
+            text,
+            (
+                "create a folder",
+                "create folder",
+                "make a folder",
+                "make folder",
+            ),
+        )
+
+        if target is None:
+            return None
+
+        content = ""
+
+    if target.lower().startswith(
+        "in "
+    ):
+        name = ""
+        directory = target[
+            3:
+        ].strip()
+    else:
+        name, directory = _split_right(
+            target,
+            " in ",
+        )
+
+    parameters = {
+        "name": _clean_name(name),
+        "directory": directory,
+    }
+
+    if action_type == "create_file":
+        parameters["content"] = content
+
+    return AutomationAction(
+        action_type=action_type,
+        parameters=parameters,
+        risk=RiskLevel.LOW,
+    )
+
+
+def _route_rename(
     text: str,
 ) -> Optional[AutomationAction]:
-    explicit_target = _extract_after_prefix(
+    target = _extract(
         text,
         (
-            "open folder ",
-            "open directory ",
+            "rename the file",
+            "rename file",
+            "rename the folder",
+            "rename folder",
         ),
     )
 
-    if explicit_target:
-        return AutomationAction(
-            action_type="open_folder",
-            parameters={
-                "path": explicit_target,
-            },
-            risk=RiskLevel.LOW,
-        )
+    if target is None:
+        return None
 
-    target = _extract_after_prefix(
-        text,
-        OPEN_PREFIXES,
+    source, new_name = _split_right(
+        target,
+        " to ",
     )
 
-    if not target:
-        return None
+    source, source_directory = (
+        _split_right(
+            source,
+            " in ",
+        )
+    )
 
-    if not _looks_like_folder(target):
-        return None
+    is_folder = (
+        "rename folder"
+        in text.lower()
+    )
 
     return AutomationAction(
-        action_type="open_folder",
+        action_type=(
+            "rename_folder"
+            if is_folder
+            else "rename_file"
+        ),
         parameters={
-            "path": target,
+            "source": _clean_name(
+                source
+            ),
+            "source_directory": (
+                source_directory
+            ),
+            "target": _clean_name(
+                new_name
+            ),
         },
         risk=RiskLevel.LOW,
     )
 
 
-def _route_directory_listing(
+def _route_transfer(
+    text: str,
+    action_type: str,
+) -> Optional[AutomationAction]:
+    if action_type == "move_file":
+        target = _extract(
+            text,
+            (
+                "move the file",
+                "move file",
+            ),
+        )
+    else:
+        target = _extract(
+            text,
+            (
+                "copy the file",
+                "copy file",
+            ),
+        )
+
+    if target is None:
+        return None
+
+    source, destination = _split_right(
+        target,
+        " to ",
+    )
+
+    source, source_directory = (
+        _split_right(
+            source,
+            " in ",
+        )
+    )
+
+    return AutomationAction(
+        action_type=action_type,
+        parameters={
+            "source": _clean_name(
+                source
+            ),
+            "source_directory": (
+                source_directory
+            ),
+            "destination": destination,
+        },
+        risk=RiskLevel.LOW,
+    )
+
+
+def _route_delete_all(
     text: str,
 ) -> Optional[AutomationAction]:
-    target = _extract_after_prefix(
+    target = _extract(
         text,
         (
-            "list files in ",
-            "list the files in ",
-            "show files in ",
-            "show the files in ",
-            "list directory ",
-            "show directory ",
-            "show contents of ",
-            "show the contents of ",
-            "what is in ",
-            "what's in ",
-            "whats in ",
+            "delete all occurrences of",
+            "delete all occurrence of",
+            "delete all instances of",
+            "delete every occurrence of",
+            "delete every instance of",
+            "delete every copy of",
         ),
     )
 
-    if not target:
+    if target is None:
+        return None
+
+    target = target.strip()
+
+    for suffix in (
+        " from my system",
+        " from system",
+        " on my system",
+        " on the system",
+    ):
+        if target.lower().endswith(
+            suffix
+        ):
+            target = target[
+                :-len(suffix)
+            ].strip()
+            break
+
+    name = _clean_name(
+        target
+    )
+
+    if not name:
+        return AutomationAction(
+            action_type="delete_all_matches",
+            parameters={
+                "name": "",
+            },
+            risk=RiskLevel.HIGH,
+        )
+
+    return AutomationAction(
+        action_type="delete_all_matches",
+        parameters={
+            "name": name,
+        },
+        risk=RiskLevel.HIGH,
+    )
+
+
+def _route_delete(
+    text: str,
+) -> Optional[AutomationAction]:
+    target = _extract(
+        text,
+        (
+            "delete the file",
+            "delete file",
+            "remove the file",
+            "remove file",
+        ),
+    )
+
+    if target is not None:
+        path, directory = _split_right(
+            target,
+            " in ",
+        )
+
+        return AutomationAction(
+            action_type="delete_file",
+            parameters={
+                "path": _clean_name(path),
+                "source_directory": directory,
+            },
+            risk=RiskLevel.HIGH,
+        )
+
+    target = _extract(
+        text,
+        (
+            "delete the folder",
+            "delete folder",
+            "remove the folder",
+            "remove folder",
+        ),
+    )
+
+    if target is not None:
+        path, directory = _split_right(
+            target,
+            " in ",
+        )
+
+        return AutomationAction(
+            action_type="delete_folder",
+            parameters={
+                "path": _clean_name(path),
+                "source_directory": directory,
+            },
+            risk=RiskLevel.HIGH,
+        )
+
+    return None
+
+
+def _route_find(
+    text: str,
+) -> Optional[AutomationAction]:
+    target = _extract(
+        text,
+        (
+            "search for the file",
+            "search for file",
+            "find the file",
+            "find file",
+        ),
+    )
+
+    if target is None:
+        return None
+
+    name, directory = _split_right(
+        target,
+        " in ",
+    )
+
+    return AutomationAction(
+        action_type="find_file",
+        parameters={
+            "name": _clean_name(name),
+            "directory": directory,
+        },
+        risk=RiskLevel.LOW,
+    )
+
+
+def _route_listing(
+    text: str,
+) -> Optional[AutomationAction]:
+    target = _extract(
+        text,
+        (
+            "list the files in",
+            "list files in",
+            "list directory",
+            "show the files in",
+            "show files in",
+            "show directory",
+            "show the contents of",
+            "show contents of",
+            "what is in",
+            "what's in",
+            "whats in",
+            "list the files",
+            "list files",
+        ),
+    )
+
+    if target is None:
         return None
 
     return AutomationAction(
@@ -163,338 +445,88 @@ def _route_directory_listing(
     )
 
 
-def _route_find_file(
+def _route_open(
     text: str,
 ) -> Optional[AutomationAction]:
-    target = _extract_after_prefix(
-        text,
-        (
-            "find file ",
-            "find the file ",
-            "search for file ",
-            "search for the file ",
-            "find ",
-        ),
-    )
-
-    if not target:
-        return None
-
-    parts = _split_clause(
-        target,
-        " in ",
-    )
-
-    if parts:
-        name, directory = parts
-    else:
-        name = target
-        directory = ""
-
-    return AutomationAction(
-        action_type="find_file",
-        parameters={
-            "name": name,
-            "directory": directory,
-        },
-        risk=RiskLevel.LOW,
-    )
-
-def _route_create_file(
-    text: str,
-) -> Optional[AutomationAction]:
-    target = _extract_after_prefix(
-        text,
-        (
-            "create file ",
-            "create a file ",
-        ),
-    )
-
-    if not target:
-        return None
-
-    content = ""
-
-    parts = _split_clause(
-        target,
-        " with content ",
-    )
-
-    if parts:
-        path, content = parts
-    else:
-        path = target
-
-    path_parts = _split_clause(
-        path,
-        " in ",
-    )
-
-    if path_parts:
-        filename, directory = path_parts
-        full_path = (
-            resolve_path(directory)
-            / filename.strip()
-        )
-    else:
-        full_path = path.strip()
-
-    return AutomationAction(
-        action_type="create_file",
-        parameters={
-            "path": str(full_path),
-            "content": content.strip(),
-        },
-        risk=RiskLevel.LOW,
-    )
-
-def _route_create_folder(
-    text: str,
-) -> Optional[AutomationAction]:
-    target = _extract_after_prefix(
-        text,
-        (
-            "create folder ",
-            "create a folder ",
-            "make folder ",
-            "make a folder ",
-        ),
-    )
-
-    if not target:
-        return None
-
-    return AutomationAction(
-        action_type="create_folder",
-        parameters={
-            "path": target,
-        },
-        risk=RiskLevel.LOW,
-    )
-
-
-def _route_rename(
-    text: str,
-) -> Optional[AutomationAction]:
-    target = _extract_after_prefix(
-        text,
-        (
-            "rename file ",
-            "rename the file ",
-            "rename folder ",
-            "rename the folder ",
-        ),
-    )
-
-    if not target:
-        return None
-
-    parts = _split_clause(
-        target,
-        " to ",
-    )
-
-    if not parts:
-        return None
-
-    source, destination = parts
-
-    lowered = text.lower()
-
-    expected_type = (
-        "folder"
-        if "rename folder" in lowered
-        else "file"
-    )
-
-    action_type = (
-        "rename_folder"
-        if expected_type == "folder"
-        else "rename_file"
-    )
-
-    return AutomationAction(
-        action_type=action_type,
-        parameters={
-            "source": source,
-            "target": destination,
-        },
-        risk=RiskLevel.LOW,
-    )
-
-
-def _route_file_transfer(
-    text: str,
-) -> Optional[AutomationAction]:
-    move_target = _extract_after_prefix(
-        text,
-        (
-            "move file ",
-            "move the file ",
-        ),
-    )
-
-    if move_target:
-        parts = _split_clause(
-            move_target,
-            " to ",
-        )
-
-        if parts:
-            source, destination = parts
-
-            return AutomationAction(
-                action_type="move_file",
-                parameters={
-                    "source": source,
-                    "destination": destination,
-                },
-                risk=RiskLevel.LOW,
-            )
-
-    copy_target = _extract_after_prefix(
-        text,
-        (
-            "copy file ",
-            "copy the file ",
-        ),
-    )
-
-    if copy_target:
-        parts = _split_clause(
-            copy_target,
-            " to ",
-        )
-
-        if parts:
-            source, destination = parts
-
-            return AutomationAction(
-                action_type="copy_file",
-                parameters={
-                    "source": source,
-                    "destination": destination,
-                },
-                risk=RiskLevel.LOW,
-            )
-
-    return None
-
-
-def _route_delete(
-    text: str,
-) -> Optional[AutomationAction]:
-    file_target = _extract_after_prefix(
-        text,
-        (
-            "delete file ",
-            "delete the file ",
-            "remove file ",
-            "remove the file ",
-        ),
-    )
-
-    if file_target:
-        return AutomationAction(
-            action_type="delete_file",
-            parameters={
-                "path": file_target,
-            },
-            risk=RiskLevel.HIGH,
-        )
-
-    folder_target = _extract_after_prefix(
-        text,
-        (
-            "delete folder ",
-            "delete the folder ",
-            "remove folder ",
-            "remove the folder ",
-        ),
-    )
-
-    if folder_target:
-        return AutomationAction(
-            action_type="delete_folder",
-            parameters={
-                "path": folder_target,
-            },
-            risk=RiskLevel.HIGH,
-        )
-
-    return None
-
-
-def _route_shell_command(
-    text: str,
-) -> Optional[AutomationAction]:
-    prefixes = (
-        "run command ",
-        "execute command ",
-        "run shell command ",
-        "execute shell command ",
-    )
-
-    lowered = text.lower()
-
-    for prefix in prefixes:
-        if lowered.startswith(prefix):
-            command = text[
-                len(prefix):
-            ].strip()
-
-            if not command:
-                return None
-
-            return AutomationAction(
-                action_type="shell_command",
-                parameters={
-                    "command": command,
-                },
-                risk=RiskLevel.HIGH,
-            )
-
-    return None
-
-
-def _route_application(
-    text: str,
-) -> Optional[AutomationAction]:
-    application_name = _extract_after_prefix(
+    target = _extract(
         text,
         OPEN_PREFIXES,
     )
 
-    if not application_name:
+    if not target:
         return None
 
-    normalized_name = normalize_application_name(
-        application_name
+    normalized = normalize_application_name(
+        target
     )
 
     executable = resolve_application(
-        normalized_name
+        normalized
     )
+
+    if executable:
+        return AutomationAction(
+            action_type="open_application",
+            parameters={
+                "application": normalized,
+                "executable": executable,
+            },
+            risk=RiskLevel.LOW,
+        )
+
+    folder_matches = search_paths(
+        target,
+        expected_type="folder",
+        max_results=1,
+    )
+
+    if folder_matches:
+        return AutomationAction(
+            action_type="open_folder",
+            parameters={
+                "path": target,
+            },
+            risk=RiskLevel.LOW,
+        )
 
     return AutomationAction(
         action_type="open_application",
         parameters={
-            "application": normalized_name,
-            "executable": executable or "",
+            "application": normalized,
+            "executable": "",
         },
         risk=RiskLevel.LOW,
+    )
+
+
+def _route_shell(
+    text: str,
+) -> Optional[AutomationAction]:
+    target = _extract(
+        text,
+        (
+            "run shell command",
+            "execute shell command",
+            "run command",
+            "execute command",
+        ),
+    )
+
+    if target is None or not target:
+        return None
+
+    return AutomationAction(
+        action_type="shell_command",
+        parameters={
+            "command": target,
+        },
+        risk=RiskLevel.HIGH,
     )
 
 
 def route_command(
     query: str,
 ) -> Optional[AutomationAction]:
-    """
-    Convert natural-language commands into
-    structured automation actions.
-    """
-
     text = str(
         query or ""
     ).strip()
@@ -502,41 +534,67 @@ def route_command(
     if not text:
         return None
 
-    # ---------------------------------------------------------
-    # File / folder control
-    # ---------------------------------------------------------
+    # Most specific filesystem intents first.
+    action = _route_delete_all(text)
 
-    filesystem_action = (
-        _route_open_folder(text)
-        or _route_directory_listing(text)
-        or _route_find_file(text)
-        or _route_create_file(text)
-        or _route_create_folder(text)
-        or _route_rename(text)
-        or _route_file_transfer(text)
-        or _route_delete(text)
+    if action:
+        return action
+
+    action = _route_delete(text)
+
+    if action:
+        return action
+
+    action = _route_find(text)
+
+    if action:
+        return action
+
+    action = _route_create(
+        text,
+        "create_file",
     )
 
-    if filesystem_action is not None:
-        return filesystem_action
+    if action:
+        return action
 
-    # ---------------------------------------------------------
-    # Existing secure shell-command pathway
-    #
-    # IMPORTANT:
-    # This comes before generic "run " application
-    # detection so "run command ..." remains a shell command.
-    # ---------------------------------------------------------
-
-    shell_action = _route_shell_command(
-        text
+    action = _route_create(
+        text,
+        "create_folder",
     )
 
-    if shell_action is not None:
-        return shell_action
+    if action:
+        return action
 
-    # ---------------------------------------------------------
-    # Desktop application control
-    # ---------------------------------------------------------
+    action = _route_rename(text)
 
-    return _route_application(text)
+    if action:
+        return action
+
+    action = _route_transfer(
+        text,
+        "move_file",
+    )
+
+    if action:
+        return action
+
+    action = _route_transfer(
+        text,
+        "copy_file",
+    )
+
+    if action:
+        return action
+
+    action = _route_listing(text)
+
+    if action:
+        return action
+
+    action = _route_shell(text)
+
+    if action:
+        return action
+
+    return _route_open(text)

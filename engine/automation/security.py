@@ -4,9 +4,7 @@ from engine.auth import recognizer
 
 
 FIRST_CONFIRMATION = {
-    "confirm action",
     "confirm",
-    "yes confirm",
 }
 
 SECOND_CONFIRMATION = {
@@ -59,7 +57,7 @@ def request_authorization(action) -> bool:
     speak(
         f"The requested action is {action_type} "
         "and requires authorization. "
-        "Say 'confirm action' to continue."
+        "Say 'confirm' to continue."
     )
 
     first_response = takecommand()

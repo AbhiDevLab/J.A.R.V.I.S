@@ -242,6 +242,74 @@ def _execute_filesystem_action(
         success,
         message,
     )
+    
+def _execute_delete_all_matches(
+    action: AutomationAction,
+) -> Dict[str, Any]:
+    paths = action.parameters.get(
+        "paths",
+        [],
+    )
+
+    if not isinstance(
+        paths,
+        list,
+    ) or not paths:
+        return _result(
+            False,
+            "No matching files were provided.",
+        )
+
+    deleted = 0
+    failures = []
+
+    for raw_path in paths:
+        path = str(
+            raw_path
+        ).strip()
+
+        if not path:
+            continue
+
+        try:
+            from pathlib import Path
+
+            target = Path(path)
+
+            if not target.exists():
+                continue
+
+            if not target.is_file():
+                failures.append(
+                    str(target)
+                )
+                continue
+
+            target.unlink()
+            deleted += 1
+
+        except Exception as exc:
+            print(
+                f"Delete-all error for {path}: {exc}"
+            )
+            failures.append(path)
+
+    if failures:
+        return _result(
+            False,
+            (
+                f"Deleted {deleted} matching files, "
+                f"but {len(failures)} could not be deleted."
+            ),
+            deleted_count=deleted,
+            failed_paths=failures,
+        )
+
+    return _result(
+        True,
+        f"Deleted {deleted} matching files.",
+        deleted_count=deleted,
+    )
 
 def execute_action(
     action: AutomationAction,
@@ -278,6 +346,7 @@ def execute_action(
         "copy_file": _execute_filesystem_action,
         "delete_file": _execute_filesystem_action,
         "delete_folder": _execute_filesystem_action,
+        "delete_all_matches": _execute_delete_all_matches,
     }
 
     handler = handlers.get(

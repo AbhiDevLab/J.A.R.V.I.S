@@ -14,6 +14,7 @@ from engine.settings_store import (
 
 from engine.automation import (
     route_command,
+    complete_action,
     execute_action,
 )
 
@@ -345,6 +346,13 @@ def allCommands(message=1):
             )
 
             if automation_action is not None:
+                automation_action = complete_action(
+                    automation_action
+                )
+
+                if automation_action is None:
+                    break
+
                 automation_result = execute_action(
                     automation_action
                 )
