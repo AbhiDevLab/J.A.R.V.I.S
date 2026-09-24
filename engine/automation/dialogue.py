@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from pathlib import Path
 from typing import List, Optional
@@ -60,6 +61,187 @@ def _cancelled(
         in CANCELLATION_PHRASES
     )
 
+SELECTION_NUMBER_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+}
+
+SELECTION_ORDINAL_WORDS = {
+    "first": 1,
+    "second": 2,
+    "third": 3,
+    "fourth": 4,
+    "fifth": 5,
+    "sixth": 6,
+    "seventh": 7,
+    "eighth": 8,
+    "ninth": 9,
+    "tenth": 10,
+}
+
+SELECTION_WRAPPERS = {
+    "the",
+    "number",
+    "option",
+    "choice",
+}
+
+SELECTION_SUFFIXES = {
+    "one",
+    "item",
+    "file",
+    "folder",
+    "location",
+}
+
+
+def _parse_selection_index(
+    response: str,
+    max_items: int,
+) -> Optional[int]:
+    """
+    Convert a natural-language selection into a 1-based index.
+
+    Supported examples:
+
+        1
+        2
+        1st
+        2nd
+        one
+        two
+        first
+        second
+        first one
+        second one
+        the first one
+        the second file
+        number one
+        number two
+        option one
+        choice two
+
+    Returns None when the response does not represent a valid
+    selection within max_items.
+    """
+
+    normalized = _normalize(
+        _clean(response)
+    )
+
+    if not normalized:
+        return None
+
+    # ---------------------------------------------------------
+    # Direct numeric selection
+    # ---------------------------------------------------------
+
+    if normalized.isdigit():
+        index = int(normalized)
+
+        if 1 <= index <= max_items:
+            return index
+
+        return None
+
+    # ---------------------------------------------------------
+    # Numeric ordinal forms: 1st, 2nd, 3rd, 4th...
+    # ---------------------------------------------------------
+
+    ordinal_match = re.fullmatch(
+        r"(\d+)(?:st|nd|rd|th)",
+        normalized,
+    )
+
+    if ordinal_match:
+        index = int(
+            ordinal_match.group(1)
+        )
+
+        if 1 <= index <= max_items:
+            return index
+
+        return None
+
+    # ---------------------------------------------------------
+    # Remove harmless voice-command wrappers.
+    #
+    # Examples:
+    #
+    #   "the second one" -> "second one"
+    #   "number two"     -> "two"
+    #   "option 2"       -> "2"
+    # ---------------------------------------------------------
+
+    tokens = normalized.split()
+
+    while (
+        tokens
+        and tokens[0] in SELECTION_WRAPPERS
+    ):
+        tokens.pop(0)
+
+    # ---------------------------------------------------------
+    # Remove harmless item-type suffixes.
+    #
+    # Examples:
+    #
+    #   "first one"      -> "first"
+    #   "second file"    -> "second"
+    #   "third folder"   -> "third"
+    #   "fourth location"-> "fourth"
+    # ---------------------------------------------------------
+
+    if (
+        len(tokens) > 1
+        and tokens[-1]
+        in SELECTION_SUFFIXES
+    ):
+        tokens.pop()
+
+    normalized_core = " ".join(
+        tokens
+    )
+
+    # ---------------------------------------------------------
+    # Spoken cardinal numbers.
+    # ---------------------------------------------------------
+
+    index = (
+        SELECTION_NUMBER_WORDS.get(
+            normalized_core
+        )
+    )
+
+    if index is not None:
+        if 1 <= index <= max_items:
+            return index
+
+        return None
+
+    # ---------------------------------------------------------
+    # Spoken ordinal numbers.
+    # ---------------------------------------------------------
+
+    index = (
+        SELECTION_ORDINAL_WORDS.get(
+            normalized_core
+        )
+    )
+
+    if index is not None:
+        if 1 <= index <= max_items:
+            return index
+
+    return None
 
 def _ask(
     prompt: str,
@@ -135,51 +317,19 @@ def _choose_match(
         display=False
     )
 
-    response = str(
-        takecommand()
-    ).strip().lower()
+    response = takecommand()
 
-    response = response.rstrip(
-        ".,!?;:"
-    ).strip()
-
-    if response in {
-        "cancel",
-        "stop",
-        "abort",
-        "no",
-    }:
+    if _cancelled(response):
         speak("Action cancelled.")
         return None
 
-    if response.isdigit():
-        index = int(response)
+    index = _parse_selection_index(
+        response,
+        len(preview),
+    )
 
-        if (
-            1 <= index <= len(preview)
-        ):
-            return preview[index - 1]
-
-    number_words = {
-        "one": 1,
-        "two": 2,
-        "three": 3,
-        "four": 4,
-        "five": 5,
-        "six": 6,
-        "seven": 7,
-        "eight": 8,
-        "nine": 9,
-        "ten": 10,
-    }
-
-    if response in number_words:
-        index = number_words[
-            response
-        ]
-
-        if index <= len(preview):
-            return preview[index - 1]
+    if index is not None:
+        return preview[index - 1]
 
     speak(
         "I could not determine which "
@@ -308,40 +458,16 @@ def _choose_delete_target(
     if response == "all":
         return "all", None
 
-    number_words = {
-        "one": 1,
-        "two": 2,
-        "three": 3,
-        "four": 4,
-        "five": 5,
-        "six": 6,
-        "seven": 7,
-        "eight": 8,
-        "nine": 9,
-        "ten": 10,
-    }
+    index = _parse_selection_index(
+        response,
+        len(preview),
+    )
 
-    if response in number_words:
-        index = number_words[
-            response
-        ]
-    elif response.isdigit():
-        index = int(response)
-    else:
-        speak(
-            "I could not determine which "
-            "file you meant."
-        )
-        return "invalid", None
-
-    if 1 <= index <= len(preview):
+    if index is not None:
         return (
             "single",
             preview[index - 1],
         )
-
-    if index == len(preview) + 1:
-        return "all", None
 
     speak(
         "That selection is not valid."
@@ -905,28 +1031,21 @@ def _complete_delete(
             display=False
         )
 
-        response = str(
-            takecommand()
-        ).strip().lower()
+        response = takecommand()
 
-        response = response.rstrip(
-            ".,!?;:"
-        ).strip()
+        if _cancelled(response):
+            speak("Action cancelled.")
+            return None
 
-        if not response.isdigit():
+        index = _parse_selection_index(
+            response,
+            len(matches),
+        )
+
+        if index is None:
             speak(
                 "I could not determine "
                 "which one you meant."
-            )
-            return None
-
-        index = int(response)
-
-        if not (
-            1 <= index <= len(matches)
-        ):
-            speak(
-                "That selection is not valid."
             )
             return None
 
