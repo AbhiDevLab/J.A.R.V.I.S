@@ -863,9 +863,13 @@ def find_file(
         _safe_display(
             "receiverText",
             (
-                f"I found {len(matches)} matches "
-                f"for {target_name}:\n"
-                + "\n".join(location_lines)
+                (
+                    f"I found {len(matches)} matches "
+                    f"for {target_name}:\n\n"
+                    + "\n".join(location_lines)
+                    + "\n\n"
+                    "Say the number to select a specific file."
+                )
             ),
         )
 

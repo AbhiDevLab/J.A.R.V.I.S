@@ -878,6 +878,159 @@ $(document).ready(function () {
     );
   }
 
+  let recognizedQueryTransitionId = 0;
+
+  function showRecognizedQuery(message) {
+    const text =
+      String(
+        message ?? ""
+      ).trim();
+
+    const container =
+      $("#HudRecognizedQuery");
+
+    const textElement =
+      $("#HudRecognizedQueryText");
+
+    if (
+      !container.length ||
+      !textElement.length ||
+      !text
+    ) {
+      return;
+    }
+
+    const transitionId =
+      ++recognizedQueryTransitionId;
+
+    container.stop(
+      true,
+      true
+    );
+
+    textElement.stop(
+      true,
+      true
+    );
+
+    const currentText =
+      textElement.text().trim();
+
+    // Same recognized query — just keep it visible.
+    if (
+      currentText === text &&
+      !container.prop("hidden")
+    ) {
+      container
+        .animate(
+          {
+            opacity: 1,
+          },
+          220
+        );
+
+      return;
+    }
+
+    // If another query is already displayed,
+    // fade it out before replacing it.
+    if (
+      !container.prop("hidden") &&
+      currentText
+    ) {
+      container.animate(
+        {
+          opacity: 0,
+        },
+        180,
+        function () {
+          if (
+            transitionId !==
+            recognizedQueryTransitionId
+          ) {
+            return;
+          }
+
+          textElement.text(
+            text
+          );
+
+          container
+            .prop(
+              "hidden",
+              false
+            )
+            .css({
+              opacity: 0,
+            });
+
+          container.animate(
+            {
+              opacity: 1,
+            },
+            300
+          );
+        }
+      );
+
+      return;
+    }
+
+    // First appearance.
+    textElement.text(
+      text
+    );
+
+    container
+      .prop(
+        "hidden",
+        false
+      )
+      .css({
+        opacity: 0,
+      });
+
+    container.animate(
+      {
+        opacity: 1,
+      },
+      300
+    );
+  }
+
+
+  function hideRecognizedQuery() {
+    const container =
+      $("#HudRecognizedQuery");
+
+    if (!container.length) {
+      return;
+    }
+
+    ++recognizedQueryTransitionId;
+
+    container.stop(
+      true,
+      true
+    );
+
+    container.animate(
+      {
+        opacity: 0,
+      },
+      220,
+      function () {
+        container.prop(
+          "hidden",
+          true
+        );
+      }
+    );
+  }
+
+  eel.expose(showRecognizedQuery);
+  eel.expose(hideRecognizedQuery);
+
   function DisplayMessage(message) {
     try {
       if (!message || message.trim() === "") {
@@ -907,6 +1060,7 @@ $(document).ready(function () {
             "Listening..."
           );
           hideThinkingIndicator();
+          hideRecognizedQuery();
         } else if (
           status === "Recognizing ...." ||
           status === "Recognizing..."
@@ -1174,6 +1328,7 @@ $(document).ready(function () {
 
   function assistantResponse(message) {
     try {
+      hideRecognizedQuery();
       hideConversationVoiceStatus();
       hideThinkingIndicator();
 

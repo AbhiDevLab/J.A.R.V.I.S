@@ -3263,4 +3263,135 @@ body.history-open #ChatBtn {
 #WishMessage,
 .siri-message {
     opacity: 1;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.receiver_message,
+.hood-transient {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+/* =========================================================
+   RECOGNIZED USER QUERY HUD
+   ========================================================= */
+
+.hud-recognized-query {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+
+    width: min(
+        760px,
+        88vw
+    );
+
+    margin:
+        0 auto 14px;
+
+    padding:
+        8px 14px;
+
+    border:
+        1px solid rgba(
+            0,
+            170,
+            255,
+            0.18
+        );
+
+    border-radius:
+        10px;
+
+    background:
+        rgba(
+            0,
+            0,
+            0,
+            0.24
+        );
+
+    box-shadow:
+        0 0 18px rgba(
+            0,
+            170,
+            255,
+            0.06
+        );
+
+    backdrop-filter:
+        blur(8px);
+
+    -webkit-backdrop-filter:
+        blur(8px);
+
+    opacity: 0;
+
+    overflow-wrap:
+        anywhere;
+}
+
+.hud-recognized-label {
+    flex:
+        0 0 auto;
+
+    color:
+        rgba(
+            125,
+            211,
+            252,
+            0.72
+        );
+
+    font-size:
+        9px;
+
+    font-weight:
+        700;
+
+    letter-spacing:
+        0.16em;
+
+    text-transform:
+        uppercase;
+}
+
+.hud-recognized-text {
+    color:
+        rgba(
+            255,
+            255,
+            255,
+            0.72
+        );
+
+    font-size:
+        12px;
+
+    line-height:
+        1.45;
+
+    text-align:
+        left;
+
+    white-space:
+        pre-line;
+
+    overflow-wrap:
+        anywhere;
+}
+
+@media (max-width: 600px) {
+    .hud-recognized-query {
+        width: 92vw;
+        padding:
+            7px 11px;
+    }
+
+    .hud-recognized-text {
+        font-size:
+            11px;
+    }
 }
