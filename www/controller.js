@@ -126,7 +126,7 @@ $(document).ready(function () {
     }
 
     history.innerHTML = "";
-    
+
     renderHistoryPeek(
       conversations
     );
@@ -807,6 +807,77 @@ $(document).ready(function () {
   // Define handlers first, then expose them to Python via eel.expose.
   // This ensures the visual hood updates (big-screen) as well as chat (offcanvas).
 
+  let hudTextTransitionId = 0;
+
+  function transitionHudText(message) {
+    const text = String(
+      message ?? ""
+    ).trim();
+
+    if (!text) {
+      return;
+    }
+
+    const transitionId =
+      ++hudTextTransitionId;
+
+    $("#WishMessage, .siri-message").each(
+      function () {
+        const element =
+          $(this);
+
+        if (!element.length) {
+          return;
+        }
+
+        const currentText =
+          element.text().trim();
+
+        if (currentText === text) {
+          return;
+        }
+
+        // Cancel any previous transition.
+        element.stop(
+          true,
+          true
+        );
+
+        // Fade the old text out.
+        element.animate(
+          {
+            opacity: 0,
+          },
+          220,
+          function () {
+            // A newer message arrived while this
+            // transition was running.
+            if (
+              transitionId !==
+              hudTextTransitionId
+            ) {
+              return;
+            }
+
+            // Replace the text only after it
+            // has faded out.
+            element.text(
+              text
+            );
+
+            // Fade the new text in.
+            element.animate(
+              {
+                opacity: 1,
+              },
+              360
+            );
+          }
+        );
+      }
+    );
+  }
+
   function DisplayMessage(message) {
     try {
       if (!message || message.trim() === "") {
@@ -865,13 +936,9 @@ $(document).ready(function () {
       }
 
       // Keep the normal JARVIS HUD behavior unchanged.
-      $("#WishMessage").text(status);
-
-      $(".siri-message").text(status);
-
-      try {
-        $(".siri-message").textillate("start");
-      } catch (e) { }
+      transitionHudText(
+        status
+      );
     } catch (e) {
       console.error(
         "DisplayMessage error:",
@@ -1470,19 +1537,9 @@ $(document).ready(function () {
 
           // Update both main wish message
           // and siri-message animation
-          $("#WishMessage").text(
+          transitionHudText(
             message
           );
-
-          $(".siri-message").text(
-            message
-          );
-
-          try {
-            $(".siri-message").textillate(
-              "start"
-            );
-          } catch (e) { }
 
 
           const hood =

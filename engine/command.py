@@ -413,12 +413,27 @@ def allCommands(message=1):
                 if automation_result.get(
                     "success"
                 ):
-                    speak(
-                        automation_result.get(
-                            "message",
-                            "Action completed successfully.",
+                    if (
+                        automation_action.action_type
+                        == "find_file"
+                        and automation_result.get(
+                            "message"
                         )
-                    )
+                    ):
+                        speak(
+                            automation_result.get(
+                                "message",
+                                "Action completed successfully.",
+                            ),
+                            display=False,
+                        )
+                    else:
+                        speak(
+                            automation_result.get(
+                                "message",
+                                "Action completed successfully.",
+                            )
+                        )
 
                 else:
                     speak(

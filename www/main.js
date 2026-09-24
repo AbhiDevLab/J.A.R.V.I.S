@@ -647,20 +647,6 @@ $(document).ready(function () {
     });
 
 
-    $(".siri-message").textillate({
-        loop: true,
-        sync: true,
-        in: {
-            effect: "fadeInUp",
-            sync: true,
-        },
-        out: {
-            effect: "fadeOutUp",
-            sync: true,
-        },
-    });
-
-
     /* =========================================================
        MICROPHONE
        ========================================================= */

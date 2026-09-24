@@ -295,6 +295,14 @@ def _file_match_rank(
     filename: str,
     target: str,
 ) -> Optional[int]:
+    """Rank a filename against a user-provided file reference.
+
+    Lower rank means a stronger match:
+
+        0 -> exact filename
+        1 -> exact filename stem
+        2 -> target contained in filename stem
+        None -> no match"""
     filename_lower = filename.casefold()
     target_lower = target.casefold()
 
@@ -320,7 +328,17 @@ def search_paths(
     search_roots: Optional[List[Path]] = None,
 ) -> List[Path]:
     """
-    Search for an exact file or folder name.
+    Search for a file or folder by name.
+
+    File matching uses ranked resolution:
+
+        0 -> exact filename
+        1 -> exact filename stem
+        2 -> target contained in filename stem
+
+    Only the best available rank is returned.
+
+    Folder matching remains exact-match only.
 
     Search scope:
         - Current working directory
@@ -366,9 +384,8 @@ def search_paths(
     ):
         return []
 
-    target_lower = target.casefold()
-
     matches: List[Path] = []
+    ranked_file_matches: List[tuple[int, Path]] = []
     seen = set()
 
     roots = (
@@ -409,12 +426,12 @@ def search_paths(
                     current_root
                 )
 
-                # Folder search
+                # Folder search remains exact-match only.
                 if expected_type != "file":
                     for directory in dir_names:
                         if (
                             directory.casefold()
-                            != target_lower
+                            != target.casefold()
                         ):
                             continue
 
@@ -431,20 +448,15 @@ def search_paths(
                         seen.add(match)
                         matches.append(match)
 
-                        if (
-                            max_results is not None
-                            and len(matches)
-                            >= max_results
-                        ):
-                            return matches
-
-                # File search
+                # File search uses ranked filename matching.
                 if expected_type != "folder":
                     for filename in file_names:
-                        if (
-                            filename.casefold()
-                            != target_lower
-                        ):
+                        rank = _file_match_rank(
+                            filename,
+                            target,
+                        )
+
+                        if rank is None:
                             continue
 
                         match = (
@@ -458,19 +470,55 @@ def search_paths(
                             continue
 
                         seen.add(match)
-                        matches.append(match)
 
-                        if (
-                            max_results is not None
-                            and len(matches)
-                            >= max_results
-                        ):
-                            return matches
+                        ranked_file_matches.append(
+                            (
+                                rank,
+                                match,
+                            )
+                        )
 
         except Exception as exc:
             print(
                 f"Filesystem search warning: {exc}"
             )
+
+    # Keep only the strongest match class.
+    #
+    # Example:
+    #
+    #   query: "Godmother"
+    #
+    #   Godmother.pdf          rank 1
+    #   Godmother.jpg          rank 1
+    #   MyGodmotherNotes.txt   rank 2
+    #
+    # Only the rank-1 matches should be considered.
+    if ranked_file_matches:
+        ranked_file_matches.sort(
+            key=lambda item: (
+                item[0],
+                str(item[1]).casefold(),
+            )
+        )
+
+        best_rank = ranked_file_matches[0][0]
+
+        best_matches = [
+            match
+            for rank, match
+            in ranked_file_matches
+            if rank == best_rank
+        ]
+
+        if max_results is not None:
+            best_matches = best_matches[
+                :max_results
+            ]
+
+        matches.extend(
+            best_matches
+        )
 
     return matches
 
@@ -799,10 +847,37 @@ def find_file(
             f"I found {target_name} at {locations}.",
         )
 
+    # Show the detailed locations in the HUD,
+    # but keep the spoken response short.
+    try:
+        from engine.command import _safe_display
+
+        location_lines = [
+            f"{index}. {match}"
+            for index, match in enumerate(
+                matches,
+                start=1,
+            )
+        ]
+
+        _safe_display(
+            "receiverText",
+            (
+                f"I found {len(matches)} matches "
+                f"for {target_name}:\n"
+                + "\n".join(location_lines)
+            ),
+        )
+
+    except Exception as exc:
+        print(
+            f"Find-file UI display error: {exc}"
+        )
+
     return (
         True,
         f"I found {len(matches)} matches "
-        f"for {target_name}: {locations}.",
+        f"for {target_name}.",
     )
 
 def create_folder(

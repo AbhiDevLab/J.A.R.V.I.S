@@ -3259,3 +3259,8 @@ body.history-open #ChatBtn {
     transform:
         translateY(0);
 }
+
+#WishMessage,
+.siri-message {
+    opacity: 1;
+}

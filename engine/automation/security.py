@@ -7,12 +7,6 @@ FIRST_CONFIRMATION = {
     "confirm",
 }
 
-SECOND_CONFIRMATION = {
-    "confirm again",
-    "confirm action again",
-    "execute",
-}
-
 CANCELLATION_PHRASES = {
     "cancel",
     "stop",
@@ -45,8 +39,8 @@ def _is_cancelled(text: str) -> bool:
 
 def request_authorization(action) -> bool:
     """
-    Require two explicit voice confirmations with a successful
-    face authentication in between.
+    Require one explicit voice confirmation followed by
+    successful face authentication.
 
     Fail closed:
     any failed step means the action is cancelled.
@@ -58,7 +52,7 @@ def request_authorization(action) -> bool:
     action_type = action.action_type
 
     # ---------------------------------------------------------
-    # STEP 1 — First voice confirmation
+    # STEP 1 — Voice confirmation
     # ---------------------------------------------------------
 
     speak(
@@ -75,13 +69,13 @@ def request_authorization(action) -> bool:
 
     if _normalize(first_response) not in FIRST_CONFIRMATION:
         speak(
-            "First confirmation was not recognized. "
+            "Confirmation was not recognized. "
             "The action has been cancelled."
         )
         return False
 
     speak(
-        "First confirmation accepted. "
+        "Confirmation accepted. "
         "Starting face authentication."
     )
 
@@ -104,28 +98,13 @@ def request_authorization(action) -> bool:
         )
         return False
 
+    # ---------------------------------------------------------
+    # STEP 3 — Authorization complete
+    # ---------------------------------------------------------
+
     speak(
         "Face authentication successful. "
-        "Say 'confirm again' to execute the action."
+        "Authorization successful."
     )
-
-    # ---------------------------------------------------------
-    # STEP 3 — Second voice confirmation
-    # ---------------------------------------------------------
-
-    second_response = takecommand()
-
-    if _is_cancelled(second_response):
-        speak("Action cancelled.")
-        return False
-
-    if _normalize(second_response) not in SECOND_CONFIRMATION:
-        speak(
-            "Second confirmation was not recognized. "
-            "The action has been cancelled."
-        )
-        return False
-
-    speak("Authorization successful.")
 
     return True
