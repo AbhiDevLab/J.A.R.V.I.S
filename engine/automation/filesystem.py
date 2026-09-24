@@ -262,7 +262,7 @@ def _is_full_search_root(
     root: Path,
 ) -> bool:
     """
-    C:\Dev and C:\Users are intentionally scanned
+    C:\\Dev and C:\\Users are intentionally scanned
     recursively without the normal application/system
     exclusion list.
     """
@@ -290,6 +290,28 @@ def _is_full_search_root(
     return root.resolve(
         strict=False
     ) in full_roots
+
+def _file_match_rank(
+    filename: str,
+    target: str,
+) -> Optional[int]:
+    filename_lower = filename.casefold()
+    target_lower = target.casefold()
+
+    stem_lower = Path(
+        filename
+    ).stem.casefold()
+
+    if filename_lower == target_lower:
+        return 0
+
+    if stem_lower == target_lower:
+        return 1
+
+    if target_lower in stem_lower:
+        return 2
+
+    return None
 
 def search_paths(
     name: str,
@@ -584,6 +606,44 @@ def open_folder(
             f"I could not open {path_text}.",
         )
 
+def open_file(
+    path_text: str,
+):
+    path = resolve_path(
+        path_text
+    )
+
+    if not path.exists():
+        return (
+            False,
+            f"I could not find {path_text}.",
+        )
+
+    if not path.is_file():
+        return (
+            False,
+            f"{path_text} is not a file.",
+        )
+
+    try:
+        os.startfile(
+            str(path)
+        )
+
+        return (
+            True,
+            f"Opening {path.name}.",
+        )
+
+    except Exception as exc:
+        print(
+            f"File open error: {exc}"
+        )
+
+        return (
+            False,
+            f"I could not open {path_text}.",
+        )
 
 def list_directory(
     path_text: str,

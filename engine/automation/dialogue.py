@@ -188,6 +188,57 @@ def _choose_match(
 
     return None
 
+def _complete_open_file(
+    action: AutomationAction,
+) -> Optional[AutomationAction]:
+    parameters = dict(
+        action.parameters
+    )
+
+    source = _clean(
+        parameters.get(
+            "source",
+            "",
+        )
+    )
+
+    if not source:
+        source = _ask(
+            "Which file should I open?"
+        )
+
+        if source is None:
+            return None
+
+    matches = search_paths(
+        source,
+        expected_type="file",
+        max_results=50,
+    )
+
+    resolved = _choose_match(
+        matches,
+        source,
+    )
+
+    if resolved is None:
+        from engine.command import speak
+
+        speak(
+            f"I could not uniquely locate "
+            f"{source}."
+        )
+        return None
+
+    parameters["path"] = str(
+        resolved
+    )
+
+    return replace(
+        action,
+        parameters=parameters,
+    )
+
 def _choose_delete_target(
     matches: List[Path],
     description: str,
@@ -1005,6 +1056,10 @@ def complete_action(
 ) -> Optional[AutomationAction]:
     action_type = action.action_type
 
+    if action_type == "open_file":
+        return _complete_open_file(
+            action
+        )
     if action_type == "create_file":
         return _complete_create(
             action,

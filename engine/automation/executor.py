@@ -17,6 +17,7 @@ from .filesystem import (
     find_file,
     list_directory,
     move_file,
+    open_file,
     open_folder,
     rename_path,
 )
@@ -184,6 +185,11 @@ def _execute_filesystem_action(
             parameters.get("name", ""),
             parameters.get("directory", ""),
         )
+        
+    elif action_type == "open_file":
+        success, message = open_file(
+            parameters.get("path", "")
+        )
 
     elif action_type == "create_file":
         success, message = create_file(
@@ -335,6 +341,7 @@ def execute_action(
     handlers = {
         "open_application": _execute_open_application,
         "shell_command": _execute_shell_command,
+        "open_file": _execute_filesystem_action,
         "open_folder": _execute_filesystem_action,
         "list_directory": _execute_filesystem_action,
         "find_file": _execute_filesystem_action,

@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import re
 from typing import Optional
 
 from .actions import (
@@ -389,10 +389,20 @@ def _route_find(
     target = _extract(
         text,
         (
-            "search for the file",
+            "search for a file named",
+            "search for a file called",
+            "search for the file named",
+            "search for the file called",
             "search for file",
-            "find the file",
+            "find a file named",
+            "find a file called",
+            "find a file name called",
+            "find the file named",
+            "find the file called",
             "find file",
+            "find the file",
+            "locate file",
+            "locate the file",
         ),
     )
 
@@ -526,6 +536,146 @@ def _route_shell(
         risk=RiskLevel.HIGH,
     )
 
+def _route_find_and_operate(
+    text: str,
+) -> Optional[AutomationAction]:
+    """
+    Convert commands such as:
+
+        Find Godmother and open it
+        Find Godmother and delete it
+        Find Godmother and move it to Desktop
+        Find Godmother and copy it to Downloads
+        Find Godmother and rename it to Final Godmother
+
+    into a normal filesystem action whose source is resolved
+    later by dialogue.py.
+    """
+
+    pattern = re.compile(
+        r"""
+        ^\s*
+        (?P<find>
+            find\s+(?:a\s+)?(?:file\s+)?(?:named\s+|called\s+|name\s+called\s+)?
+            |
+            search\s+for\s+(?:a\s+)?(?:file\s+)?(?:named\s+|called\s+|name\s+called\s+)?
+            |
+            locate\s+(?:a\s+)?(?:file\s+)?(?:named\s+|called\s+|name\s+called\s+)?
+        )
+        (?P<source>.+?)
+        \s+
+        (?:and\s+then|then|and)
+        \s+
+        (?P<operation>
+            open
+            |
+            delete
+            |
+            remove
+            |
+            move
+            |
+            copy
+            |
+            rename
+        )
+        (?:
+            \s+it
+        |
+            \s+the\s+file
+        )?
+        (?:
+            \s+to\s+(?P<target>.+)
+        )?
+        \s*$
+        """,
+        re.IGNORECASE | re.VERBOSE,
+    )
+
+    match = pattern.match(
+        text
+    )
+
+    if not match:
+        return None
+
+    source = _clean_name(
+        match.group("source")
+    )
+
+    operation = (
+        match.group("operation")
+        .lower()
+    )
+
+    target = match.group(
+        "target"
+    )
+
+    if not source:
+        return None
+
+    if operation == "open":
+        return AutomationAction(
+            action_type="open_file",
+            parameters={
+                "source": source,
+            },
+            risk=RiskLevel.LOW,
+        )
+
+    if operation in {
+        "delete",
+        "remove",
+    }:
+        return AutomationAction(
+            action_type="delete_file",
+            parameters={
+                "path": source,
+            },
+            risk=RiskLevel.HIGH,
+        )
+
+    if operation == "move":
+        return AutomationAction(
+            action_type="move_file",
+            parameters={
+                "source": source,
+                "source_directory": "",
+                "destination": (
+                    target or ""
+                ),
+            },
+            risk=RiskLevel.LOW,
+        )
+
+    if operation == "copy":
+        return AutomationAction(
+            action_type="copy_file",
+            parameters={
+                "source": source,
+                "source_directory": "",
+                "destination": (
+                    target or ""
+                ),
+            },
+            risk=RiskLevel.LOW,
+        )
+
+    if operation == "rename":
+        return AutomationAction(
+            action_type="rename_file",
+            parameters={
+                "source": source,
+                "source_directory": "",
+                "target": (
+                    target or ""
+                ),
+            },
+            risk=RiskLevel.LOW,
+        )
+
+    return None
 
 def route_command(
     query: str,
@@ -536,6 +686,13 @@ def route_command(
 
     if not text:
         return None
+    
+    action = _route_find_and_operate(
+        text
+    )
+
+    if action is not None:
+        return action
 
     # Most specific filesystem intents first.
     action = _route_delete_all(text)
