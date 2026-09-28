@@ -1,223 +1,442 @@
 # J.A.R.V.I.S (Just A Rather Very Intelligent System)
 
-<img width="1672" height="941" alt="image" src="https://github.com/user-attachments/assets/e060004a-5024-47c2-92b7-9fb40808dae2" />
+A Windows-centric Python desktop voice assistant built with **Python + Eel**, combining face authentication, voice fallback, local desktop automation, conversational AI, speech recognition, neural TTS, hotword activation, and a cinematic HUD interface.
 
+## ✨ Current Features
 
-A Windows-centric Python desktop voice assistant with face authentication, voice fallback, local automation, and Gemini-powered conversational AI. Built with Python + Eel for a native-like web UI.
+### 🔐 Authentication & Security
 
-## ✨ Features
+- **Face authentication** using Faster R-CNN face detection, FaceNet embeddings (InceptionResnetV1), and MTCNN-assisted face processing.
+- Configurable similarity threshold and consecutive-frame verification.
+- **Voice authentication fallback** when face authentication fails.
+- High-risk local actions require **two authentication steps only**:
+  1. Explicit spoken confirmation
+  2. Successful face authentication
+- High-risk actions fail closed when authorization fails.
+- Authentication samples and generated face embeddings are kept local and ignored by Git.
 
-- **Face Authentication** using Faster R-CNN detection and FaceNet embeddings
-- **Voice Fallback** (Google Speech Recognition) when face auth fails or is disabled
-- **Hotword Detection** (Porcupine) for "Jarvis" / "Alexa" to activate via Win+J
-- **Command Execution**:
-  - Open local applications & websites (configured via SQLite)
-  - YouTube playback (`play <search>`)
-  - WhatsApp messaging/calls/video (via URL scheme + pyautogui)
-  - Android automation via ADB (call/SMS)
-- **Conversational AI**: General queries handled by Google Gemini (`gemini-2.5-flash-lite`)
-- **Optional Chat History**: MongoDB persistence for user/assistant turns
-- **Rich UI**: Animated loader, SiriWave visualization, orbiting hood, off‑canvas chat
-- **Cross‑process Architecture**: Separate processes for GUI and hotword listener
+### 🎙️ Speech & Voice
+
+- Local speech transcription with **Faster-Whisper** when available.
+- Google Speech Recognition fallback.
+- Automatic English/Hindi detection for supported speech.
+- Neural TTS using **Edge TTS** with SAPI5 fallback.
+- Configurable English/Hindi voices, rate, volume, and pitch.
+- Interruptible TTS infrastructure so the hotword system can detect an interruption while JARVIS is speaking.
+- Hotword activation through **Porcupine**.
+- Shared microphone/process coordination between hotword detection and speech recognition.
+
+### 🤖 Conversational AI
+
+- Provider-neutral LLM client using **OmniRoute**.
+- OpenAI-compatible /chat/completions interface.
+- Configurable OmniRoute model/team.
+- Conversation context manager with configurable recent-turn memory.
+- Optional MongoDB persistence for conversation history.
+- Conversation history can be loaded into the UI.
+- New-conversation support.
+- Non-streaming LLM responses are currently used by JARVIS.
+
+### 🖥️ Desktop Automation
+
+JARVIS has a structured automation layer under engine/automation/.
+
+- Command routing into structured AutomationAction objects.
+- Application resolution with aliases for common Windows applications.
+- File/folder search with ranked matching:
+  - exact filename
+  - exact filename stem
+  - substring stem
+- Case-insensitive file matching.
+- Multiple-match selection using spoken numbering/ordinal forms.
+- File operations:
+  - open
+  - create
+  - rename
+  - move
+  - copy
+  - delete
+- Folder operations:
+  - open
+  - create
+  - rename
+  - move
+  - delete
+  - list
+- High-risk actions such as deletion are passed through the authorization gate before execution.
+- Authorized shell-command execution is available through the structured automation layer.
+
+### 📱 External & Application Automation
+
+- Windows application launching.
+- Browser/application aliases for common applications including Chrome, Edge, VS Code, Spotify, Explorer, Terminal, Notepad, Calculator, Paint, Task Manager, and Command Prompt.
+- YouTube playback through pywhatkit.
+- WhatsApp messaging/calling/video-call automation.
+- Android automation through ADB for calls and SMS.
+- Optional device.bat startup integration for Android device preparation.
+
+### 🎨 JARVIS HUD
+
+- Eel-based native-like web interface.
+- Animated loader and authentication UI.
+- Live webcam feed during face authentication.
+- SiriWave voice visualization.
+- Cinematic HUD/orbiting interface.
+- Smooth status-text transitions for Listening, Recognizing, Thinking, and other transient states.
+- User speech is surfaced directly through the main HUD text rather than a separate transcript card.
+- Markdown-aware assistant response cards.
+- Response copy controls.
+- Conversation/history viewer.
+- Settings panel for voice responses and response language.
+- Responsive multiline rendering for filesystem results and long text.
 
 ## 🏗️ Architecture
 
-```mermaid
+~~~mermaid
 flowchart TD
-    A[Hotword Process] -->|Detects "jarvis"/"alexa"| B(Win+J Shortcut)
-    B --> C[Main Process]
-    C --> D{Eel + Frontend}
-    D -->|loads| E[www/index.html]
-    D -->|exposes| F[Python Bindings]
-    F --> G[Face Authentication]
-    F --> H[Voice Fallback]
-    F --> I[Command Router]
-    I --> J[Open Apps/Websites]
-    I --> K[YouTube]
-    I --> L[WhatsApp/Android]
-    I --> M[Gemini LLM]
-    M -->|Optional| N[(MongoDB Chat Log)]
-    G -->|Success| O[Assistant Ready]
-    H -->|Success| O
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style C fill:#bbf,stroke:#333,stroke-width:2px
-```
+    A[Porcupine Hotword Process] -->|Jarvis detected| B[Win+J activation]
+    B --> C[JARVIS Main Process]
 
-## 📦 Installation
+    C --> D[Eel Web UI]
+    D --> E[HUD / SiriWave / Chat]
 
-### Prerequisites
+    C --> F[Authentication]
+    F --> F1[Face Authentication]
+    F --> F2[Voice Fallback]
+
+    C --> G[Speech Recognition]
+    G --> G1[Faster-Whisper]
+    G --> G2[Google STT fallback]
+
+    C --> H[Command Router]
+    H --> I[AutomationAction]
+
+    I --> J[Security Gate]
+    J --> K[Executor]
+
+    K --> K1[Files / Folders]
+    K --> K2[Windows Applications]
+    K --> K3[ADB / Android]
+    K --> K4[WhatsApp / YouTube]
+
+    C --> L[OmniRoute LLM]
+    L --> M[Conversation Manager]
+    M --> N[(Optional MongoDB)]
+~~~
+
+### Main project structure
+
+~~~text
+J.A.R.V.I.S/
+├── engine/
+│   ├── auth/
+│   │   ├── recognizer.py
+│   │   ├── voice_auth.py
+│   │   ├── capture_samples.py
+│   │   └── trainer.py
+│   │
+│   ├── automation/
+│   │   ├── actions.py
+│   │   ├── applications.py
+│   │   ├── dialogue.py
+│   │   ├── executor.py
+│   │   ├── filesystem.py
+│   │   ├── router.py
+│   │   └── security.py
+│   │
+│   ├── command.py
+│   ├── conversation.py
+│   ├── features.py
+│   ├── llm_client.py
+│   ├── settings_store.py
+│   ├── stt.py
+│   └── tts.py
+│
+├── www/
+│   ├── index.html
+│   ├── controller.js
+│   └── style.css
+│
+├── main.py
+├── run.py
+├── device.bat
+└── requirements.txt
+~~~
+
+## 📦 Requirements
+
+### Platform
+
 - Windows 10/11
-- Python 3.8+ (tested with 3.11)
+- Python 3.11 recommended
 - Git
-- [Brave Browser](https://brave.com/) (optional; falls back to default browser)
-- Android Debug Bridge (ADB) for mobile features (optional)
-- Webcam & microphone
+- Webcam
+- Microphone
+- Internet connection for Google STT fallback, Edge TTS, and OmniRoute-backed LLM requests
+- Brave Browser is recommended for the app-style frontend, although the browser launch can be adjusted.
+
+### Optional hardware/software
+
+- Android phone + ADB for Android automation
+- MongoDB for persistent conversation history
+- CUDA-capable GPU can be useful for face/STT workloads
+
+## 🚀 Installation
 
 ### 1. Clone the repository
-```bash
-git clone https://github.com/your-username/J.A.R.V.I.S.git
-cd J.A.R.V.I.S
-```
 
-### 2. Set up a virtual environment (recommended)
-```bash
+~~~bash
+git clone https://github.com/AbhiDevLab/J.A.R.V.I.S.git
+cd J.A.R.V.I.S
+~~~
+
+### 2. Create the virtual environment
+
+~~~bash
 python -m venv envjarvis
 .\envjarvis\Scripts\activate
-```
+~~~
 
 ### 3. Install dependencies
-> **Note**: The current `requirements.txt` is **incomplete**. Install the following packages manually:
 
-```bash
-pip install eel pyttsx3 SpeechRecognition pyaudio playsound pyautogui pywhatkit pvporcupine requests
-pip install torch torchvision facenet-pytorch opencv-python pillow numpy
-# Optional: for MongoDB chat history
-pip install pymongo
-# Optional: for voice dependency helper (Windows)
-pip install pipwin
-```
+Install the packages listed in requirements.txt.
 
-### 4. Configure environment
-Copy `.env.example` to `.env` and fill in your values:
+Some Windows/audio/ML packages may require additional setup depending on the local Python installation.
 
-```env
-# Required
-GEMINI_API_KEY=your_gemini_api_key_here
+For the current feature set, the environment includes packages for:
 
-# Face Auth (tune as needed)
+- Eel
+- SpeechRecognition / PyAudio
+- Faster-Whisper
+- Edge TTS
+- pyttsx3
+- pygame
+- OpenCV
+- PyTorch / TorchVision
+- FaceNet / facenet-pytorch
+- NumPy / Pillow
+- pyautogui
+- pywhatkit
+- Porcupine
+- requests
+- optional pymongo
+
+## ⚙️ Environment Configuration
+
+Create a local .env file from .env.example.
+
+### OmniRoute
+
+~~~env
+LLM_PROVIDER=omniroute
+OMNIROUTE_API_KEY=your_key
+OMNIROUTE_BASE_URL=http://localhost:20128/v1
+OMNIROUTE_MODEL=Teamax
+OMNIROUTE_TIMEOUT=180
+~~~
+
+run.py checks whether OmniRoute is already responding. If it is not running, JARVIS attempts to start the local omniroute process automatically and waits for it to become available.
+
+### Face authentication
+
+~~~env
 JARVIS_AUTH_ID=1
 JARVIS_AUTH_FRAMES=3
 JARVIS_AUTH_TIMEOUT=20
 JARVIS_AUTH_THRESHOLD=0.9
 JARVIS_AUTH_OVERLAY_SECONDS=4
+JARVIS_AUTH_WEBCAM_FPS=15
+~~~
 
-# Voice Fallback
+### Voice authentication
+
+~~~env
 JARVIS_VOICE_ENABLED=1
 JARVIS_VOICE_PHRASE=genius billionaire playboy philanthropist
 JARVIS_VOICE_TIMEOUT=20
+~~~
 
-# Optional MongoDB
-# MONGODB_URI=mongodb://localhost:27017/jarvis
-# JARVIS_DB_NAME=jarvis
-# JARVIS_CHAT_COLLECTION=chats
-```
+### Speech recognition
 
-> **Never commit your real `.env`**. Keep it private.
+The STT layer can use local Faster-Whisper first and Google Speech Recognition as a fallback when enabled by configuration.
 
-### 5. Enroll your face (one‑time)
-Run the sample capture script to collect training images:
+### TTS
 
-```bash
+Relevant settings include:
+
+~~~env
+JARVIS_TTS_ENABLED=1
+JARVIS_TTS_LANGUAGE=auto
+JARVIS_TTS_EN_VOICE=en-US-GuyNeural
+JARVIS_TTS_HI_VOICE=hi-IN-MadhurNeural
+JARVIS_TTS_RATE=-5%
+JARVIS_TTS_VOLUME=+0%
+JARVIS_TTS_PITCH=-2Hz
+~~~
+
+### Conversation persistence
+
+MongoDB is optional:
+
+~~~env
+MONGODB_URI=your_mongodb_connection_string
+JARVIS_DB_NAME=jarvis
+JARVIS_CHAT_COLLECTION=chats
+JARVIS_CONTEXT_TURNS=8
+~~~
+
+If MongoDB is unavailable, the active session can continue using in-memory conversation context.
+
+> **Never commit your real .env file or API keys.**
+
+## 👤 Face Enrollment
+
+Face authentication uses locally generated embeddings.
+
+Capture samples:
+
+~~~bash
 python engine/auth/capture_samples.py --label YourName --id 1 --count 50
-```
+~~~
 
-Then generate the embeddings:
+Generate the gallery:
 
-```bash
+~~~bash
 python engine/auth/trainer.py
-```
+~~~
 
-This creates `engine/auth/trainer/embeddings.pkl`.
+The generated authentication data remains local and is ignored by Git.
 
-### 6. Launch J.A.R.V.I.S
-```bash
-# Start both GUI and hotword listener
+## ▶️ Running J.A.R.V.I.S
+
+### Full mode
+
+Starts the main JARVIS process and the separate hotword process:
+
+~~~bash
 python run.py
-```
-or
-```bash
-# Start GUI only (hotword must be triggered manually via Win+J)
+~~~
+
+### GUI/main process only
+
+~~~bash
 python main.py
-```
+~~~
 
-The assistant will open in a Brave app window (or default browser) at `http://localhost:8000/index.html`.
+The application serves the Eel frontend locally and opens it in an app-style browser window.
 
-## 🚀 Usage
+## 🎤 Typical Interaction
 
-1. **Hotword**: Say “Jarvis” or “Alexa” to activate via Win+J shortcut.
-2. **UI Interaction**:
-   - Click the mic button or press `Ctrl+J` to voice‑command.
-   - Type in the chat box and press Enter or Send.
-3. **Authentication**:
-   - Face authentication runs automatically on start.
-   - If it fails (or is disabled), voice fallback listens for the phrase set in `JARVIS_VOICE_PHRASE`.
-   - Use the “Try Again” button in the UI to retry voice fallback.
-4. **Example Commands**:
-   - `open notepad`
-   - `play Bohemian Rhapsody on youtube`
-   - `send message to Mom Hello`
-   - `phone call Dad`
-   - `what is the capital of France?` → Gemini responds
+### Startup
 
-## ⚙️ Configuration
+~~~text
+Launch
+  ↓
+Face authentication
+  ↓
+Voice fallback if face authentication fails
+  ↓
+System unlocked
+~~~
 
-Adjust behavior via environment variables in `.env`:
+### Voice command
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GEMINI_API_KEY` | Google Gemini API key | *(required)* |
-| `JARVIS_AUTH_ID` | Numeric ID of the authorized person | `1` |
-| `JARVIS_AUTH_FRAMES` | Consecutive positive frames needed for auth | `3` |
-| `JARVIS_AUTH_TIMEOUT` | Seconds to attempt face auth before fallback | `20` |
-| `JARVIS_AUTH_THRESHOLD` | Cosine similarity threshold (0‑1) | `0.9` |
-| `JARVIS_AUTH_OVERLAY_SECONDS` | Overlay display time after success/failure | `4` |
-| `JARVIS_VOICE_ENABLED` | Enable voice fallback (`1`/`0`) | `1` |
-| `JARVIS_VOICE_PHRASE` | Phrase for voice fallback (lower‑case, no punctuation) | `genius billionaire playboy philanthropist` |
-| `JARVIS_VOICE_TIMEOUT` | Seconds to listen for voice phrase | `20` |
-| `MONGODB_URI` | MongoDB connection string | *(optional)* |
-| `JARVIS_DB_NAME` | Database name for chat history | `jarvis` |
-| `JARVIS_CHAT_COLLECTION` | Collection name for chat history | `chats` |
+~~~text
+Listening...
+  ↓
+Recognizing...
+  ↓
+Recognized user speech
+  ↓
+Command routing / LLM
+  ↓
+Thinking...
+  ↓
+Response
+~~~
 
-## 🖼️ Screenshots
+### High-risk automation
 
-> **No authentic screenshots are currently committed to the repository.**  
-> To enrich this README, capture the following:
-> 1. Animated loader / face‑auth Lottie screen
-> 2. Main interface: orbiting hood, text input, mic/send/chat buttons
-> 3. SiriWave voice‑listening visualization
-> 4. Off‑canvas chat with a real user/assistant exchange
-> 5. (Optional) OpenCV face‑authentication overlay window
+~~~text
+User requests protected action
+  ↓
+Voice confirmation
+  ↓
+Face authentication
+  ↓
+Action execution
+~~~
 
-Place any captured screenshots under `docs/` or `assets/screenshots/` and reference them here.
+There is intentionally **no third confirmation step**.
 
-## 🔒 Limitations & Notes
+## 🧪 Tests
 
-- **Windows‑only**: Relies on `os.startfile`, `pyautogui` Win+J, Brave, SAPI5, and ADB paths.
-- **Internet Required**: Voice fallback uses Google Speech Recognition; Gemini queries need internet.
-- **Face Auth Privacy**: Biometric samples (`engine/auth/samples/`) and embeddings (`engine/auth/trainer/embeddings.pkl`) are **local only** and must remain private.
-- **.gitignore**: Ensure the following are **not** committed:
-  - `.env` (real API key)
-  - `engine/auth/samples/`
-  - `engine/auth/trainer/`
-  - `jarvis.db` (SQLite runtime)
-  - `*.wav`, `*.mp3` (test audio)
-  - Virtual environments, IDE folders, logs, caches
-- **Dependencies**: The bundled `requirements.txt` omits several core packages (see Installation). Install the full list above.
-- **device.bat**: A helper script that prepares ADB over TCP; if missing or failing, the app will still launch but Android features won’t work. Verify ADB is installed and a device is connected.
+The repository contains a local test suite covering the current filesystem matching and authorization behavior.
 
-## 🐞 Troubleshooting
+Run:
 
-| Symptom | Fix |
-|---------|-----|
-| `FileNotFoundError: device.bat` | Ensure `device.bat` exists at project root. It may require adjusting the working directory when launched from a shortcut. |
-| Voice auth repeatedly “Access Denied” | Confirm `JARVIS_VOICE_PHRASE` matches exactly what you speak (lowercase, no punctuation). Use the console output to compare. |
-| Missing module `cv2` or `PIL` | Install `opencv-python` and `pillow`. |
-| `pipwin not found` on Windows | Install via `pip install pipwin` then retry PyAudio install. |
-| Gemini returns “not available” | Install `google-generativeai` and verify `GEMINI_API_KEY` is set. |
-| Hotkey (Win+J) does nothing | Ensure the hotword process is running (`python run.py`) and Porcupine initialized correctly. |
-| WhatsApp/Website fails to open | Verify default browser or Brave is installed and accessible. |
+~~~bash
+python -m unittest discover -s tests -v
+~~~
 
-## 📚 Related Projects
+The current local test set covers:
 
-- [Eel](https://github.com/ChrisKnott/Eel) – Python‑HTML/JS bridge
-- [Porcupine](https://picovoice.ai/) – Wake word engine
-- [FaceNet](https://github.com/timesler/facenet-pytorch) – Face embeddings
-- [Google Gemini](https://ai.google.dev/gemini-api) – Generative AI model
+- exact filename matching
+- exact stem matching
+- substring matching
+- case-insensitive matching
+- maximum result limits
+- suppression of weaker matches when stronger matches exist
+- failed face authorization
+- failed voice confirmation
+- successful voice-confirmation + face-auth authorization
+
+## 🔒 Security & Privacy
+
+J.A.R.V.I.S can interact with the local Windows environment, so security boundaries are important.
+
+The following are intentionally treated as high-risk operations:
+
+- deleting files/folders
+- deleting multiple matches
+- shell/PowerShell execution
+- process termination
+- system power operations
+- system-setting modifications
+- software installation/uninstallation
+
+Authentication data, runtime databases, environment variables, audio files, virtual environments, and other local/private artifacts should remain outside version control.
+
+The project is currently designed for **personal/local Windows use**, not as a multi-user server application.
+
+## ⚠️ Current Limitations
+
+- Windows-focused implementation.
+- Some automation integrations depend on the local Windows installation and application paths.
+- Android features require ADB and a connected/configured device.
+- Google STT fallback requires internet access.
+- Edge TTS requires internet access.
+- OmniRoute must be available for conversational LLM functionality.
+- The current LLM request path is non-streaming.
+- Speech recognition currently displays the recognized utterance after the transcription result is available; true token/word-level live STT is not yet implemented.
+- Some legacy integrations remain in engine/features.py while the newer structured automation layer is being consolidated.
+
+## 🛠️ Development Status
+
+The core J.A.R.V.I.S system is functional, with the current development focus on:
+
+- HUD/voice-recognition animation polish
+- end-to-end automation reliability
+- hotword/TTS interruption reliability
+- consolidation of legacy and structured automation paths
+- broader regression coverage
+- dependency/documentation cleanup
+- optional future live/interim speech recognition
 
 ## 📄 License
 
-This project is provided as‑is. See the repository for any license information.
+See the repository for the current license information.
 
 ---
 
-*Made with ❤️ for the desktop assistant enthusiasts.*
+*J.A.R.V.I.S — a personal desktop voice assistant built for Windows.*
