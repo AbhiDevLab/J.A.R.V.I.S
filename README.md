@@ -20,8 +20,10 @@ A Windows-centric Python desktop voice assistant built with **Python + Eel**, co
 - Local speech transcription with **Faster-Whisper** when available.
 - Google Speech Recognition fallback.
 - Automatic English/Hindi detection for supported speech.
-- Neural TTS using **Edge TTS** with SAPI5 fallback.
-- Configurable English/Hindi voices, rate, volume, and pitch.
+- Local neural TTS using **Kokoro-82M** with SAPI5 fallback.
+- English and Hindi voices are synthesized locally after the model assets are downloaded once.
+- Configurable English/Hindi voices and speech speed.
+- No recurring TTS API quota is required.
 - Interruptible TTS infrastructure so the hotword system can detect an interruption while JARVIS is speaking.
 - Hotword activation through **Porcupine**.
 - Shared microphone/process coordination between hotword detection and speech recognition.
@@ -172,7 +174,7 @@ J.A.R.V.I.S/
 - Git
 - Webcam
 - Microphone
-- Internet connection for Google STT fallback, Edge TTS, and OmniRoute-backed LLM requests
+- Internet connection for Google STT fallback and OmniRoute-backed LLM requests
 - Brave Browser is recommended for the app-style frontend, although the browser launch can be adjusted.
 
 ### Optional hardware/software
@@ -208,7 +210,9 @@ For the current feature set, the environment includes packages for:
 - Eel
 - SpeechRecognition / PyAudio
 - Faster-Whisper
-- Edge TTS
+- Kokoro TTS
+- soundfile
+- espeak-ng loader
 - pyttsx3
 - pygame
 - OpenCV
@@ -260,19 +264,22 @@ JARVIS_VOICE_TIMEOUT=20
 
 The STT layer can use local Faster-Whisper first and Google Speech Recognition as a fallback when enabled by configuration.
 
-### TTS
+### Local Neural TTS
 
-Relevant settings include:
+J.A.R.V.I.S uses **Kokoro-82M** as its primary speech engine. Kokoro runs locally after its model assets are downloaded once, so normal speech synthesis does not depend on a recurring cloud API quota.
 
 ~~~env
 JARVIS_TTS_ENABLED=1
+JARVIS_TTS_ENGINE=kokoro
 JARVIS_TTS_LANGUAGE=auto
-JARVIS_TTS_EN_VOICE=en-US-GuyNeural
-JARVIS_TTS_HI_VOICE=hi-IN-MadhurNeural
-JARVIS_TTS_RATE=-5%
-JARVIS_TTS_VOLUME=+0%
-JARVIS_TTS_PITCH=-2Hz
+JARVIS_TTS_EN_VOICE=am_michael
+JARVIS_TTS_HI_VOICE=hm_omega
+JARVIS_KOKORO_SPEED=1.0
 ~~~
+
+On Windows, Kokoro's phonemization stack requires eSpeak-NG support. The project includes `espeakng-loader` for the bundled shared library; if the local Kokoro stack still cannot initialize, JARVIS falls back to Windows SAPI5.
+
+The first use can take longer because the Kokoro model/pipeline is initialized and cached locally.
 
 ### Conversation persistence
 
@@ -415,10 +422,10 @@ The project is currently designed for **personal/local Windows use**, not as a m
 - Some automation integrations depend on the local Windows installation and application paths.
 - Android features require ADB and a connected/configured device.
 - Google STT fallback requires internet access.
-- Edge TTS requires internet access.
 - OmniRoute must be available for conversational LLM functionality.
 - The current LLM request path is non-streaming.
 - Speech recognition currently displays the recognized utterance after the transcription result is available; true token/word-level live STT is not yet implemented.
+- Kokoro's first initialization may be slower than later utterances because the local model pipeline is loaded and cached.
 - Some legacy integrations remain in engine/features.py while the newer structured automation layer is being consolidated.
 
 ## 🛠️ Development Status
