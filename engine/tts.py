@@ -25,6 +25,13 @@ except Exception:
     KPipeline = None
 
 try:
+    import espeakng_loader  # type: ignore
+
+    espeakng_loader.make_library_available()
+except Exception:
+    espeakng_loader = None
+
+try:
     import pygame  # type: ignore
 except Exception:
     pygame = None
