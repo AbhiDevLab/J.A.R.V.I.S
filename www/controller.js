@@ -878,82 +878,58 @@ $(document).ready(function () {
     );
   }
 
-
-  let hudRecognitionId = 0;
+  // Recognized speech uses the same primary HUD text as
+  // Listening / Recognizing / Thinking. The transcript is revealed
+  // progressively so it feels like JARVIS is understanding the utterance.
+  let recognizedQueryTransitionId = 0;
 
   function animateRecognizedQuery(message) {
-    const text =
-      String(
-        message ?? ""
-      ).trim();
+    const text = String(message ?? "").trim();
 
     if (!text) {
       return;
     }
 
-    const animationId =
-      ++hudRecognitionId;
+    const transitionId = ++recognizedQueryTransitionId;
+    const elements = $("#WishMessage, .siri-message");
 
-    const elements =
-      $("#WishMessage, .siri-message");
-
-    elements.stop(
-      true,
-      true
-    );
+    elements.stop(true, true);
 
     elements.animate(
       {
-        opacity: 0
+        opacity: 0,
       },
       180,
       function () {
-        if (
-          animationId !==
-          hudRecognitionId
-        ) {
+        if (transitionId !== recognizedQueryTransitionId) {
           return;
         }
 
-        elements.text("");
+        const words = text.split(/\s+/);
+        let index = 0;
 
-        elements.css(
-          "opacity",
-          0
-        );
+        elements.text("");
+        elements.css("opacity", 0);
 
         elements.animate(
           {
-            opacity: 1
+            opacity: 1,
           },
           180
         );
 
-        const words =
-          text.split(/\s+/);
-
-        let index = 0;
-
         function revealNextWord() {
-          if (
-            animationId !==
-            hudRecognitionId
-          ) {
+          if (transitionId !== recognizedQueryTransitionId) {
             return;
           }
 
-          if (
-            index >= words.length
-          ) {
+          if (index >= words.length) {
             return;
           }
 
           elements.text(
             words
-              .slice(
-                0,
-                index + 1
-              )
+              .slice(0, index + 1)
               .join(" ")
           );
 
@@ -970,12 +946,7 @@ $(document).ready(function () {
     );
   }
 
-  eel.expose(
-    animateRecognizedQuery
-  );
-  eel.expose(
-    animateRecognizedQuery
-  );
+  eel.expose(animateRecognizedQuery);
 
   function DisplayMessage(message) {
     try {
