@@ -13,6 +13,7 @@ SpeechRecognition>=3.8.1
 pipwin>=0.5.1
 pygame-ce==2.5.8
 faster-whisper==1.2.1
-pymongo>=4.0.0kokoro>=0.9.4
+pymongo>=4.0.0
+kokoro>=0.9.4
 soundfile>=0.13.1
 espeakng-loader>=0.2.4
