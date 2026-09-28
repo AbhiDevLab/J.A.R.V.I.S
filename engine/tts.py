@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import re
 import tempfile
@@ -322,7 +321,7 @@ def _synthesize_kokoro(
         text,
         voice=voice,
         speed=speed,
-        split_pattern=r"\\n+",
+        split_pattern=r"\n+",
     )
 
     wrote_audio = False
