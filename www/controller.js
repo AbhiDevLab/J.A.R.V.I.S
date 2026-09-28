@@ -878,158 +878,75 @@ $(document).ready(function () {
     );
   }
 
+  // Recognized speech uses the same primary HUD text as
+  // Listening / Recognizing / Thinking. The transcript is revealed
+  // progressively so it feels like JARVIS is understanding the utterance.
   let recognizedQueryTransitionId = 0;
 
-  function showRecognizedQuery(message) {
-    const text =
-      String(
-        message ?? ""
-      ).trim();
+  function animateRecognizedQuery(message) {
+    const text = String(message ?? "").trim();
 
-    const container =
-      $("#HudRecognizedQuery");
-
-    const textElement =
-      $("#HudRecognizedQueryText");
-
-    if (
-      !container.length ||
-      !textElement.length ||
-      !text
-    ) {
+    if (!text) {
       return;
     }
 
-    const transitionId =
-      ++recognizedQueryTransitionId;
+    const transitionId = ++recognizedQueryTransitionId;
+    const elements = $("#WishMessage, .siri-message");
 
-    container.stop(
-      true,
-      true
-    );
+    elements.stop(true, true);
 
-    textElement.stop(
-      true,
-      true
-    );
+    elements.animate(
+      {
+        opacity: 0,
+      },
+      180,
+      function () {
+        if (transitionId !== recognizedQueryTransitionId) {
+          return;
+        }
 
-    const currentText =
-      textElement.text().trim();
+        const words = text.split(/\\s+/);
+        let index = 0;
 
-    // Same recognized query — just keep it visible.
-    if (
-      currentText === text &&
-      !container.prop("hidden")
-    ) {
-      container
-        .animate(
+        elements.text("");
+        elements.css("opacity", 0);
+
+        elements.animate(
           {
             opacity: 1,
           },
-          220
+          180
         );
 
-      return;
-    }
-
-    // If another query is already displayed,
-    // fade it out before replacing it.
-    if (
-      !container.prop("hidden") &&
-      currentText
-    ) {
-      container.animate(
-        {
-          opacity: 0,
-        },
-        180,
-        function () {
-          if (
-            transitionId !==
-            recognizedQueryTransitionId
-          ) {
+        function revealNextWord() {
+          if (transitionId !== recognizedQueryTransitionId) {
             return;
           }
 
-          textElement.text(
-            text
+          if (index >= words.length) {
+            return;
+          }
+
+          elements.text(
+            words
+              .slice(0, index + 1)
+              .join(" ")
           );
 
-          container
-            .prop(
-              "hidden",
-              false
-            )
-            .css({
-              opacity: 0,
-            });
+          index += 1;
 
-          container.animate(
-            {
-              opacity: 1,
-            },
-            300
+          setTimeout(
+            revealNextWord,
+            160
           );
         }
-      );
 
-      return;
-    }
-
-    // First appearance.
-    textElement.text(
-      text
-    );
-
-    container
-      .prop(
-        "hidden",
-        false
-      )
-      .css({
-        opacity: 0,
-      });
-
-    container.animate(
-      {
-        opacity: 1,
-      },
-      300
-    );
-  }
-
-
-  function hideRecognizedQuery() {
-    const container =
-      $("#HudRecognizedQuery");
-
-    if (!container.length) {
-      return;
-    }
-
-    ++recognizedQueryTransitionId;
-
-    container.stop(
-      true,
-      true
-    );
-
-    container.animate(
-      {
-        opacity: 0,
-      },
-      220,
-      function () {
-        container.prop(
-          "hidden",
-          true
-        );
+        revealNextWord();
       }
     );
   }
 
-  eel.expose(showRecognizedQuery);
-  eel.expose(hideRecognizedQuery);
+  eel.expose(animateRecognizedQuery);
 
   function DisplayMessage(message) {
     try {
@@ -1060,7 +977,6 @@ $(document).ready(function () {
             "Listening..."
           );
           hideThinkingIndicator();
-          hideRecognizedQuery();
         } else if (
           status === "Recognizing ...." ||
           status === "Recognizing..."
@@ -1328,7 +1244,6 @@ $(document).ready(function () {
 
   function assistantResponse(message) {
     try {
-      hideRecognizedQuery();
       hideConversationVoiceStatus();
       hideThinkingIndicator();
 
