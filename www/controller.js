@@ -905,7 +905,7 @@ $(document).ready(function () {
           return;
         }
 
-        const words = text.split(/\\s+/);
+        const words = text.split(/\s+/);
         let index = 0;
 
         elements.text("");
