@@ -15,9 +15,14 @@ from threading import Lock
 import pyttsx3
 
 try:
-    import edge_tts  # type: ignore
+    import soundfile as sf  # type: ignore
 except Exception:
-    edge_tts = None
+    sf = None
+
+try:
+    from kokoro import KPipeline  # type: ignore
+except Exception:
+    KPipeline = None
 
 try:
     import pygame  # type: ignore
@@ -26,6 +31,9 @@ except Exception:
 
 _mixer_lock = Lock()
 _mixer_initialized = False
+
+_kokoro_lock = Lock()
+_kokoro_pipelines = {}
 
 
 def _env_flag(name: str, default: bool = True) -> bool:
@@ -177,27 +185,69 @@ def _prepare_speech_text(text: str) -> str:
 
     return spoken.strip()
 
-def _select_voice(text: str, language: str | None = None) -> str:
+def _select_kokoro_voice(
+    text: str,
+    language: str | None = None,
+) -> tuple[str, str]:
+    """Return the Kokoro language code and configured voice."""
     detected = (language or "").strip().lower()
+    configured = os.getenv(
+        "JARVIS_TTS_LANGUAGE",
+        "auto",
+    ).strip().lower()
 
     if detected in {"hi", "hi-in", "hindi"}:
-        return os.getenv("JARVIS_TTS_HI_VOICE", "hi-IN-MadhurNeural")
+        return (
+            "h",
+            os.getenv(
+                "JARVIS_TTS_HI_VOICE",
+                "hm_omega",
+            ),
+        )
 
     if detected in {"en", "en-in", "en-us", "english"}:
-        return os.getenv("JARVIS_TTS_EN_VOICE", "en-US-GuyNeural")
-
-    configured = os.getenv("JARVIS_TTS_LANGUAGE", "auto").strip().lower()
+        return (
+            "a",
+            os.getenv(
+                "JARVIS_TTS_EN_VOICE",
+                "am_michael",
+            ),
+        )
 
     if configured in {"hi", "hi-in", "hindi"}:
-        return os.getenv("JARVIS_TTS_HI_VOICE", "hi-IN-MadhurNeural")
+        return (
+            "h",
+            os.getenv(
+                "JARVIS_TTS_HI_VOICE",
+                "hm_omega",
+            ),
+        )
 
     if configured in {"en", "en-in", "en-us", "english"}:
-        return os.getenv("JARVIS_TTS_EN_VOICE", "en-US-GuyNeural")
+        return (
+            "a",
+            os.getenv(
+                "JARVIS_TTS_EN_VOICE",
+                "am_michael",
+            ),
+        )
 
     if _contains_devanagari(text):
-        return os.getenv("JARVIS_TTS_HI_VOICE", "hi-IN-MadhurNeural")
+        return (
+            "h",
+            os.getenv(
+                "JARVIS_TTS_HI_VOICE",
+                "hm_omega",
+            ),
+        )
 
-    return os.getenv("JARVIS_TTS_EN_VOICE", "en-US-GuyNeural")
+    return (
+        "a",
+        os.getenv(
+            "JARVIS_TTS_EN_VOICE",
+            "am_michael",
+        ),
+    )
 
 def _safe_unlink(path: Path) -> None:
     for _ in range(5):
@@ -219,15 +269,75 @@ def _ensure_mixer() -> None:
         _mixer_initialized = True
 
 
-async def _synthesize_edge(text: str, output_path: Path, voice: str) -> None:
-    communicator = edge_tts.Communicate(
-        text,
-        voice,
-        rate=os.getenv("JARVIS_TTS_RATE", "-5%"),
-        volume=os.getenv("JARVIS_TTS_VOLUME", "+0%"),
-        pitch=os.getenv("JARVIS_TTS_PITCH", "-2Hz"),
+def _get_kokoro_pipeline(language_code: str):
+    if KPipeline is None:
+        raise RuntimeError("Kokoro is not installed.")
+
+    with _kokoro_lock:
+        pipeline = _kokoro_pipelines.get(language_code)
+
+        if pipeline is None:
+            print(
+                "Loading Kokoro TTS pipeline "
+                f"for language '{language_code}'..."
+            )
+
+            pipeline = KPipeline(
+                lang_code=language_code
+            )
+
+            _kokoro_pipelines[language_code] = pipeline
+
+            print("Kokoro TTS pipeline ready.")
+
+        return pipeline
+
+
+def _synthesize_kokoro(
+    text: str,
+    language_code: str,
+    voice: str,
+    output_path: Path,
+) -> None:
+    if sf is None:
+        raise RuntimeError("soundfile is not installed.")
+
+    pipeline = _get_kokoro_pipeline(language_code)
+
+    speed = float(
+        os.getenv(
+            "JARVIS_KOKORO_SPEED",
+            "1.0",
+        )
     )
-    await communicator.save(str(output_path))
+
+    generator = pipeline(
+        text,
+        voice=voice,
+        speed=speed,
+        split_pattern=r"\\n+",
+    )
+
+    wrote_audio = False
+
+    with sf.SoundFile(
+        str(output_path),
+        mode="w",
+        samplerate=24000,
+        channels=1,
+        subtype="PCM_16",
+    ) as wav_file:
+        for _, _, audio in generator:
+            if audio is None:
+                continue
+
+            wav_file.write(
+                audio.detach().cpu().numpy()
+            )
+            wrote_audio = True
+
+    if not wrote_audio:
+        raise RuntimeError("Kokoro generated no audio.")
 
 
 def _play_with_interrupt(audio_path: Path, interrupt_event=None, speaking_event=None) -> bool:
@@ -269,23 +379,47 @@ def _play_with_interrupt(audio_path: Path, interrupt_event=None, speaking_event=
             interrupt_event.clear()
 
 
-def _speak_with_edge(text: str, language: str | None, interrupt_event=None, speaking_event=None) -> bool:
-    if edge_tts is None:
-        raise RuntimeError("edge-tts is not installed.")
+def _speak_with_kokoro(
+    text: str,
+    language: str | None,
+    interrupt_event=None,
+    speaking_event=None,
+) -> bool:
+    if KPipeline is None:
+        raise RuntimeError("Kokoro is not installed.")
+
     if pygame is None:
         raise RuntimeError("pygame is not installed.")
 
-    voice = _select_voice(text, language=language)
-    output_path = Path(tempfile.gettempdir()) / f"jarvis_tts_{uuid.uuid4().hex}.mp3"
+    language_code, voice = _select_kokoro_voice(
+        text,
+        language=language,
+    )
+
+    output_path = (
+        Path(tempfile.gettempdir())
+        / f"jarvis_kokoro_{uuid.uuid4().hex}.wav"
+    )
 
     try:
-        print(f"JARVIS neural TTS voice: {voice}")
-        asyncio.run(_synthesize_edge(text, output_path, voice))
+        print(
+            "JARVIS local neural TTS voice: "
+            f"{voice}"
+        )
+
+        _synthesize_kokoro(
+            text,
+            language_code,
+            voice,
+            output_path,
+        )
+
         return _play_with_interrupt(
             output_path,
             interrupt_event=interrupt_event,
             speaking_event=speaking_event,
         )
+
     finally:
         _safe_unlink(output_path)
 
@@ -344,6 +478,7 @@ def speak(
     interrupt_event=None,
     speaking_event=None,
 ) -> bool:
+    """Speak locally with Kokoro and fall back to SAPI5."""
     if not text:
         return False
 
@@ -356,24 +491,38 @@ def speak(
         "JARVIS_TTS_ENABLED",
         True,
     ):
+        return False
+
+    engine = os.getenv(
+        "JARVIS_TTS_ENGINE",
+        "kokoro",
+    ).strip().lower()
+
+    if engine == "sapi5":
         return _speak_with_sapi(
             spoken_text,
             interrupt_event,
             speaking_event,
         )
 
+    if engine != "kokoro":
+        print(
+            "Unknown JARVIS_TTS_ENGINE="
+            f"{engine!r}; using Kokoro."
+        )
+
     try:
-        return _speak_with_edge(
+        return _speak_with_kokoro(
             spoken_text,
             language=language,
             interrupt_event=interrupt_event,
             speaking_event=speaking_event,
         )
 
-    except Exception as e:
+    except Exception as exc:
         print(
-            "Neural TTS unavailable; "
-            f"falling back to SAPI5: {e}"
+            "Kokoro TTS unavailable; "
+            f"falling back to local SAPI5: {exc}"
         )
 
         return _speak_with_sapi(
