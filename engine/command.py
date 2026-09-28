@@ -326,7 +326,7 @@ def takecommand(return_language=False):
         )
 
         _safe_display(
-            "showRecognizedQuery",
+            "animateRecognizedQuery",
             query,
         )
 
