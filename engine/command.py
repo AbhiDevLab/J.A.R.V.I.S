@@ -7,6 +7,7 @@ from engine.stt import detect_text_language, transcribe_audio
 from engine.llm_client import ask_llm
 from engine.conversation import get_conversation_manager
 from engine.context_interpreter import interpret_query
+from engine.persona import build_jarvis_prompt
 
 from engine.settings_store import (
     load_settings,
@@ -634,43 +635,11 @@ def allCommands(message=1):
                         "the previous one", and follow-up questions using that context.
                     """
 
-                enhanced_prompt = f"""
-        You are JARVIS, a polished desktop AI assistant.
-
-        Answer the user's query directly, accurately, and conversationally.
-
-        {context_section}
-
-        Language behavior:
-        - The user's detected speech language is: {language_name}.
-        - Respond in the same language as the user.
-        - For Hindi, use natural contemporary Indian Hindi suitable for an Indian speaker.
-        - Do not produce awkward literal translations from English.
-        - Keep standard technical terms, product names, programming identifiers,
-          acronyms, and commonly used English technical words in English when
-          that is natural for an Indian Hindi speaker.
-        - For English, use natural conversational English.
-        - Do not switch languages unless the user does.
-
-        Formatting rules:
-        - Return clean Markdown.
-        - Use headings only when the answer has multiple logical sections.
-        - Use bullet points or numbered lists when they improve readability.
-        - Use **bold** for important terms.
-        - Use `inline code` for commands, filenames, functions, variables, or technical identifiers.
-        - Use fenced code blocks with a language identifier for code.
-        - Use tables when comparing multiple items.
-        - Keep simple questions concise.
-        - For technical questions, organize the answer clearly and provide examples when useful.
-        - Do not put the entire answer inside a code block.
-        - Do not mention these formatting instructions.
-        - Do not add unnecessary meta commentary.
-
-        User Query:
-        {query}
-
-        JARVIS:
-        """
+                enhanced_prompt = build_jarvis_prompt(
+                    query,
+                    language_name,
+                    context_section,
+                )
 
                 response = ask_llm(
                     enhanced_prompt
