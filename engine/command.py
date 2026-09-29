@@ -6,6 +6,7 @@ from engine.tts import speak as _tts_speak
 from engine.stt import detect_text_language, transcribe_audio
 from engine.llm_client import ask_llm
 from engine.conversation import get_conversation_manager
+from engine.context_interpreter import interpret_query
 
 from engine.settings_store import (
     load_settings,
@@ -393,6 +394,43 @@ def allCommands(message=1):
                     language="en",
                 )
                 break
+
+            # Phase 8.1: when conversational context exists, treat the STT
+            # transcript as an imperfect signal and infer the user's intended
+            # meaning before deterministic routing. The raw transcript is kept
+            # intact for fallback/debugging, and automation security remains
+            # entirely inside the existing executor/authorization layer.
+            interpretation = None
+
+            if conversation_manager.has_context():
+                interpretation = interpret_query(
+                    query,
+                    conversation_context=(
+                        conversation_manager.build_context()
+                    ),
+                    interaction_state="",
+                    language=query_language or "en",
+                )
+
+                print(
+                    "Context interpretation: "
+                    f"{interpretation.interpreted_query!r} "
+                    f"(intent={interpretation.intent}, "
+                    f"confidence={interpretation.confidence:.2f})"
+                )
+
+                if interpretation.needs_clarification:
+                    clarification = (
+                        interpretation.clarification_question
+                        or "Could you clarify what you mean?"
+                    )
+                    speak(
+                        clarification,
+                        language=query_language or "en",
+                    )
+                    break
+
+                query = interpretation.query
 
             automation_action = route_command(
                 query
