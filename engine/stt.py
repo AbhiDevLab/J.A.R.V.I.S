@@ -2,7 +2,7 @@
 
 Phase 5:
 - Local faster-whisper transcription with automatic language detection.
-- English (en) and Hindi (hi) are the supported assistant languages.
+- English and Hindi remain fully supported, while low-confidence Whisper language misclassifications are corrected from transcript evidence before command handling.
 - Google Web Speech remains an optional fallback if local STT is unavailable.
 """
 
@@ -20,6 +20,160 @@ except Exception:
     WhisperModel = None
 
 _MODEL = None
+
+
+# Common English function words are used only as a fallback signal when
+# Whisper's language classifier is uncertain. This does not replace Whisper;
+# it prevents a low-confidence misclassification from discarding a good
+# transcript such as "How are you feeling now?".
+_ENGLISH_HINT_WORDS = {
+    "a",
+    "about",
+    "after",
+    "am",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "can",
+    "could",
+    "did",
+    "do",
+    "does",
+    "for",
+    "from",
+    "get",
+    "go",
+    "have",
+    "he",
+    "hello",
+    "help",
+    "how",
+    "i",
+    "in",
+    "is",
+    "it",
+    "me",
+    "my",
+    "need",
+    "now",
+    "of",
+    "on",
+    "open",
+    "or",
+    "please",
+    "play",
+    "put",
+    "show",
+    "start",
+    "tell",
+    "the",
+    "this",
+    "to",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "with",
+    "would",
+    "you",
+    "your",
+}
+
+_HINDI_RANGES = (
+    ("\u0900", "\u097F"),  # Devanagari
+)
+
+
+def _contains_script(
+    text: str,
+    start: str,
+    end: str,
+) -> bool:
+    return any(
+        start <= char <= end
+        for char in str(text or "")
+    )
+
+
+def _looks_like_hindi(
+    text: str,
+) -> bool:
+    return _contains_script(
+        text,
+        "\u0900",
+        "\u097F",
+    )
+
+
+def _english_hint_score(
+    text: str,
+) -> int:
+    words = {
+        word
+        for word in (
+            str(text or "")
+            .lower()
+            .replace("'", " ")
+            .split()
+        )
+        if word.isalpha()
+    }
+
+    return len(
+        words.intersection(
+            _ENGLISH_HINT_WORDS
+        )
+    )
+
+
+def _normalize_detected_language(
+    text: str,
+    language: str,
+    confidence: float,
+) -> str:
+    """
+    Keep Whisper's language result when it is reliable, but recover from
+    low-confidence misclassifications using the transcript itself.
+
+    This is intentionally conservative:
+    - explicit Hindi script -> hi
+    - English function-word evidence -> en
+    - otherwise preserve Whisper's detected language
+    """
+    detected = str(
+        language or ""
+    ).strip().lower()
+
+    try:
+        threshold = float(
+            os.getenv(
+                "JARVIS_STT_LANGUAGE_CONFIDENCE_THRESHOLD",
+                "0.75",
+            )
+        )
+    except Exception:
+        threshold = 0.75
+
+    if detected in {"en", "hi"}:
+        return detected
+
+    # Only reinterpret an unsupported language when Whisper itself is
+    # uncertain. Stronger classifications are preserved.
+    if confidence >= threshold:
+        return detected
+
+    if _looks_like_hindi(text):
+        return "hi"
+
+    if _english_hint_score(text) >= 2:
+        return "en"
+
+    return detected
 
 
 def _env_flag(name: str, default: bool = True) -> bool:
@@ -117,13 +271,47 @@ def _transcribe_local(audio_data: sr.AudioData) -> Tuple[str, str, float]:
         if segment.text and segment.text.strip()
     ).strip()
 
-    language = str(getattr(info, "language", "")).lower()
+    language = str(
+        getattr(
+            info,
+            "language",
+            "",
+        )
+    ).lower()
+
     try:
-        probability = float(getattr(info, "language_probability", 0.0))
+        probability = float(
+            getattr(
+                info,
+                "language_probability",
+                0.0,
+            )
+        )
     except Exception:
         probability = 0.0
 
-    return text, language, probability
+    normalized_language = _normalize_detected_language(
+        text,
+        language,
+        probability,
+    )
+
+    if (
+        normalized_language != language
+        and text
+    ):
+        print(
+            "Language detection corrected from "
+            f"{language or 'unknown'} to "
+            f"{normalized_language} "
+            f"(Whisper confidence={probability:.2f})"
+        )
+
+    return (
+        text,
+        normalized_language,
+        probability,
+    )
 
 
 def _transcribe_google_fallback(audio_data: sr.AudioData) -> Tuple[str, str, float]:
