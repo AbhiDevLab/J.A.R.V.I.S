@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from engine.llm_client import ask_llm
+from engine.interaction_state import get_interaction_state
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,11 @@ def interpret_query(
 
     if not raw:
         return _fallback(raw)
+
+    active_state = get_interaction_state()
+
+    if not interaction_state:
+        interaction_state = active_state.as_context()
 
     has_context = bool(
         str(conversation_context or "").strip()
