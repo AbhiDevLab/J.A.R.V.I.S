@@ -202,6 +202,15 @@ def _select_kokoro_voice(
         "auto",
     ).strip().lower()
 
+    def _english_voice():
+        voice = os.getenv(
+            "JARVIS_TTS_EN_VOICE",
+            "am_michael",
+        )
+        # Kokoro's b language pipeline is used by British voices.
+        language_code = "b" if voice.lower().startswith(("bm_", "bf_")) else "a"
+        return language_code, voice
+
     if detected in {"hi", "hi-in", "hindi"}:
         return (
             "h",
@@ -212,13 +221,7 @@ def _select_kokoro_voice(
         )
 
     if detected in {"en", "en-in", "en-us", "english"}:
-        return (
-            "a",
-            os.getenv(
-                "JARVIS_TTS_EN_VOICE",
-                "am_michael",
-            ),
-        )
+        return _english_voice()
 
     if configured in {"hi", "hi-in", "hindi"}:
         return (
@@ -230,13 +233,7 @@ def _select_kokoro_voice(
         )
 
     if configured in {"en", "en-in", "en-us", "english"}:
-        return (
-            "a",
-            os.getenv(
-                "JARVIS_TTS_EN_VOICE",
-                "am_michael",
-            ),
-        )
+        return _english_voice()
 
     if _contains_devanagari(text):
         return (
@@ -247,13 +244,7 @@ def _select_kokoro_voice(
             ),
         )
 
-    return (
-        "a",
-        os.getenv(
-            "JARVIS_TTS_EN_VOICE",
-            "am_michael",
-        ),
-    )
+    return _english_voice()
 
 def _safe_unlink(path: Path) -> None:
     for _ in range(5):
@@ -317,11 +308,18 @@ def _synthesize_kokoro(
         )
     )
 
+    split_pattern = r"\n+"
+    if _env_flag("JARVIS_TTS_SENTENCE_PAUSES", True):
+        # Give Kokoro a short natural boundary between sentences. This keeps
+        # the voice measured without adding a second TTS engine.
+        text = re.sub(r"(?<=[.!?])\s+(?=[A-Z0-9])", "\n", text)
+        split_pattern = r"\n+"
+
     generator = pipeline(
         text,
         voice=voice,
         speed=speed,
-        split_pattern=r"\n+",
+        split_pattern=split_pattern,
     )
 
     wrote_audio = False
