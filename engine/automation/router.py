@@ -137,18 +137,40 @@ def _route_create(
 
         content = ""
 
+    location_markers = (
+        " in ",
+        " inside ",
+        " within ",
+    )
+
     if target.lower().startswith(
-        "in "
+        ("in ", "inside ", "within ")
     ):
         name = ""
-        directory = target[
-            3:
-        ].strip()
+        directory = target.split(
+            " ",
+            1,
+        )[1].strip()
     else:
-        name, directory = _split_right(
-            target,
-            " in ",
-        )
+        name = target
+        directory = ""
+
+        marker_index = -1
+        marker_used = ""
+
+        lowered_target = target.casefold()
+
+        for marker in location_markers:
+            index = lowered_target.rfind(marker)
+            if index > marker_index:
+                marker_index = index
+                marker_used = marker
+
+        if marker_index != -1:
+            name = target[:marker_index].strip()
+            directory = target[
+                marker_index + len(marker_used):
+            ].strip()
 
     parameters = {
         "name": _clean_name(name),
