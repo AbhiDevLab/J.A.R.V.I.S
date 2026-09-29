@@ -128,7 +128,12 @@ These include the multiple-result selection UX, natural-language selection parsi
 
 The implementation is not considered fully closed until we complete live end-to-end testing.
 
-- [ ] Run complete automated regression suite
+- [x] Run complete automated regression suite — 22/22 tests passing
+- [x] Verify Porcupine hotword startup with the pinned legacy local version
+- [x] Verify local Kokoro English TTS startup with `am_michael`
+- [x] Verify Faster-Whisper English speech reaches OmniRoute
+- [x] Fix and validate low-confidence/incorrect Whisper language classification for valid English transcripts
+
 - [ ] Test safe application automation through J.A.R.V.I.S.
 - [ ] Test folder open/list operations
 - [ ] Test file search
@@ -137,10 +142,11 @@ The implementation is not considered fully closed until we complete live end-to-
 - [ ] Test protected delete operations using disposable test data
 - [ ] Test authorization cancellation/failure paths
 - [ ] Test error handling for nonexistent targets
+- [ ] Complete remaining live E2E automation tests
 - [ ] Record final Phase 7.3 checkpoint
 - [ ] Commit Phase 7.3 checkpoint
 
-**Current Phase 7 status:** 🔄 Phase 7.3 checkpoint / validation
+**Current Phase 7 status:** 🔄 Phase 7.3 live E2E validation
 
 ---
 
@@ -278,10 +284,10 @@ PHASE 7
   🔄 Desktop Automation / Agent
       ├─ 7.1 ✅ Secure Automation Foundation
       ├─ 7.2 ✅ Desktop Application Control
-      └─ 7.3 🔄 Filesystem Automation Checkpoint
+      └─ 7.3 🔄 Filesystem Automation — Live E2E Checkpoint
         ↓
 PHASE 8
-  ⏳ Intelligence + Context
+  🟡 Intelligence + Context — Next
         ↓
 PHASE 9
   ⏳ Advanced Voice + Vision
