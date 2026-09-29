@@ -173,7 +173,8 @@ JARVIS should treat speech recognition output as an imperfect signal rather than
 - [x] Resolve incomplete or elliptical commands using context
 - [x] Detect when the transcript is ambiguous rather than forcing an incorrect interpretation
 - [x] Ask a clarification question only when context cannot safely determine the user's intent
-- [ ] Add regression tests for context-based interpretation
+- [x] Add regression tests for context-based interpretation
+- [x] Run current automated regression suite — 27/27 tests passing
 
 ### Phase 8.2 — Long-Term Memory System
 
