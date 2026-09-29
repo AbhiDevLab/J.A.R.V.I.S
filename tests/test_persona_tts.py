@@ -76,4 +76,4 @@ def test_speech_preparation_adds_sentence_pauses_without_changing_content():
 
     assert "The server is ready." in spoken
     assert "The connection is stable." in spoken
-    assert "\\n" in spoken
+    assert "\n" in spoken
