@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from .actions import AutomationAction
+from engine.context_interpreter import interpret_query
+from engine.interaction_state import get_interaction_state
 from .filesystem import (
     resolve_existing_path,
     resolve_path,
@@ -60,6 +62,29 @@ def _cancelled(
         _normalize(text)
         in CANCELLATION_PHRASES
     )
+
+
+def _interpret_dialogue_response(
+    response: str,
+) -> str:
+    """Interpret a short response against the active dialogue state."""
+    state = get_interaction_state()
+
+    if not state.has_state():
+        return _clean(response)
+
+    result = interpret_query(
+        response,
+        conversation_context="",
+        interaction_state=state.as_context(),
+    )
+
+    interpreted = result.query.strip()
+
+    if interpreted:
+        return interpreted
+
+    return _clean(response)
 
 SELECTION_NUMBER_WORDS = {
     "one": 1,
@@ -310,6 +335,14 @@ def _choose_match(
     )
 
     # Keep the spoken response short.
+    state = get_interaction_state()
+    state.set(
+        "selection",
+        prompt=f"select one of the matching {description} locations",
+        candidates=[str(match) for match in preview],
+        description=description,
+    )
+
     speak(
         f"I found {len(matches)} matching "
         f"locations for {description}. "
@@ -317,7 +350,11 @@ def _choose_match(
         display=False
     )
 
-    response = takecommand()
+    response = _interpret_dialogue_response(
+        takecommand()
+    )
+
+    state.clear()
 
     if _cancelled(response):
         speak("Action cancelled.")
@@ -431,6 +468,15 @@ def _choose_delete_target(
         display_text,
     )
 
+    state = get_interaction_state()
+    state.set(
+        "selection_or_all",
+        prompt="select a file or choose all",
+        action_type="delete_file",
+        candidates=[str(match) for match in preview],
+        description=description,
+    )
+
     speak(
         f"I found {len(preview)} matching files. "
         "Say the number to delete a specific file, "
@@ -438,9 +484,11 @@ def _choose_delete_target(
         display=False
     )
 
-    response = str(
+    response = _interpret_dialogue_response(
         takecommand()
     ).strip().lower()
+
+    state.clear()
 
     response = response.rstrip(
         ".,!?;:"
