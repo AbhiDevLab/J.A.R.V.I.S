@@ -1,6 +1,8 @@
 from __future__ import annotations
 import re
 from engine.auth import recognizer
+from engine.context_interpreter import interpret_query
+from engine.interaction_state import get_interaction_state
 
 
 FIRST_CONFIRMATION = {
@@ -55,6 +57,13 @@ def request_authorization(action) -> bool:
     # STEP 1 — Voice confirmation
     # ---------------------------------------------------------
 
+    state = get_interaction_state()
+    state.set(
+        "authorization_confirmation",
+        prompt="explicitly confirm or cancel the pending high-risk action",
+        action_type=action_type,
+    )
+
     speak(
         f"The requested action is {action_type} "
         "and requires authorization. "
@@ -63,11 +72,18 @@ def request_authorization(action) -> bool:
 
     first_response = takecommand()
 
-    if _is_cancelled(first_response):
+    interpreted_confirmation = interpret_query(
+        first_response,
+        interaction_state=state.as_context(),
+    ).query
+
+    state.clear()
+
+    if _is_cancelled(interpreted_confirmation):
         speak("Action cancelled.")
         return False
 
-    if _normalize(first_response) not in FIRST_CONFIRMATION:
+    if _normalize(interpreted_confirmation) not in FIRST_CONFIRMATION:
         speak(
             "Confirmation was not recognized. "
             "The action has been cancelled."
