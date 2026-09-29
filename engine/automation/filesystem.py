@@ -143,7 +143,7 @@ def _natural_location_parts(
     return [
         _clean_named_location(part)
         for part in re.split(
-            r"\\s+(?:under|inside|within)\\s+",
+            r"\s+(?:under|inside|within)\s+",
             reference,
             flags=re.IGNORECASE,
         )
