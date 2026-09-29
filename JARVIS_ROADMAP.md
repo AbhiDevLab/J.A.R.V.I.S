@@ -164,15 +164,15 @@ JARVIS should treat speech recognition output as an imperfect signal rather than
 
 ### Phase 8.1 — Contextual Interpretation Foundation
 
-- [ ] Create a dedicated contextual interpretation layer between STT and command/LLM handling
-- [ ] Preserve the raw STT transcript separately from the interpreted user meaning
-- [ ] Combine current transcript with recent conversation context
+- [x] Create a dedicated contextual interpretation layer between STT and command/LLM handling
+- [x] Preserve the raw STT transcript separately from the interpreted user meaning
+- [x] Combine current transcript with recent conversation context
 - [ ] Combine current transcript with active interaction/task state
-- [ ] Resolve obvious STT errors using conversational context
-- [ ] Resolve pronouns and references such as “it”, “that”, “this”, “there”, and “the previous one”
-- [ ] Resolve incomplete or elliptical commands using context
-- [ ] Detect when the transcript is ambiguous rather than forcing an incorrect interpretation
-- [ ] Ask a clarification question only when context cannot safely determine the user's intent
+- [x] Resolve obvious STT errors using conversational context
+- [x] Resolve pronouns and references such as “it”, “that”, “this”, “there”, and “the previous one”
+- [x] Resolve incomplete or elliptical commands using context
+- [x] Detect when the transcript is ambiguous rather than forcing an incorrect interpretation
+- [x] Ask a clarification question only when context cannot safely determine the user's intent
 - [ ] Add regression tests for context-based interpretation
 
 ### Phase 8.2 — Long-Term Memory System
