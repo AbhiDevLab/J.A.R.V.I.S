@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import List, Optional
@@ -31,6 +32,19 @@ DIRECTORY_ALIASES = {
     "my music": "music",
     "music folder": "music",
 }
+
+
+LOCATION_WRAPPER_PREFIXES = (
+    "my ",
+    "the ",
+)
+
+LOCATION_WRAPPER_SUFFIXES = (
+    " folder",
+    " directory",
+    " project",
+    " workspace",
+)
 
 
 SEARCH_EXCLUDED_DIRECTORIES = {
@@ -80,11 +94,68 @@ def normalize_filesystem_text(
     )
 
 
+def _clean_named_location(
+    text: str,
+) -> str:
+    """
+    Clean conversational location words without changing
+    ordinary filesystem names.
+
+    Examples:
+        "my J.A.R.V.I.S project" -> "J.A.R.V.I.S"
+        "the Web folder" -> "Web"
+        "current workspace" -> "current workspace"
+    """
+
+    value = " ".join(
+        str(text or "").strip().split()
+    )
+
+    lowered = value.casefold()
+
+    for prefix in LOCATION_WRAPPER_PREFIXES:
+        if lowered.startswith(prefix):
+            value = value[len(prefix):].strip()
+            lowered = value.casefold()
+            break
+
+    for suffix in LOCATION_WRAPPER_SUFFIXES:
+        if lowered.endswith(suffix):
+            value = value[:-len(suffix)].strip()
+            break
+
+    return value
+
+
+def _natural_location_parts(
+    reference: str,
+) -> list[str]:
+    """
+    Split conversational hierarchy descriptions such as:
+
+        J.A.R.V.I.S folder under Web folder under Dev folder
+        J.A.R.V.I.S inside Web inside Dev
+
+    The first item is the deepest target and the last item
+    is the broadest ancestor.
+    """
+
+    return [
+        _clean_named_location(part)
+        for part in re.split(
+            r"\\s+(?:under|inside|within)\\s+",
+            reference,
+            flags=re.IGNORECASE,
+        )
+        if _clean_named_location(part)
+    ]
+
+
 def _canonical_directory_alias(
     text: str,
 ) -> Optional[str]:
     normalized = normalize_filesystem_text(
-        text
+        _clean_named_location(text)
     )
 
     for prefix in (
@@ -522,6 +593,137 @@ def search_paths(
 
     return matches
 
+def _resolve_folder_name(
+    reference: str,
+    search_roots: Optional[List[Path]] = None,
+) -> tuple[Optional[Path], str]:
+    """Resolve one exact folder name without guessing."""
+
+    target = _clean_named_location(
+        _clean_reference(reference)
+    )
+
+    if not target:
+        return None, "No folder name was provided."
+
+    direct = resolve_path(target)
+
+    if direct.is_dir():
+        return direct, ""
+
+    current = Path.cwd().resolve(
+        strict=False
+    )
+
+    for parent in [
+        current,
+        *current.parents,
+    ]:
+        if parent.name.casefold() == target.casefold():
+            return parent, ""
+
+    matches = search_paths(
+        target,
+        expected_type="folder",
+        max_results=50,
+        search_roots=search_roots,
+    )
+
+    if len(matches) == 1:
+        return matches[0], ""
+
+    if len(matches) > 1:
+        locations = "; ".join(
+            str(match)
+            for match in matches
+        )
+        return (
+            None,
+            f"I found multiple matches for "
+            f"{target}: {locations}.",
+        )
+
+    return None, f"I could not find {target}."
+
+
+def _resolve_natural_folder_hierarchy(
+    reference: str,
+) -> tuple[Optional[Path], str]:
+    """
+    Resolve a spoken hierarchy from broadest ancestor to
+    deepest child.
+
+    Example:
+        "J.A.R.V.I.S folder under Web folder under Dev folder"
+
+    resolves as:
+        C:\Dev -> Web -> J.A.R.V.I.S
+    """
+
+    parts = _natural_location_parts(
+        _clean_reference(reference)
+    )
+
+    if len(parts) <= 1:
+        return None, ""
+
+    # Work from the broadest location toward the target.
+    parts = list(reversed(parts))
+    first = parts[0]
+
+    drive_match = re.fullmatch(
+        r"([a-zA-Z]):(?:\\s+drive)?",
+        first.strip(),
+    )
+
+    if drive_match:
+        current = Path(
+            f"{drive_match.group(1).upper()}:\\"
+        )
+        if not current.is_dir():
+            return None, f"I could not find {first}."
+    else:
+        current, error = _resolve_folder_name(
+            first
+        )
+        if current is None:
+            return None, error
+
+    for child_name in parts[1:]:
+        matches = [
+            child
+            for child in current.iterdir()
+            if child.is_dir()
+            and child.name.casefold()
+            == child_name.casefold()
+        ]
+
+        if len(matches) == 1:
+            current = matches[0].resolve(
+                strict=False
+            )
+            continue
+
+        if len(matches) > 1:
+            locations = "; ".join(
+                str(match)
+                for match in matches
+            )
+            return (
+                None,
+                f"I found multiple matches for "
+                f"{child_name}: {locations}.",
+            )
+
+        return (
+            None,
+            f"I could not find {child_name} inside "
+            f"{current}.",
+        )
+
+    return current, ""
+
+
 def resolve_existing_path(
     reference: str,
     expected_type: str,
@@ -530,17 +732,15 @@ def resolve_existing_path(
     Resolve a user-provided file/folder reference.
 
     Resolution order:
-        1. Direct/explicit path
-        2. Ancestor folder lookup
-        3. Common filesystem search
+        1. Natural hierarchical location
+        2. Direct/explicit path
+        3. Current/ancestor folder lookup
+        4. Common filesystem search
 
-    When exactly one match exists, it is returned.
     Multiple matches are reported instead of guessing.
     """
 
-    target = _clean_reference(
-        reference
-    )
+    target = _clean_reference(reference)
 
     if not target:
         return (
@@ -548,9 +748,39 @@ def resolve_existing_path(
             "No path was provided.",
         )
 
-    direct = resolve_path(
+    # Friendly workspace/current-location aliases.
+    normalized_target = normalize_filesystem_text(
         target
     )
+
+    if expected_type == "folder" and normalized_target in {
+        "current folder",
+        "current directory",
+        "this folder",
+        "current workspace",
+        "this workspace",
+        "my current folder",
+        "my current directory",
+        "my current workspace",
+    }:
+        return (
+            Path.cwd().resolve(strict=False),
+            "",
+        )
+
+    # Resolve "X under Y under Z" / "X inside Y inside Z"
+    # before broad filesystem search. This prevents a
+    # common folder name from being chosen from elsewhere.
+    if expected_type == "folder":
+        hierarchical, hierarchy_error = (
+            _resolve_natural_folder_hierarchy(target)
+        )
+        if hierarchical is not None:
+            return hierarchical, ""
+        if hierarchy_error:
+            return None, hierarchy_error
+
+    direct = resolve_path(target)
 
     if _matches_expected_type(
         direct,
@@ -558,38 +788,39 @@ def resolve_existing_path(
     ):
         return direct, ""
 
-    # Resolve directory names such as:
-    #
-    # "Dev"
-    #
-    # when JARVIS is running somewhere under:
-    #
-    # C:\Dev\Web\J.A.R.V.I.S
-    #
-    # This lets an ancestor directory resolve
-    # naturally without creating a new directory.
-    if (
-        expected_type == "folder"
-        and "\\" not in target
-        and "/" not in target
-        and ":" not in target
-    ):
-        current = Path.cwd().resolve(
-            strict=False
-        )
+    if expected_type == "folder":
+        cleaned_target = _clean_named_location(target)
 
-        for parent in [
-            current,
-            *current.parents,
-        ]:
-            if (
-                parent.name.casefold()
-                == target.casefold()
-            ):
-                return parent, ""
+        # Resolve a folder name relative to the current
+        # workspace/working directory.
+        if (
+            cleaned_target
+            and "\\" not in cleaned_target
+            and "/" not in cleaned_target
+            and ":" not in cleaned_target
+        ):
+            current = Path.cwd().resolve(
+                strict=False
+            )
+
+            for parent in [
+                current,
+                *current.parents,
+            ]:
+                if (
+                    parent.name.casefold()
+                    == cleaned_target.casefold()
+                ):
+                    return parent, ""
+
+    search_target = (
+        _clean_named_location(target)
+        if expected_type == "folder"
+        else target
+    )
 
     matches = search_paths(
-        target,
+        search_target,
         expected_type=expected_type,
         max_results=50,
     )
@@ -606,14 +837,13 @@ def resolve_existing_path(
         return (
             None,
             f"I found multiple matches for "
-            f"{target}: {locations}.",
+            f"{search_target}: {locations}.",
         )
 
     return (
         None,
-        f"I could not find {target}.",
+        f"I could not find {search_target}.",
     )
-
 
 def open_folder(
     path_text: str,
