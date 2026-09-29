@@ -48,7 +48,7 @@ The work originally planned as Phase 10 was moved forward into Phase 7.
 
 ## Phase 7.2 — Desktop Application Control
 
-**Commit:** `ec1c49d779d5f119efec430f0022ccd190e41ec1`
+**Commit:** `ec1c49d779d5f119efc430f0022ccd190e41ec1`
 
 - [x] Known desktop application registry
 - [x] Application executable resolution
@@ -154,17 +154,122 @@ The implementation is not considered fully closed until we complete live end-to-
 
 This is the next major intelligence-focused phase after Desktop Automation.
 
-Potential scope:
+## Phase 8 Core Objective
 
-- [ ] Better long-term memory
-- [ ] User preferences/context
-- [ ] Better conversation summarization
-- [ ] Contextual follow-ups
-- [ ] Smarter intent detection
-- [ ] Improved error/fallback handling
-- [ ] Provider/model fallback strategy
+> **Give JARVIS the ability to infer what the user means from imperfect speech, conversation history, memory, and current interaction state.**
 
-**Phase status:** ⏳ Not started
+The goal is to move JARVIS from a system that primarily reacts to literal transcripts into a **context-aware interpreting entity** that can recover intended meaning, maintain conversational continuity, and respond or act appropriately.
+
+JARVIS should treat speech recognition output as an imperfect signal rather than blindly assuming the transcript is exactly what the user intended.
+
+### Phase 8.1 — Contextual Interpretation Foundation
+
+- [ ] Create a dedicated contextual interpretation layer between STT and command/LLM handling
+- [ ] Preserve the raw STT transcript separately from the interpreted user meaning
+- [ ] Combine current transcript with recent conversation context
+- [ ] Combine current transcript with active interaction/task state
+- [ ] Resolve obvious STT errors using conversational context
+- [ ] Resolve pronouns and references such as “it”, “that”, “this”, “there”, and “the previous one”
+- [ ] Resolve incomplete or elliptical commands using context
+- [ ] Detect when the transcript is ambiguous rather than forcing an incorrect interpretation
+- [ ] Ask a clarification question only when context cannot safely determine the user's intent
+- [ ] Add regression tests for context-based interpretation
+
+### Phase 8.2 — Long-Term Memory System
+
+- [ ] Design a dedicated JARVIS memory architecture instead of treating conversation history as memory
+- [ ] Separate episodic memory from persistent semantic memory
+- [ ] Store relevant user facts and durable information
+- [ ] Store relevant interaction history/events
+- [ ] Add memory creation/update rules
+- [ ] Prevent irrelevant or low-value conversation from becoming persistent memory
+- [ ] Support memory relevance retrieval for the current query
+- [ ] Support memory updates when newer information supersedes older information
+- [ ] Support memory expiration for temporary working context
+- [ ] Add memory persistence and retrieval regression tests
+
+### Phase 8.3 — User Profile / Preferences / Working Context
+
+- [ ] Create a structured user-context/profile representation
+- [ ] Store durable user preferences
+- [ ] Store communication preferences
+- [ ] Store relevant project/work context
+- [ ] Track temporary active task state separately from long-term memory
+- [ ] Track pending selections and unresolved conversational references
+- [ ] Allow the contextual interpreter to use relevant user context
+- [ ] Prevent unrelated personal/context information from being injected into prompts
+- [ ] Add tests for context isolation and relevance
+
+### Phase 8.4 — Conversation Summarization & Context Compression
+
+- [ ] Summarize long conversations instead of continually expanding the raw prompt
+- [ ] Maintain recent turns plus compact historical summaries
+- [ ] Generate/update summaries when conversations become large
+- [ ] Preserve important facts, decisions, unresolved tasks, and references in summaries
+- [ ] Avoid losing important context during summarization
+- [ ] Validate summarized-context conversations against equivalent full-history conversations
+- [ ] Add regression tests for long-context continuity
+
+### Phase 8.5 — Contextual Follow-Ups & Reference Resolution
+
+- [ ] Support natural follow-ups without requiring the user to repeat context
+- [ ] Resolve references to previously mentioned files, applications, people, tasks, and answers
+- [ ] Connect Phase 7 selection state with Phase 8 contextual interpretation
+- [ ] Understand responses such as “the first one”, “yes”, “no”, “that one”, and “do it”
+- [ ] Preserve pending conversational state across multi-turn interactions
+- [ ] Detect when a follow-up belongs to an existing task versus starting a new task
+- [ ] Add multi-turn E2E tests for contextual follow-ups
+
+### Phase 8.6 — Smarter Intent Detection
+
+- [ ] Introduce structured semantic intent representation
+- [ ] Distinguish conversation, information requests, automation requests, clarifications, confirmations, and cancellations
+- [ ] Use contextual interpretation to improve intent detection when STT is imperfect
+- [ ] Preserve deterministic routing for security-sensitive automation
+- [ ] Convert interpreted automation intent into existing `AutomationAction` structures
+- [ ] Do not allow LLM interpretation to bypass authorization/security gates
+- [ ] Add ambiguous-intent and misheard-command regression tests
+
+### Phase 8.7 — Intelligent Error / Fallback Handling
+
+- [ ] Classify STT, interpretation, LLM, automation, authorization, and TTS failures separately
+- [ ] Replace generic failure responses with context-appropriate recovery
+- [ ] Retry transient LLM/provider failures when safe
+- [ ] Recover gracefully from malformed/empty LLM responses
+- [ ] Preserve conversation context across recoverable failures
+- [ ] Ask the user for clarification when recovery requires missing information
+- [ ] Add failure-recovery regression tests
+
+### Phase 8.8 — LLM Provider / Model Fallback Strategy
+
+This is limited to **runtime reliability and fallback behavior**. Full provider/model configuration remains Phase 10.
+
+- [ ] Define a controlled fallback policy around the existing OmniRoute architecture
+- [ ] Detect connection failures, timeouts, provider failures, and invalid responses
+- [ ] Retry requests only when the failure is safely retryable
+- [ ] Support controlled model/provider fallback where the existing runtime configuration permits it
+- [ ] Preserve a consistent JARVIS response contract across fallback providers/models
+- [ ] Log which fallback path was used for diagnostics
+- [ ] Add provider/fallback regression tests
+- [ ] Keep full provider selection/configuration for Phase 10
+
+### Phase 8.9 — Intelligence Integration & E2E Validation
+
+- [ ] Integrate contextual interpretation into the existing STT → command/automation → LLM pipeline
+- [ ] Verify imperfect-transcript recovery using realistic speech-recognition errors
+- [ ] Verify context-aware file/application references
+- [ ] Verify multi-turn follow-up conversations
+- [ ] Verify long-term memory retrieval
+- [ ] Verify user preference/context retrieval
+- [ ] Verify clarification behavior for genuinely ambiguous requests
+- [ ] Verify automation security remains fail-closed after contextual interpretation
+- [ ] Verify recoverable LLM/provider failures preserve conversation state
+- [ ] Run complete Phase 8 automated regression suite
+- [ ] Run complete Phase 8 live voice E2E suite
+- [ ] Record final Phase 8 checkpoint
+- [ ] Commit Phase 8 checkpoint
+
+**Phase 8 status:** ⏳ Not started
 
 ---
 
@@ -288,6 +393,15 @@ PHASE 7
         ↓
 PHASE 8
   🟡 Intelligence + Context — Next
+      ├─ 8.1 ⏳ Contextual Interpretation
+      ├─ 8.2 ⏳ Long-Term Memory
+      ├─ 8.3 ⏳ User Profile / Working Context
+      ├─ 8.4 ⏳ Conversation Summarization
+      ├─ 8.5 ⏳ Contextual Follow-Ups
+      ├─ 8.6 ⏳ Smarter Intent Detection
+      ├─ 8.7 ⏳ Intelligent Error / Fallback Handling
+      ├─ 8.8 ⏳ LLM Provider / Model Fallback
+      └─ 8.9 ⏳ Intelligence Integration & E2E Validation
         ↓
 PHASE 9
   ⏳ Advanced Voice + Vision
@@ -310,3 +424,6 @@ PHASE 12
 4. The Command Prompt executor issue is intentionally deferred and should not be treated as part of the current Phase 7.3 checkpoint unless explicitly reopened.
 5. The roadmap should be updated as each phase/sub-phase is completed.
 6. The Git history and this checklist together define the project's development progression.
+7. Phase 8 must improve JARVIS's ability to infer **intended meaning**, not merely improve literal transcript handling.
+8. Contextual interpretation must never bypass the existing deterministic automation security and authorization gates.
+9. Full AI provider/model configuration remains part of Phase 10; Phase 8 only addresses runtime reliability and controlled fallback behavior.
