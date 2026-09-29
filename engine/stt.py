@@ -162,16 +162,21 @@ def _normalize_detected_language(
     if detected in {"en", "hi"}:
         return detected
 
-    # Only reinterpret an unsupported language when Whisper itself is
-    # uncertain. Stronger classifications are preserved.
-    if confidence >= threshold:
-        return detected
-
+    # Transcript evidence takes precedence when it clearly identifies
+    # one of JARVIS's supported languages. Whisper can confidently
+    # misclassify short English utterances, so confidence alone must not
+    # cause a correct transcript to be discarded.
     if _looks_like_hindi(text):
         return "hi"
 
-    if _english_hint_score(text) >= 2:
+    english_score = _english_hint_score(text)
+    if english_score >= 2:
         return "en"
+
+    # For other languages, keep Whisper's result. This allows future
+    # language-specific pipelines to use the original detection.
+    if confidence >= threshold:
+        return detected
 
     return detected
 
