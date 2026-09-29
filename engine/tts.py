@@ -189,6 +189,15 @@ def _prepare_speech_text(text: str) -> str:
         spoken,
     )
 
+    # Optional sentence boundaries give Kokoro clearer opportunities for
+    # measured pauses without changing the words spoken.
+    if _env_flag("JARVIS_TTS_SENTENCE_PAUSES", True):
+        spoken = re.sub(
+            r"(?<=[.!?])\s+(?=[A-Z0-9])",
+            "\n",
+            spoken,
+        )
+
     return spoken.strip()
 
 def _select_kokoro_voice(
@@ -309,11 +318,6 @@ def _synthesize_kokoro(
     )
 
     split_pattern = r"\n+"
-    if _env_flag("JARVIS_TTS_SENTENCE_PAUSES", True):
-        # Give Kokoro a short natural boundary between sentences. This keeps
-        # the voice measured without adding a second TTS engine.
-        text = re.sub(r"(?<=[.!?])\s+(?=[A-Z0-9])", "\n", text)
-        split_pattern = r"\n+"
 
     generator = pipeline(
         text,
