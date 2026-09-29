@@ -167,7 +167,7 @@ JARVIS should treat speech recognition output as an imperfect signal rather than
 - [x] Create a dedicated contextual interpretation layer between STT and command/LLM handling
 - [x] Preserve the raw STT transcript separately from the interpreted user meaning
 - [x] Combine current transcript with recent conversation context
-- [ ] Combine current transcript with active interaction/task state
+- [x] Combine current transcript with active interaction/task state
 - [x] Resolve obvious STT errors using conversational context
 - [x] Resolve pronouns and references such as “it”, “that”, “this”, “there”, and “the previous one”
 - [x] Resolve incomplete or elliptical commands using context
