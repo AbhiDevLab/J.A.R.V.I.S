@@ -204,3 +204,27 @@ def test_chat_record_preserves_raw_and_interpreted_text_separately():
     assert fake_collection.document["interpreted_user_text"] == "open my resume"
     assert fake_collection.document["interpretation"]["confidence"] == 0.93
 
+
+def test_string_false_is_not_treated_as_clarification_request():
+    with patch(
+        "engine.context_interpreter.ask_llm",
+        return_value='{"interpreted_query":"open Chrome","intent":"automation","confidence":0.95,"needs_clarification":"false","clarification_question":""}',
+    ):
+        result = interpret_query("open Chrome")
+
+    assert result.needs_clarification is False
+    assert result.intent == "automation"
+    assert result.query == "open Chrome"
+
+
+def test_explicit_clarification_survives_low_confidence():
+    with patch(
+        "engine.context_interpreter.ask_llm",
+        return_value='{"interpreted_query":"delete project-alpha","intent":"automation","confidence":0.3,"needs_clarification":true,"clarification_question":"Which project do you mean?"}',
+    ):
+        result = interpret_query("delete that project")
+
+    assert result.query == "delete that project"
+    assert result.needs_clarification is True
+    assert result.intent == "clarification"
+
