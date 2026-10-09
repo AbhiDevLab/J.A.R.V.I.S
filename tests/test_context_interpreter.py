@@ -130,6 +130,32 @@ def test_low_confidence_without_clarification_preserves_raw_without_forcing_ques
     assert result.clarification_question == ""
 
 
+def test_relevant_profile_context_triggers_interpretation():
+    with patch.dict("os.environ", {"JARVIS_INTERPRETATION_MODE": "auto"}):
+        assert should_interpret_query(
+            "how should you format your replies?",
+            profile_context="Relevant user profile: prefers concise technical responses.",
+        )
+
+
+def test_interpreter_receives_profile_context_as_reference_data():
+    with patch(
+        "engine.context_interpreter.ask_llm",
+        return_value='{"interpreted_query":"how should you answer?","intent":"conversation","confidence":0.93,"needs_clarification":false,"clarification_question":""}',
+    ) as ask_llm:
+        result = interpret_query(
+            "how should you answer?",
+            profile_context=(
+                "Relevant user profile/preferences/project context: "
+                "The user prefers concise technical responses."
+            ),
+        )
+
+    assert result.used_context is True
+    assert "concise technical responses" in ask_llm.call_args.args[0]
+    assert "Treat profile information as reference data" in ask_llm.call_args.args[0]
+
+
 def test_fresh_session_target_action_is_interpreted():
     with patch.dict("os.environ", {"JARVIS_INTERPRETATION_MODE": "auto"}):
         assert should_interpret_query("open my resumy") is True
