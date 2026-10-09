@@ -180,10 +180,10 @@ JARVIS should treat speech recognition output as an imperfect signal rather than
 The interpreter, structured result, contextual prompt, temporary interaction state, and interpreter tests are present in the branch. The full runtime path is not yet consistently context-aware:
 
 - General interpretation in `engine/command.py` runs only when in-memory conversation history exists, so a fresh-session request bypasses it.
-- Completed automation actions are not added to conversation history, limiting follow-ups such as “close that” or “move the previous one.”
+- Successful structured automation actions are now added to immediate conversation context and stored as episodic memories. Other legacy automation routes have not all been moved into the same structured context path.
 - Raw and interpreted text are not persisted as separate fields; the result object keeps both only during interpretation.
 - Low-confidence responses restore the raw transcript but also clear `needs_clarification`, which can suppress a clarification that the model requested.
-- Re-run the automated suite against the current branch head before treating any historical test count as current.
+- The project owner ran the focused memory/context tests (16 passed) and full regression suite (43 passed, 6 dependency warnings) locally on 2026-10-09.
 
 These are Phase 8.1 integration-hardening tasks. They should be addressed before declaring 8.1 complete, even though much of the interpreter foundation is already implemented.
 
@@ -199,9 +199,10 @@ These are Phase 8.1 integration-hardening tasks. They should be addressed before
 - [x] Supersede previous semantic values when a new value arrives for the same key
 - [x] Support memory expiration; episodic records default to a configurable 90-day TTL
 - [x] Add memory persistence/retrieval/update/expiry regression tests in `tests/test_memory.py`
-- [ ] Run `pytest -v tests/test_memory.py` and the full suite in the local Python 3.11 environment
+- [x] Run focused memory/context regression suite — 16/16 tests passed locally on 2026-10-09
+- [x] Run the complete regression suite — 43/43 tests passed locally on 2026-10-09 (6 dependency warnings; no test failures)
 
-**Phase 8.2 status:** 🟡 Implementation committed; local regression execution remains pending. The implementation uses SQLite and lexical retrieval; embeddings/vector search and a dedicated memory-management HUD are not part of this sub-phase implementation.
+**Phase 8.2 status:** ✅ Implemented and automated regression suite passing. The implementation uses SQLite and lexical retrieval; embeddings/vector search and a dedicated memory-management HUD are not part of this sub-phase implementation.
 
 ### Phase 8.3 — User Profile / Preferences / Working Context
 
@@ -409,7 +410,7 @@ PHASE 7
 PHASE 8
   🟡 Contextual foundation present; overall phase incomplete
       ├─ 8.1 🟡 Interpreter exists; runtime integration and validation open
-      ├─ 8.2 🟡 Long-Term Memory — implementation committed; tests pending
+      ├─ 8.2 ✅ Long-Term Memory — implementation and 43-test regression suite passing
       ├─ 8.3 ⏳ User Profile / Working Context
       ├─ 8.4 ⏳ Conversation Summarization
       ├─ 8.5 ⏳ Contextual Follow-Ups
