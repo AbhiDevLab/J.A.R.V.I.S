@@ -321,7 +321,7 @@ Raw speech-to-text transcript:
         # replaces the original transcript.
         try:
             minimum_confidence = float(
-                __import__("os").getenv(
+                os.getenv(
                     "JARVIS_INTERPRETATION_MIN_CONFIDENCE",
                     "0.70",
                 )
