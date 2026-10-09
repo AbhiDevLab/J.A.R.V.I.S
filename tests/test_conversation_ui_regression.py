@@ -17,8 +17,8 @@ def test_history_switch_control_opens_sidebar_from_active_viewer():
     assert '$("#ConversationViewerHistory").on(' in MAIN_JS
     handler = MAIN_JS.split(
         '$("#ConversationViewerHistory").on(', 1
-    )[1].split(");", 1)[0]
-    assert "openHistorySidebar()" in handler
+    )[1].split("\\n    );", 1)[0]
+    assert "openHistorySidebar();" in handler
 
 
 def test_closing_viewer_restores_hud_and_hides_siriwave():
