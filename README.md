@@ -741,15 +741,15 @@ Phase 6
   ✅ Conversational System
         ↓
 Phase 7
-  🔄 Desktop Automation / Agent
+  ✅ Desktop Automation / Agent
       ├─ 7.1 ✅ Secure automation foundation
       ├─ 7.2 ✅ Desktop application control
-      └─ 7.3 🔄 Live end-to-end validation and checkpoint pending
+      └─ 7.3 ✅ Live E2E validation reported complete by owner
         ↓
 Phase 8
   🟡 Contextual foundation exists; overall phase incomplete
       ├─ 8.1 🟡 Interpretation code exists; integration gaps remain
-      ├─ 8.2 ⏳ Long-term memory not implemented
+      ├─ 8.2 🟡 Persistent memory implemented; local test execution pending
       ├─ 8.3 ⏳ User profile / working context
       ├─ 8.4 ⏳ Conversation summarization
       ├─ 8.5 ⏳ Contextual follow-ups across actions
@@ -775,17 +775,17 @@ The Phase 8 objective is:
 
 > Give JARVIS the ability to infer what the user means from imperfect speech, conversation history, memory, and current interaction state.
 
-The codebase contains a contextual interpreter, recent-turn conversation context, and temporary interaction state. These are useful foundations, but they do not yet amount to persistent personal memory or complete contextual continuity across automation actions.
+The codebase contains a contextual interpreter, recent-turn conversation context, temporary interaction state, and a new SQLite-backed long-term memory module. Persistent memory is now implemented at the Phase 8.2 feature level, but the local regression suite still needs to be executed against the updated branch.
 
 ### Verified implementation gaps
 
-- In `engine/command.py`, general contextual interpretation runs only when `conversation_manager.has_context()` is true. A fresh conversation bypasses that interpretation path.
-- Completed automation actions are not added to `ConversationManager` the way conversational turns are. A later command therefore cannot reliably refer back to the previous application or filesystem action through saved chat context.
-- The raw transcript and interpreted query are represented separately inside `InterpretationResult`, but the command flow replaces the active query with the interpreted text. The saved conversation turn does not separately retain both values for auditing or later memory extraction.
-- `engine/mongo_store.py` persists user/assistant conversation turns. No dedicated semantic/episodic memory model, relevance retrieval, fact correction policy, or memory-expiration mechanism is present in this branch snapshot.
-- The low-confidence path in `engine/context_interpreter.py` restores the raw transcript and clears the clarification flag. This is conservative about rewriting speech, but it can suppress a clarification requested by the model; it needs an explicit policy and regression tests.
+- General contextual interpretation in `engine/command.py` is conditional on existing in-memory chat context or a retrieved memory. A fresh request with no relevant memory can bypass it.
+- Successful structured automation actions are added to immediate conversation context and recorded as episodic memories. Other legacy automation routes have not all been refactored into the same structured flow.
+- The raw transcript and interpreted query are not persisted as separate chat fields.
+- The low-confidence path in `engine/context_interpreter.py` can suppress a clarification requested by the model; Phase 8.1 hardening remains open.
+- The new memory tests are committed, but this audit session could not execute them in the repository's local Windows/Python runtime.
 
-Phase 7.3 remains the roadmap's active checkpoint because its live end-to-end validation list is still open. Phase 8.1's source foundation exists, but the complete Phase 8 integration and validation work remains outstanding. Long-term memory (Phase 8.2) has not yet been implemented.
+Phase 7.3 live validation is recorded as complete based on the project owner's local report on 2026-10-09; this session did not independently repeat desktop/voice tests. Phase 8.1 hardening, Phase 8.2 test execution, and the remaining Phase 8 sub-phases are still outstanding.
 
 ---
 
