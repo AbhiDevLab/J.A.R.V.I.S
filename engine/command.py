@@ -377,6 +377,7 @@ def _language_name(language):
 @eel.expose
 def allCommands(message=1):
     # Initial query comes either from the microphone or the text box.
+    is_voice_input = message == 1
     if message == 1:
         query, query_language = takecommand(
             return_language=True
@@ -425,6 +426,7 @@ def allCommands(message=1):
                 conversation_context=conversation_context,
                 memory_context=memory_context,
                 interaction_state=interaction_context,
+                is_voice_input=is_voice_input,
             )
 
             if should_interpret:
