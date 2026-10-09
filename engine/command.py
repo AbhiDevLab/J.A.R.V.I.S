@@ -7,6 +7,11 @@ from engine.stt import detect_text_language, transcribe_audio
 from engine.llm_client import ask_llm
 from engine.conversation import get_conversation_manager
 from engine.context_interpreter import interpret_query
+from engine.memory import (
+    build_memory_context,
+    extract_memories_from_turn,
+    record_episode,
+)
 from engine.persona import build_jarvis_prompt
 
 from engine.settings_store import (
@@ -382,6 +387,7 @@ def allCommands(message=1):
     # If an LLM response is interrupted by saying "Jarvis", the loop
     # listens for the next query and continues without another activation.
     while True:
+        raw_transcript = str(query or "").strip()
         if query:
             _safe_display(
                 "senderText",
@@ -402,14 +408,16 @@ def allCommands(message=1):
             # intact for fallback/debugging, and automation security remains
             # entirely inside the existing executor/authorization layer.
             interpretation = None
+            memory_context = build_memory_context(query, limit=5)
 
-            if conversation_manager.has_context():
+            if conversation_manager.has_context() or memory_context:
                 interpretation = interpret_query(
                     query,
                     conversation_context=(
                         conversation_manager.build_context()
                     ),
                     interaction_state="",
+                    memory_context=memory_context,
                     language=query_language or "en",
                 )
 
@@ -481,6 +489,35 @@ def allCommands(message=1):
                             "The action could not be completed.",
                         )
                     )
+
+                if automation_result.get("success"):
+                    action_message = str(
+                        automation_result.get(
+                            "message",
+                            "Action completed successfully.",
+                        )
+                    )
+                    try:
+                        record_episode(
+                            raw_transcript,
+                            outcome=action_message,
+                            action_type=automation_action.action_type,
+                            conversation_id=conversation_manager.conversation_id,
+                            metadata={
+                                "action_type": automation_action.action_type,
+                            },
+                        )
+                        # Keep the just-completed action available to immediate
+                        # follow-ups in the current conversation context.
+                        conversation_manager.add_turn(
+                            raw_transcript,
+                            action_message,
+                        )
+                    except Exception as memory_error:
+                        print(
+                            "Action memory recording unavailable: "
+                            f"{memory_error}"
+                        )
 
                 break
 
@@ -624,16 +661,18 @@ def allCommands(message=1):
                     conversation_manager.build_context()
                 )
 
-                context_section = ""
-
+                context_parts = []
                 if previous_context:
-                    context_section = f"""
-                        {previous_context}
+                    context_parts.append(f"""
+{previous_context}
 
-                        Use the previous conversation only when it is relevant to the
-                        current query. Resolve references such as "it", "that", "this",
-                        "the previous one", and follow-up questions using that context.
-                    """
+Use the previous conversation only when it is relevant to the current query.
+Resolve references such as "it", "that", "this", "the previous one", and follow-up
+questions using that context.
+""".strip())
+                if memory_context:
+                    context_parts.append(memory_context)
+                context_section = "\n\n".join(context_parts)
 
                 enhanced_prompt = build_jarvis_prompt(
                     query,
@@ -683,6 +722,21 @@ def allCommands(message=1):
                     query,
                     response,
                 )
+
+                # Durable memory extraction is selective and best-effort. It
+                # runs only for user messages that resemble durable statements;
+                # ordinary questions/commands do not incur an extra LLM call.
+                try:
+                    extract_memories_from_turn(
+                        raw_transcript,
+                        response,
+                        conversation_id=conversation_manager.conversation_id,
+                    )
+                except Exception as memory_error:
+                    print(
+                        "Long-term memory extraction unavailable: "
+                        f"{memory_error}"
+                    )
 
                 _safe_display(
                     "assistantResponse",
