@@ -128,6 +128,10 @@ def loadConversation(conversation_id):
             conversation_id
         )
 
+        # Pending selections/clarifications belong to the previous live turn,
+        # not to a conversation loaded from history.
+        get_interaction_state().clear()
+
         messages = []
 
         for turn in turns:
@@ -182,6 +186,7 @@ def startNewConversation():
         conversation_id = (
             conversation_manager.start_new_conversation()
         )
+        get_interaction_state().clear()
 
         return {
             "success": True,
@@ -469,7 +474,10 @@ def allCommands(message=1):
                     except (TypeError, ValueError):
                         minimum_confidence = 0.70
 
-                    if interpretation.confidence < minimum_confidence:
+                    if (
+                        interpretation.confidence < minimum_confidence
+                        or interpretation.intent == "unknown"
+                    ):
                         # Do not drop pending clarification state after an
                         # interpreter failure or uncertain answer.
                         speak(
