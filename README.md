@@ -754,7 +754,7 @@ python -m pytest -v
 The project owner reports that the three file-open regression tests passed, the full suite passed, and the explicit README.md file-open command succeeded live. The baseline following the file-open fix was 56 passing tests. Phase 8.3 adds 5 profile tests and 2 interpreter-context tests; run the new focused checks and the full suite locally before treating Phase 8.3 as validated.
 
 ~~~bash
-python -m pytest -v tests/test_context_interpreter.py
+python -m pytest -v tests/test_user_context.py tests/test_context_interpreter.py
 python -m pytest -v
 ~~~
 
