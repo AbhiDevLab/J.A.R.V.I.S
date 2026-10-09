@@ -457,9 +457,31 @@ def allCommands(message=1):
                     )
                     break
 
-                query = interpretation.query
-                # A previous clarification has now received a usable answer.
                 current_state = get_interaction_state()
+                if current_state.state_type == "clarification":
+                    try:
+                        minimum_confidence = float(
+                            os.getenv(
+                                "JARVIS_INTERPRETATION_MIN_CONFIDENCE",
+                                "0.70",
+                            )
+                        )
+                    except (TypeError, ValueError):
+                        minimum_confidence = 0.70
+
+                    if interpretation.confidence < minimum_confidence:
+                        # Do not drop pending clarification state after an
+                        # interpreter failure or uncertain answer.
+                        speak(
+                            current_state.prompt
+                            or "I still need you to clarify that request.",
+                            language=query_language or "en",
+                        )
+                        break
+
+                query = interpretation.query
+                # A previous clarification has now received a sufficiently
+                # confident answer, so its temporary state can be cleared.
                 if current_state.state_type == "clarification":
                     current_state.clear()
 
