@@ -93,14 +93,15 @@ def should_interpret_query(
     conversation_context: str = "",
     memory_context: str = "",
     interaction_state: str = "",
+    is_voice_input: bool = False,
 ) -> bool:
     """Return whether this utterance benefits from contextual interpretation.
 
     Clear known application launches are the fast path. Interpret when previous
     context, relevant memory, pending interaction state, follow-up language, or
     a target-sensitive action makes ambiguity/STT correction materially useful.
-    Target-sensitive actions are interpreted even in a fresh conversation,
-    so errors such as "open my resumy" can be corrected.
+    In auto mode, other microphone utterances are interpreted too, while plain
+    typed text stays on the direct path unless a contextual signal applies.
     """
     mode = str(os.getenv("JARVIS_INTERPRETATION_MODE", "auto")).strip().lower()
     if mode in {"off", "0", "false", "disabled"}:
@@ -134,9 +135,10 @@ def should_interpret_query(
     if _TARGET_ACTION_PATTERN.search(raw):
         return True
 
-    # Ordinary conversational requests stay on the normal answer path
-    # unless another contextual signal indicates they need interpretation.
-    return False
+    # Speech-to-text is an imperfect input channel. In auto mode, interpret
+    # microphone utterances by default, except for the clear app-launch fast
+    # path above. Typed text avoids an extra LLM call unless context warrants it.
+    return bool(is_voice_input)
 
 
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
