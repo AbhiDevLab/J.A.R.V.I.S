@@ -177,15 +177,15 @@ JARVIS should treat speech recognition output as an imperfect signal rather than
 - [x] Add hardening regression tests for selective interpretation, clarification state, and transcript persistence
 - [x] Run focused contextual-interpreter tests after the Phase 8.1 hardening commits — 16 passed locally on 2026-10-09
 - [x] Run the full regression suite after the Phase 8.1 hardening commits — 53 passed, 6 dependency warnings, on 2026-10-09
-- [ ] Run the three new file-open routing/path regression tests after the latest fix commit
-- [ ] Rerun the full regression suite after the latest file-open routing/path fix
-- [ ] Complete live file-open clarification/path validation after the fix
+- [x] Run the three new file-open routing/path regression tests — owner reports passing locally
+- [x] Rerun the full regression suite after the file-open routing/path fix — owner reports passing locally (56 tests expected)
+- [x] Complete live file-open clarification/path validation — owner reports the explicit README.md open succeeded
 
-**Phase 8.1 status: 🟡 Hardening implementation committed; regression execution and runtime validation pending.**
+**Phase 8.1 status: ✅ Core contextual interpreter, file-open routing regression fix, automated checks, and reported live file-open validation completed.** Legacy automation routes are not all unified under the structured action-history pipeline; that remains integration work for Phase 8.9.
 
 The latest hardening adds the following:
 
-A live clarification test exposed a separate file-open routing gap: `open file <absolute path>` fell through to application-launch routing, and file completion used fuzzy name search even for an exact path. The branch now routes explicit file-open phrases to the `open_file` action and checks an exact path before fuzzy search. Three regression tests were added; they remain pending local execution.
+A live clarification test exposed a separate file-open routing gap: `open file <absolute path>` fell through to application-launch routing, and file completion used fuzzy name search even for an exact path. The branch now routes explicit file-open phrases to the `open_file` action and checks an exact path before fuzzy search. The project owner reports the three regression tests, complete suite, and live explicit-path open test all passed locally.
 
 - In `auto` mode, microphone utterances are interpreted by default, including in fresh sessions, so standalone speech-recognition errors can be corrected.
 - Recognized application launches such as `open Chrome` retain a deterministic fast path when no context requires interpretation.
@@ -212,21 +212,30 @@ Remaining work: some legacy automation routes (such as the older app/YouTube/mes
 - [x] Support memory expiration; episodic records default to a configurable 90-day TTL
 - [x] Add memory persistence/retrieval/update/expiry regression tests in `tests/test_memory.py`
 - [x] Run focused memory/context regression suite — 16/16 tests passed locally on 2026-10-09
-- [x] Run the complete regression suite — 53/53 tests passed locally on 2026-10-09 before the later file-open routing/path fix (6 dependency warnings; no test failures)
+- [x] Run the complete regression suite — 56/56 tests passed locally after the file-open routing/path fix (reported by project owner on 2026-10-09; 6 dependency warnings in the earlier 53-test run)
 
 **Phase 8.2 status:** ✅ Implemented and automated regression suite passing. The implementation uses SQLite and lexical retrieval; embeddings/vector search and a dedicated memory-management HUD are not part of this sub-phase implementation.
 
+### Phase 8.3 implementation checkpoint
+
+Initial implementation is committed on `test-jarvis` across `engine/user_context.py`, contextual interpreter/command wiring, `.env.example`, and `tests/test_user_context.py`. Two interpreter tests cover profile context triggers and prompt isolation. Five profile tests cover category persistence, relevance filtering, unrelated-context exclusion, sensitive/low-confidence rejection, and backward-compatible categorization of existing `user.*`/`project.*` memory keys.
+
+The profile tests and updated full suite have not yet been run locally at this checkpoint. The expected full suite count is 63 if all existing 56 tests and 7 new tests pass; confirm using pytest rather than treating the expected count as a result.
+
 ### Phase 8.3 — User Profile / Preferences / Working Context
 
-- [ ] Create a structured user-context/profile representation
-- [ ] Store durable user preferences
-- [ ] Store communication preferences
-- [ ] Store relevant project/work context
-- [ ] Track temporary active task state separately from long-term memory
-- [ ] Track pending selections and unresolved conversational references
-- [ ] Allow the contextual interpreter to use relevant user context
-- [ ] Prevent unrelated personal/context information from being injected into prompts
-- [ ] Add tests for context isolation and relevance
+- [x] Create a structured user-context/profile representation in `engine/user_context.py`
+- [x] Store durable profile entries by category using the existing SQLite memory layer
+- [x] Support preference and communication-preference categories
+- [x] Support relevant project/work context
+- [x] Keep temporary active interaction state separate in `engine/interaction_state.py`
+- [x] Keep pending selections and unresolved clarifications in ephemeral interaction state
+- [x] Pass query-relevant user profile context to the contextual interpreter and response prompt
+- [x] Filter profile retrieval by lexical relevance and label profile text as reference data, not instructions
+- [x] Add focused tests for profile persistence, category mapping, sensitive/low-confidence rejection, and relevance filtering
+- [ ] Run the new Phase 8.3 profile/context tests locally
+- [ ] Run the full regression suite with Phase 8.3 changes
+- [ ] Complete live profile-preference retrieval tests in JARVIS
 
 ### Phase 8.4 — Conversation Summarization & Context Compression
 
@@ -421,9 +430,9 @@ PHASE 7
         ↓
 PHASE 8
   🟡 Contextual foundation present; overall phase incomplete
-      ├─ 8.1 🟡 16 focused + 53 full tests pass; file-open fix validation pending
-      ├─ 8.2 ✅ Long-Term Memory — implementation and 53-test regression suite passing
-      ├─ 8.3 ⏳ User Profile / Working Context
+      ├─ 8.1 ✅ Context interpreter + explicit file-open path validated locally
+      ├─ 8.2 ✅ Long-Term Memory — implementation and 56-test regression suite passing
+      ├─ 8.3 🟡 Structured profile context implemented; new tests pending
       ├─ 8.4 ⏳ Conversation Summarization
       ├─ 8.5 ⏳ Contextual Follow-Ups
       ├─ 8.6 ⏳ Smarter Intent Detection
