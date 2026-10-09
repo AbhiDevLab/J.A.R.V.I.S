@@ -44,7 +44,9 @@ _SENSITIVE_PATTERN = re.compile(
     r"\b(password|passcode|pin code|api[\s_-]*key|access token|secret key|"
     r"private key|recovery code|credit card|debit card|bank account number|"
     r"social security|aadhaar number|passport number|medical diagnosis|"
-    r"sexual orientation|religious affiliation|political affiliation)\b",
+    r"health condition|medical condition|medical history|medication|diagnosed|"
+    r"sexual orientation|ethnicity|racial identity|religion|religious belief|"
+    r"political affiliation|political party|political belief|biometric|fingerprint)\b",
     re.IGNORECASE,
 )
 _DURABLE_SIGNAL_PATTERN = re.compile(
