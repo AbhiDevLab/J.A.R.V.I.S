@@ -213,8 +213,14 @@ class MemoryStore:
 
     def expire_memories(self) -> int:
         """Deactivate every active memory whose expiry timestamp has passed."""
-        with self._connection() as connection:
-            return self._expire_in_connection(connection)
+        if not self.enabled:
+            return 0
+        try:
+            with self._connection() as connection:
+                return self._expire_in_connection(connection)
+        except (OSError, sqlite3.Error, RuntimeError) as exc:
+            print(f"JARVIS memory expiry unavailable: {exc}")
+            return 0
 
     def save_memory(
         self,
@@ -529,25 +535,24 @@ class MemoryStore:
         memory_id: str = "",
         key: str = "",
     ) -> int:
-        """Deactivate memories by id or semantic key; one selector is required."""
+        """Permanently erase memories by id or semantic key."""
         selector = str(memory_id or "").strip()
         normalized_key = _normalize_key(key)
         if not self.enabled or (not selector and not normalized_key):
             return 0
         try:
-            now = _iso(_utc_now())
             with self._connection() as connection:
                 if selector:
                     cursor = connection.execute(
-                        "UPDATE memories SET is_active = 0, updated_at = ? "
-                        "WHERE id = ? AND is_active = 1",
-                        (now, selector),
+                        "DELETE FROM memories WHERE id = ?",
+                        (selector,),
                     )
                 else:
+                    # Remove all versions of the key, including superseded rows,
+                    # so an explicit forget request actually deletes the fact.
                     cursor = connection.execute(
-                        "UPDATE memories SET is_active = 0, updated_at = ? "
-                        "WHERE memory_key = ? AND is_active = 1",
-                        (now, normalized_key),
+                        "DELETE FROM memories WHERE memory_key = ?",
+                        (normalized_key,),
                     )
                 return int(cursor.rowcount or 0)
         except (OSError, sqlite3.Error, RuntimeError) as exc:
@@ -555,26 +560,20 @@ class MemoryStore:
             return 0
 
     def clear_memories(self, *, memory_type: Optional[str] = None) -> int:
-        """Deactivate all memories, optionally restricted to one memory type."""
+        """Permanently delete all memories, optionally restricted by type."""
         if not self.enabled:
             return 0
         if memory_type and memory_type not in _MEMORY_TYPES:
             return 0
         try:
-            now = _iso(_utc_now())
             with self._connection() as connection:
                 if memory_type:
                     cursor = connection.execute(
-                        "UPDATE memories SET is_active = 0, updated_at = ? "
-                        "WHERE is_active = 1 AND memory_type = ?",
-                        (now, memory_type),
+                        "DELETE FROM memories WHERE memory_type = ?",
+                        (memory_type,),
                     )
                 else:
-                    cursor = connection.execute(
-                        "UPDATE memories SET is_active = 0, updated_at = ? "
-                        "WHERE is_active = 1",
-                        (now,),
-                    )
+                    cursor = connection.execute("DELETE FROM memories")
                 return int(cursor.rowcount or 0)
         except (OSError, sqlite3.Error, RuntimeError) as exc:
             print(f"JARVIS memory clear operation unavailable: {exc}")
