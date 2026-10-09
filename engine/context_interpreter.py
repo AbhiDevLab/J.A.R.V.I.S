@@ -11,6 +11,7 @@ Phase 8.1:
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -45,6 +46,98 @@ _ALLOWED_INTENTS = {
     "cancellation",
     "unknown",
 }
+
+
+_FOLLOW_UP_PATTERN = re.compile(
+    r"\b(it|that|this|those|these|there|the previous one|the first one|"
+    r"the second one|the other one|same one|do it|do that|yes|no|"
+    r"cancel it|that one)\b",
+    re.IGNORECASE,
+)
+_TARGET_ACTION_PATTERN = re.compile(
+    r"^\s*(?:please\s+)?(?:open|launch|start|run|find|search|locate|"
+    r"delete|remove|rename|move|copy|create|make|list|show|close|"
+    r"play|send|install|uninstall|kill|terminate)\b",
+    re.IGNORECASE,
+)
+_LAUNCH_PATTERN = re.compile(
+    r"^\s*(?:please\s+)?(?:open|launch|start|run)\s+(?:the\s+)?(.+?)\s*[.!?]*$",
+    re.IGNORECASE,
+)
+
+
+def _is_known_application_launch(transcript: str) -> bool:
+    """Keep unambiguous app launches on the fast path without an LLM call."""
+    match = _LAUNCH_PATTERN.match(str(transcript or "").strip())
+    if not match:
+        return False
+
+    try:
+        from engine.automation.applications import (
+            APPLICATIONS,
+            ALIASES,
+            normalize_application_name,
+        )
+
+        target = normalize_application_name(match.group(1))
+        known_names = set(APPLICATIONS) | set(ALIASES)
+        known_names |= set(ALIASES.values())
+        return target in known_names
+    except Exception:
+        return False
+
+
+def should_interpret_query(
+    transcript: str,
+    *,
+    conversation_context: str = "",
+    memory_context: str = "",
+    interaction_state: str = "",
+    is_voice_input: bool = False,
+) -> bool:
+    """Return whether this utterance benefits from contextual interpretation.
+
+    Clear known application launches are the fast path. Interpret when previous
+    context, relevant memory, pending interaction state, follow-up language, or
+    a target-sensitive action makes ambiguity/STT correction materially useful.
+    Voice input with a target-sensitive action is interpreted even in a fresh
+    conversation, so errors such as "open my resumy" can be corrected.
+    """
+    mode = str(os.getenv("JARVIS_INTERPRETATION_MODE", "auto")).strip().lower()
+    if mode in {"off", "0", "false", "disabled"}:
+        return False
+    if mode in {"always", "on", "1", "true"}:
+        return bool(str(transcript or "").strip())
+
+    raw = str(transcript or "").strip()
+    if not raw:
+        return False
+
+    state_context = str(interaction_state or "").strip()
+    if not state_context:
+        state_context = get_interaction_state().as_context()
+
+    if any((
+        str(conversation_context or "").strip(),
+        str(memory_context or "").strip(),
+        state_context,
+    )):
+        return True
+
+    if _FOLLOW_UP_PATTERN.search(raw):
+        return True
+
+    if _is_known_application_launch(raw):
+        return False
+
+    # Target-sensitive requests should be interpreted before deterministic
+    # routing even if they are the first utterance in a new session.
+    if _TARGET_ACTION_PATTERN.search(raw):
+        return True
+
+    # Voice requests that do not match deterministic action grammar stay on
+    # the normal conversational path unless another contextual signal exists.
+    return False
 
 
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
@@ -237,9 +330,17 @@ Raw speech-to-text transcript:
         except (TypeError, ValueError):
             minimum_confidence = 0.70
 
-        if confidence < minimum_confidence:
+        if needs_clarification:
+            # Never allow an uncertain guessed rewrite to reach command routing.
+            # Keep the clarification request even when confidence is low.
             interpreted = raw
-            needs_clarification = False
+            intent = "clarification"
+            if not clarification_question:
+                clarification_question = "Could you clarify what you mean?"
+        elif confidence < minimum_confidence:
+            # A low-confidence rewrite is discarded, but low confidence alone
+            # does not force a clarification if the model did not request one.
+            interpreted = raw
             clarification_question = ""
 
         return InterpretationResult(
