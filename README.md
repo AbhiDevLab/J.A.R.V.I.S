@@ -780,9 +780,9 @@ Run the full suite from the repository root:
 python -m pytest -v
 ~~~
 
-Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; the file-open routing fix brought the reported full suite to 56 passing tests; and the Phase 8.3 profile/context changes brought the reported full suite to 63 passing tests. Phase 8.4 adds seven new summarization tests and is awaiting local validation.
+Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; the file-open routing fix brought the reported full suite to 56 passing tests; Phase 8.3 profile/context changes brought it to 63; and Phase 8.4 focused tests passed `7/7` with the full suite at `70 passed, 6 dependency warnings` on 2026-10-09. Only the live long-conversation continuity check remains.
 
-The project owner reports that the file-open regression tests and live explicit-path open passed, and that the complete suite passed after Phase 8.3 changes (63 tests). Phase 8.4 adds seven conversation-summarization tests; run the focused tests and full suite locally before treating Phase 8.4 as validated.
+The project owner reports the file-open regression tests and live explicit-path open passed, followed by the Phase 8.3 checks. The Phase 8.4 focused tests and full suite have now also passed locally (`7/7` focused, `70/70` total with six dependency warnings); live long-conversation validation is still outstanding.
 
 ~~~bash
 python -m pytest -v tests/test_conversation_summarization.py
@@ -834,7 +834,7 @@ Phase 8
       ├─ 8.1 ✅ Context interpreter + file-open path verified by owner; legacy routes still need integration
       ├─ 8.2 ✅ Persistent memory implemented; included in passing 56-test suite
       ├─ 8.3 ✅ Structured profile context implemented and validated by owner
-      ├─ 8.4 🟡 Rolling conversation summarization implemented; local validation pending
+      ├─ 8.4 🟡 Rolling summaries implemented; 70 automated tests pass; live continuity pending
       ├─ 8.5 ⏳ Contextual follow-ups across actions
       ├─ 8.6 ⏳ Smarter structured intent detection
       ├─ 8.7 ⏳ Error recovery
@@ -866,7 +866,7 @@ The codebase contains a contextual interpreter, recent-turn conversation context
 - User profile/preferences/project context is now passed selectively into interpretation and response prompts; its seven new tests await local validation.
 - Conversation summarization, broader contextual reference resolution, structured intent detection, intelligent failure recovery, runtime provider/model fallback, and final integration validation remain open.
 
-Phase 7.3 live validation and the 56-test pre-Phase-8.3 suite are recorded as owner-reported results. The Phase 8.3 focused tests, full suite, and live preference-retrieval check are reported passing by the project owner. The Phase 8.4 summary tests are not yet locally validated.
+Phase 7.3 live validation and the 56-test pre-Phase-8.3 suite are recorded as owner-reported results. The Phase 8.3 focused tests, full suite, and live preference-retrieval check are reported passing by the project owner. The Phase 8.4 summary tests and full suite are reported passing locally; only the long-conversation live continuity test remains.
 
 ---
 
