@@ -170,6 +170,9 @@ def save_chat_turn(
     model: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
     conversation_id: Optional[str] = None,
+    raw_user_text: Optional[str] = None,
+    interpreted_user_text: Optional[str] = None,
+    interpretation: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Save one user/assistant conversation turn.
@@ -208,6 +211,16 @@ def save_chat_turn(
 
             "meta": meta or {},
         }
+
+        # Backward-compatible audit fields: older consumers continue to read
+        # user_text, while diagnostics/memory tooling can distinguish speech
+        # recognition output from the meaning passed downstream.
+        if raw_user_text is not None:
+            doc["raw_user_text"] = str(raw_user_text)
+        if interpreted_user_text is not None:
+            doc["interpreted_user_text"] = str(interpreted_user_text)
+        if interpretation is not None:
+            doc["interpretation"] = dict(interpretation)
 
         _collection.insert_one(doc)
 
