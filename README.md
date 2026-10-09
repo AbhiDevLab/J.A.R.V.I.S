@@ -365,25 +365,9 @@ JARVIS_KOKORO_SPEED=0.92
 JARVIS_TTS_SENTENCE_PAUSES=1
 ~~~
 
-### Voice audition tool
+### Voice audition status
 
-The repository also contains:
-
-~~~text
-tests/voice_audition.py
-~~~
-
-This allows voices to be tested independently of the full JARVIS runtime.
-
-It can audition:
-
-- British voices.
-- American voices.
-- Hindi voices.
-- Different speaking speeds.
-- Multiple JARVIS-style sample responses.
-
-This means voice selection does not require repeatedly starting OmniRoute, STT, authentication and the entire JARVIS application.
+A standalone voice-audition helper has been planned, but `tests/voice_audition.py` is **not present in the inspected `test-jarvis` branch snapshot**. The earlier documented command must not be treated as available until the script is added and committed.
 
 ---
 
@@ -529,12 +513,7 @@ J.A.R.V.I.S/
 │
 ├── tests/
 │   ├── test_context_interpreter.py
-│   ├── test_dialogue_selection.py
-│   ├── test_filesystem_matching.py
-│   ├── test_kokoro.py
-│   ├── test_persona_tts.py
-│   ├── test_security_authorization.py
-│   └── voice_audition.py
+│   └── test_persona_tts.py
 │
 ├── www/
 │   ├── index.html
@@ -695,42 +674,22 @@ When `run.py` is used, the application manages the main JARVIS process and hotwo
 
 # 🧪 Testing
 
-The repository contains regression tests for the major deterministic and contextual components.
+The branch snapshot reviewed here contains these test modules:
 
-Run:
+- `tests/test_context_interpreter.py`
+- `tests/test_persona_tts.py`
+
+Run the tests from the repository root:
 
 ~~~bash
 pytest -v
 ~~~
 
-The latest verified local regression run completed:
+The previous README reported `32 passed`, but that count could not be verified against the current branch snapshot during this audit. Treat it as historical until the suite is rerun against the exact checkout and the result is recorded.
 
-~~~text
-32 passed
-~~~
+The test modules currently listed above cover contextual-interpretation behavior and persona/TTS behavior. Do not assume filesystem automation, dialogue selection, authorization, Kokoro integration, or end-to-end voice workflows are covered by checked-in regression tests merely because those capabilities exist in the application.
 
-Coverage includes:
-
-- Contextual interpretation.
-- STT/context safety behavior.
-- Filesystem matching.
-- Multiple-result selection.
-- Automation dialogue behavior.
-- Authorization/security behavior.
-- JARVIS persona prompt behavior.
-- English/Hindi TTS pipeline selection.
-- Sentence-pause speech preparation.
-- Kokoro-related behavior.
-
-## Voice Audition
-
-To audition voices without starting JARVIS:
-
-~~~bash
-python tests/voice_audition.py
-~~~
-
-This is intentionally separate from the automated pytest suite because voice preference is ultimately a human listening decision.
+The standalone voice-audition script is not present at `tests/voice_audition.py` in the inspected branch snapshot. 
 
 ---
 
@@ -758,7 +717,7 @@ This avoids using the entire application as the only test harness.
 
 The roadmap is maintained in `JARVIS_ROADMAP.md`.
 
-Current progression:
+Current branch assessment:
 
 ~~~text
 Phase 6
@@ -766,9 +725,21 @@ Phase 6
         ↓
 Phase 7
   🔄 Desktop Automation / Agent
+      ├─ 7.1 ✅ Secure automation foundation
+      ├─ 7.2 ✅ Desktop application control
+      └─ 7.3 🔄 Live end-to-end validation and checkpoint pending
         ↓
 Phase 8
-  🔄 Intelligence + Context
+  🟡 Contextual foundation exists; overall phase incomplete
+      ├─ 8.1 🟡 Interpretation code exists; integration gaps remain
+      ├─ 8.2 ⏳ Long-term memory not implemented
+      ├─ 8.3 ⏳ User profile / working context
+      ├─ 8.4 ⏳ Conversation summarization
+      ├─ 8.5 ⏳ Contextual follow-ups across actions
+      ├─ 8.6 ⏳ Smarter structured intent detection
+      ├─ 8.7 ⏳ Error recovery
+      ├─ 8.8 ⏳ Runtime provider/model fallback
+      └─ 8.9 ⏳ Full integration and E2E validation
         ↓
 Phase 9
   ⏳ Advanced Voice + Vision
@@ -787,7 +758,17 @@ The Phase 8 objective is:
 
 > Give JARVIS the ability to infer what the user means from imperfect speech, conversation history, memory, and current interaction state.
 
-The current implementation establishes the contextual interpretation foundation. Long-term semantic memory, user profiles, summarization and broader intelligence integration remain future roadmap work.
+The codebase contains a contextual interpreter, recent-turn conversation context, and temporary interaction state. These are useful foundations, but they do not yet amount to persistent personal memory or complete contextual continuity across automation actions.
+
+### Verified implementation gaps
+
+- In `engine/command.py`, general contextual interpretation runs only when `conversation_manager.has_context()` is true. A fresh conversation bypasses that interpretation path.
+- Completed automation actions are not added to `ConversationManager` the way conversational turns are. A later command therefore cannot reliably refer back to the previous application or filesystem action through saved chat context.
+- The raw transcript and interpreted query are represented separately inside `InterpretationResult`, but the command flow replaces the active query with the interpreted text. The saved conversation turn does not separately retain both values for auditing or later memory extraction.
+- `engine/mongo_store.py` persists user/assistant conversation turns. No dedicated semantic/episodic memory model, relevance retrieval, fact correction policy, or memory-expiration mechanism is present in this branch snapshot.
+- The low-confidence path in `engine/context_interpreter.py` restores the raw transcript and clears the clarification flag. This is conservative about rewriting speech, but it can suppress a clarification requested by the model; it needs an explicit policy and regression tests.
+
+Phase 7.3 remains the roadmap's active checkpoint because its live end-to-end validation list is still open. Phase 8.1's source foundation exists, but the complete Phase 8 integration and validation work remains outstanding. Long-term memory (Phase 8.2) has not yet been implemented.
 
 ---
 
@@ -850,9 +831,11 @@ This allows the system to use LLMs for **language understanding without allowing
 - Google STT fallback requires internet access.
 - OmniRoute must be available for conversational LLM functionality.
 - Current LLM requests are non-streaming.
-- Long-term semantic memory is not yet implemented as a dedicated Phase 8 subsystem.
-- Conversation history should not yet be described as a full persistent personal-memory system.
+- Long-term semantic memory is not implemented as a dedicated Phase 8 subsystem; MongoDB currently stores conversation turns.
+- General interpretation is conditional on existing in-memory chat context, and automation actions are not preserved as conversation turns.
+- The raw transcript and interpreted query are not persisted as separate fields.
 - Some Phase 7 automation functionality still requires live end-to-end validation.
+- The previously documented `tests/voice_audition.py` script is not present at that path in this branch snapshot.
 - Kokoro's first initialization can take longer because the local pipeline/model is loaded and cached.
 - Full provider/model configuration remains planned for a later phase.
 
