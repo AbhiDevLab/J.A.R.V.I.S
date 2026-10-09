@@ -171,3 +171,36 @@ def test_interpretation_mode_can_be_disabled_or_forced():
     with patch.dict("os.environ", {"JARVIS_INTERPRETATION_MODE": "always"}):
         assert should_interpret_query("good morning") is True
 
+
+def test_chat_record_preserves_raw_and_interpreted_text_separately():
+    from engine import mongo_store
+
+    class FakeCollection:
+        def __init__(self):
+            self.document = None
+
+        def insert_one(self, document):
+            self.document = document
+
+    fake_collection = FakeCollection()
+    with patch.object(mongo_store, "_MONGO_AVAILABLE", True), patch.object(
+        mongo_store, "_collection", fake_collection
+    ):
+        mongo_store.save_chat_turn(
+            "open my resume",
+            "Opening your resume.",
+            conversation_id="conversation-test",
+            raw_user_text="open my resumy",
+            interpreted_user_text="open my resume",
+            interpretation={
+                "intent": "automation",
+                "confidence": 0.93,
+                "used_context": True,
+            },
+        )
+
+    assert fake_collection.document["user_text"] == "open my resume"
+    assert fake_collection.document["raw_user_text"] == "open my resumy"
+    assert fake_collection.document["interpreted_user_text"] == "open my resume"
+    assert fake_collection.document["interpretation"]["confidence"] == 0.93
+
