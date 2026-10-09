@@ -93,15 +93,14 @@ def should_interpret_query(
     conversation_context: str = "",
     memory_context: str = "",
     interaction_state: str = "",
-    is_voice_input: bool = False,
 ) -> bool:
     """Return whether this utterance benefits from contextual interpretation.
 
     Clear known application launches are the fast path. Interpret when previous
     context, relevant memory, pending interaction state, follow-up language, or
     a target-sensitive action makes ambiguity/STT correction materially useful.
-    Voice input with a target-sensitive action is interpreted even in a fresh
-    conversation, so errors such as "open my resumy" can be corrected.
+    Target-sensitive actions are interpreted even in a fresh conversation,
+    so errors such as "open my resumy" can be corrected.
     """
     mode = str(os.getenv("JARVIS_INTERPRETATION_MODE", "auto")).strip().lower()
     if mode in {"off", "0", "false", "disabled"}:
