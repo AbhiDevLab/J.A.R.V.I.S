@@ -128,15 +128,23 @@ class MemoryStore:
         *,
         enabled: Optional[bool] = None,
     ) -> None:
-        configured_path = db_path or os.getenv(
-            "JARVIS_MEMORY_DB_PATH", "data/jarvis_memory.db"
+        self._db_path_override = (
+            Path(db_path).expanduser() if db_path is not None else None
         )
-        self.db_path = Path(configured_path).expanduser()
-        self.enabled = (
-            _env_flag("JARVIS_MEMORY_ENABLED", True)
-            if enabled is None
-            else bool(enabled)
-        )
+        self._enabled_override = enabled
+
+    @property
+    def db_path(self) -> Path:
+        configured_path = self._db_path_override or Path(
+            os.getenv("JARVIS_MEMORY_DB_PATH", "data/jarvis_memory.db")
+        ).expanduser()
+        return configured_path
+
+    @property
+    def enabled(self) -> bool:
+        if self._enabled_override is not None:
+            return bool(self._enabled_override)
+        return _env_flag("JARVIS_MEMORY_ENABLED", True)
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -618,7 +626,7 @@ def record_episode(
         parts.append(f"Action: {str(action_type).strip()[:100]}")
     parts.append(f"User request: {event_text[:400]}")
     if outcome:
-        outcome_text = re.sub(r"\\s+", " ", str(outcome)).strip()[:400]
+        outcome_text = re.sub(r"\s+", " ", str(outcome)).strip()[:400]
         parts.append(f"Outcome: {outcome_text}")
     key_seed = f"{conversation_id}|{action_type}|{event_text}|{outcome}"
     key = "episode_" + uuid.uuid5(uuid.NAMESPACE_URL, key_seed).hex[:24]
