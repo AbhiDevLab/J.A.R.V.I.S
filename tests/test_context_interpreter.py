@@ -138,7 +138,20 @@ def test_fresh_session_target_action_is_interpreted():
 def test_known_application_launch_uses_fast_path_without_context():
     with patch.dict("os.environ", {"JARVIS_INTERPRETATION_MODE": "auto"}):
         assert should_interpret_query("open Chrome") is False
+        assert should_interpret_query("open Chrome", is_voice_input=True) is False
         assert should_interpret_query("launch VS Code.") is False
+
+
+def test_fresh_voice_conversation_is_interpreted_but_typed_text_is_fast_path():
+    with patch.dict("os.environ", {"JARVIS_INTERPRETATION_MODE": "auto"}):
+        assert should_interpret_query(
+            "what's the whether tomorrow",
+            is_voice_input=True,
+        ) is True
+        assert should_interpret_query(
+            "what's the weather tomorrow",
+            is_voice_input=False,
+        ) is False
 
 
 def test_pending_state_forces_interpretation():
