@@ -702,23 +702,24 @@ When `run.py` is used, the application manages the main JARVIS process and hotwo
 
 # 🧪 Testing
 
-The branch snapshot reviewed here contains these test modules:
+The current checked-in test modules include:
 
 - `tests/test_context_interpreter.py`
+- `tests/test_dialogue_selection.py`
+- `tests/test_filesystem_matching.py`
 - `tests/test_memory.py`
 - `tests/test_persona_tts.py`
+- `tests/test_security_authorization.py`
 
-Run the tests from the repository root:
+Run the full suite from the repository root:
 
 ~~~bash
-pytest -v
+python -m pytest -v
 ~~~
 
-The previous README reported `32 passed`, but that count could not be verified against the current branch snapshot during this audit. Treat it as historical until the suite is rerun against the exact checkout and the result is recorded.
+**Latest local verification reported on October 9, 2026:** `43 passed, 6 warnings`. The focused memory/context run completed with `16 passed`. The warnings were emitted by dependencies and did not fail the tests.
 
-The test modules cover contextual interpretation, memory persistence/retrieval/update/expiry behavior, and persona/TTS behavior. Filesystem automation, dialogue selection, authorization, Kokoro integration, and end-to-end voice workflows still require their own checked-in tests or live validation; do not infer coverage merely because the capabilities exist in the application.
-
-The standalone voice-audition script is not present at `tests/voice_audition.py` in the inspected branch snapshot. 
+The automated suite covers contextual interpretation, memory persistence/retrieval/update/expiry, dialogue selection, filesystem matching, persona/TTS behavior, and authorization. Live voice and desktop end-to-end validation remains a separate checkpoint; the project owner reports that Phase 7.3 was completed locally.
 
 ---
 
@@ -761,7 +762,7 @@ Phase 7
 Phase 8
   🟡 Contextual foundation exists; overall phase incomplete
       ├─ 8.1 🟡 Interpretation code exists; integration gaps remain
-      ├─ 8.2 🟡 Persistent memory implemented; local test execution pending
+      ├─ 8.2 ✅ Persistent memory implemented; 43-test suite passing
       ├─ 8.3 ⏳ User profile / working context
       ├─ 8.4 ⏳ Conversation summarization
       ├─ 8.5 ⏳ Contextual follow-ups across actions
@@ -787,7 +788,7 @@ The Phase 8 objective is:
 
 > Give JARVIS the ability to infer what the user means from imperfect speech, conversation history, memory, and current interaction state.
 
-The codebase contains a contextual interpreter, recent-turn conversation context, temporary interaction state, and a new SQLite-backed long-term memory module. Persistent memory is now implemented at the Phase 8.2 feature level, but the local regression suite still needs to be executed against the updated branch.
+The codebase contains a contextual interpreter, recent-turn conversation context, temporary interaction state, and a SQLite-backed long-term memory module. The project owner reported a passing local validation run of 43 tests, including the Phase 8.2 memory tests.
 
 ### Verified implementation gaps
 
@@ -795,9 +796,9 @@ The codebase contains a contextual interpreter, recent-turn conversation context
 - Successful structured automation actions are added to immediate conversation context and recorded as episodic memories. Other legacy automation routes have not all been refactored into the same structured flow.
 - The raw transcript and interpreted query are not persisted as separate chat fields.
 - The low-confidence path in `engine/context_interpreter.py` can suppress a clarification requested by the model; Phase 8.1 hardening remains open.
-- The new memory tests are committed, but this audit session could not execute them in the repository's local Windows/Python runtime.
+- The project owner's local run confirms the current automated suite passes: 43 tests, with six dependency warnings.
 
-Phase 7.3 live validation is recorded as complete based on the project owner's local report on 2026-10-09; this session did not independently repeat desktop/voice tests. Phase 8.1 hardening, Phase 8.2 test execution, and the remaining Phase 8 sub-phases are still outstanding.
+Phase 7.3 live validation is recorded as complete based on the project owner's local report on 2026-10-09; this session did not independently repeat desktop/voice tests. Phase 8.2 is implemented and its automated tests are reported passing. Phase 8.1 hardening and the remaining Phase 8 sub-phases are still outstanding.
 
 ---
 
