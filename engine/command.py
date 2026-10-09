@@ -16,6 +16,7 @@ from engine.memory import (
     extract_memories_from_turn,
     record_episode,
 )
+from engine.user_context import build_user_profile_context
 from engine.persona import build_jarvis_prompt
 
 from engine.settings_store import (
@@ -418,6 +419,7 @@ def allCommands(message=1):
             # stay on the deterministic fast path.
             interpretation = None
             memory_context = build_memory_context(query)
+            profile_context = build_user_profile_context(query)
             conversation_context = conversation_manager.build_context()
             interaction_context = get_interaction_state().as_context()
 
@@ -425,6 +427,7 @@ def allCommands(message=1):
                 query,
                 conversation_context=conversation_context,
                 memory_context=memory_context,
+                profile_context=profile_context,
                 interaction_state=interaction_context,
                 is_voice_input=is_voice_input,
             )
@@ -435,6 +438,7 @@ def allCommands(message=1):
                     conversation_context=conversation_context,
                     interaction_state=interaction_context,
                     memory_context=memory_context,
+                    profile_context=profile_context,
                     language=query_language or "en",
                 )
 
@@ -733,6 +737,8 @@ questions using that context.
 """.strip())
                 if memory_context:
                     context_parts.append(memory_context)
+                if profile_context:
+                    context_parts.append(profile_context)
                 context_section = "\n\n".join(context_parts)
 
                 enhanced_prompt = build_jarvis_prompt(
