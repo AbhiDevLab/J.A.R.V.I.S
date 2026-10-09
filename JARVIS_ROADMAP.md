@@ -250,6 +250,8 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 - [ ] Run the full regression suite with Phase 8.4 changes
 - [ ] Validate long-conversation continuity live in JARVIS
 
+**Phase 8.4 implementation checkpoint:** `engine/conversation_summary.py` and `ConversationManager` integration are committed, with seven regression tests in `tests/test_conversation_summarization.py`. The owner-reported pre-Phase-8.4 suite contained 63 passing tests, so the expected total is 70 if all new and existing tests pass. This is a target count only; the new tests and full suite must be run locally.
+
 ### Phase 8.5 — Contextual Follow-Ups & Reference Resolution
 
 - [ ] Support natural follow-ups without requiring the user to repeat context
