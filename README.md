@@ -569,9 +569,13 @@ J.A.R.V.I.S/
 │
 ├── tests/
 │   ├── test_context_interpreter.py
+│   ├── test_dialogue_selection.py
+│   ├── test_filesystem_matching.py
 │   ├── test_memory.py
-│   ├── test_user_context.py
-│   └── test_persona_tts.py
+│   ├── test_open_file_routing.py
+│   ├── test_persona_tts.py
+│   ├── test_security_authorization.py
+│   └── test_user_context.py
 │
 ├── www/
 │   ├── index.html
@@ -900,7 +904,7 @@ This allows the system to use LLMs for **language understanding without allowing
 - Current LLM requests are non-streaming.
 - Phase 8.2 memory is implemented using local SQLite with lexical relevance retrieval; embedding-based retrieval and a memory-management UI remain future work.
 - Phase 8.3 introduces category-tagged user profile/preferences/project context stored in the existing SQLite memory layer. Only query-relevant profile records are injected; temporary clarification/selection state remains in `engine/interaction_state.py` and is not persisted as a profile fact.
-- Raw transcript and interpreted query are not persisted as separate chat fields.
+- Raw transcript and interpreted query are saved as separate fields on MongoDB conversational records when persistence is available; structured automation action history is not yet unified across every legacy route.
 - Phase 7.3 live validation was reported as complete by the project owner; the roadmap records that report, but this audit session did not independently rerun local live checks.
 - Kokoro's first initialization can take longer because the local pipeline/model is loaded and cached.
 - Full provider/model configuration remains planned for a later phase.
