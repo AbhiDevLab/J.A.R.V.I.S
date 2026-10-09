@@ -782,7 +782,7 @@ Phase 7
 Phase 8
   🟡 Contextual foundation exists; overall phase incomplete
       ├─ 8.1 🟡 Hardening committed; tests and runtime validation pending
-      ├─ 8.2 ✅ Persistent memory implemented; 43-test suite passing
+      ├─ 8.2 ✅ Persistent memory implemented; Phase 8.2 tests passed
       ├─ 8.3 ⏳ User profile / working context
       ├─ 8.4 ⏳ Conversation summarization
       ├─ 8.5 ⏳ Contextual follow-ups across actions
