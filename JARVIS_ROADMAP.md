@@ -246,11 +246,11 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 - [x] Fall back to a bounded extractive recap if the LLM fails, returns an empty response, or returns an oversized summary
 - [x] Add summary enable/disable and summary/input size settings to `.env.example`
 - [x] Add tests for trigger behavior, rolling updates, context reset, disabled mode, LLM prompts, and fallback handling
-- [ ] Run Phase 8.4 focused summarization tests locally
-- [ ] Run the full regression suite with Phase 8.4 changes
-- [ ] Validate long-conversation continuity live in JARVIS
+- [x] Run Phase 8.4 focused summarization tests locally — 7/7 passed on 2026-10-09
+- [x] Run the full regression suite with Phase 8.4 changes — 70/70 passed, 6 dependency warnings, on 2026-10-09
+- [ ] Validate long-conversation continuity live in JARVIS after the summary trigger is crossed
 
-**Phase 8.4 implementation checkpoint:** `engine/conversation_summary.py` and `ConversationManager` integration are committed, with seven regression tests in `tests/test_conversation_summarization.py`. The owner-reported pre-Phase-8.4 suite contained 63 passing tests, so the expected total is 70 if all new and existing tests pass. This is a target count only; the new tests and full suite must be run locally.
+**Phase 8.4 implementation checkpoint:** `engine/conversation_summary.py` and `ConversationManager` integration are committed, with seven regression tests in `tests/test_conversation_summarization.py`. The project owner ran the focused Phase 8.4 suite (7/7 passing) and full suite (70/70 passing with six dependency warnings) locally on 2026-10-09. Only the live long-conversation continuity check remains.
 
 ### Phase 8.5 — Contextual Follow-Ups & Reference Resolution
 
@@ -311,7 +311,7 @@ This is limited to **runtime reliability and fallback behavior**. Full provider/
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** 🟡 In progress. Phases 8.1–8.3 are implemented and owner-validated; Phase 8.4 is implemented but still needs focused/full regression runs and live long-conversation validation. Phases 8.5–8.9 remain open.
+**Phase 8 status:** 🟡 In progress. Phases 8.1–8.3 are implemented and owner-validated; Phase 8.4 focused and full automated tests are passing, with live long-conversation validation still pending. Phases 8.5–8.9 remain open.
 
 ---
 
@@ -438,7 +438,7 @@ PHASE 8
       ├─ 8.1 ✅ Context interpreter + explicit file-open path validated locally
       ├─ 8.2 ✅ Long-Term Memory — implementation and 63-test regression suite passing
       ├─ 8.3 ✅ Structured profile context implemented and validated by owner
-      ├─ 8.4 🟡 Rolling conversation summarization implemented; local tests pending
+      ├─ 8.4 🟡 Rolling summaries implemented; 70 automated tests pass; live continuity test pending
       ├─ 8.5 ⏳ Contextual Follow-Ups
       ├─ 8.6 ⏳ Smarter Intent Detection
       ├─ 8.7 ⏳ Intelligent Error / Fallback Handling
