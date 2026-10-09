@@ -182,6 +182,17 @@ def _normalize_intent(value: Any) -> str:
     return intent
 
 
+def _normalize_bool(value: Any) -> bool:
+    """Normalize JSON/LLM boolean-like values without treating 'false' as true."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "yes", "1", "on"}
+    return False
+
+
 def _fallback(
     transcript: str,
     *,
@@ -310,7 +321,7 @@ Raw speech-to-text transcript:
         intent = _normalize_intent(
             data.get("intent")
         )
-        needs_clarification = bool(
+        needs_clarification = _normalize_bool(
             data.get("needs_clarification", False)
         )
         clarification_question = str(
