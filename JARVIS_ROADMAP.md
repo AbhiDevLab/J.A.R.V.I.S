@@ -173,7 +173,10 @@ JARVIS should treat speech recognition output as an imperfect signal rather than
 - [x] Detect when the transcript is ambiguous rather than forcing an incorrect interpretation
 - [x] Ask a clarification question only when context cannot safely determine the user's intent
 - [x] Add regression tests for context-based interpretation
-- [x] Run contextual-interpreter regression checkpoint — 27/27 tests passed at the original checkpoint (historical; not re-verified against the current branch head)
+- [x] Run contextual-interpreter regression checkpoint — 27/27 tests passed at the original checkpoint (historical)
+- [x] Add hardening regression tests for selective interpretation, clarification state, and transcript persistence
+- [ ] Run focused contextual-interpreter tests after the latest Phase 8.1 hardening commits
+- [ ] Run the full regression suite after the latest Phase 8.1 hardening commits
 
 **Phase 8.1 status: 🟡 Hardening implementation committed; regression execution and runtime validation pending.**
 
@@ -412,7 +415,7 @@ PHASE 7
         ↓
 PHASE 8
   🟡 Contextual foundation present; overall phase incomplete
-      ├─ 8.1 🟡 Interpreter exists; runtime integration and validation open
+      ├─ 8.1 🟡 Hardening committed; tests and runtime validation pending
       ├─ 8.2 ✅ Long-Term Memory — implementation and 43-test regression suite passing
       ├─ 8.3 ⏳ User Profile / Working Context
       ├─ 8.4 ⏳ Conversation Summarization
