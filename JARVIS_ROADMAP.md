@@ -309,7 +309,7 @@ This is limited to **runtime reliability and fallback behavior**. Full provider/
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** 🟡 Partial foundation present; overall Phase 8 is incomplete. Phase 8.2 and later sub-phases have not been implemented.
+**Phase 8 status:** 🟡 In progress. Phases 8.1–8.3 are implemented and owner-validated; Phase 8.4 is implemented but still needs focused/full regression runs and live long-conversation validation. Phases 8.5–8.9 remain open.
 
 ---
 
