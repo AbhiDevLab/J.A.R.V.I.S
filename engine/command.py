@@ -6,7 +6,11 @@ from engine.tts import speak as _tts_speak
 from engine.stt import detect_text_language, transcribe_audio
 from engine.llm_client import ask_llm
 from engine.conversation import get_conversation_manager
-from engine.context_interpreter import interpret_query
+from engine.context_interpreter import (
+    interpret_query,
+    should_interpret_query,
+)
+from engine.interaction_state import get_interaction_state
 from engine.memory import (
     build_memory_context,
     extract_memories_from_turn,
@@ -368,6 +372,7 @@ def _language_name(language):
 @eel.expose
 def allCommands(message=1):
     # Initial query comes either from the microphone or the text box.
+    is_voice_input = message == 1
     if message == 1:
         query, query_language = takecommand(
             return_language=True
@@ -402,21 +407,28 @@ def allCommands(message=1):
                 )
                 break
 
-            # Phase 8.1: when conversational context exists, treat the STT
-            # transcript as an imperfect signal and infer the user's intended
-            # meaning before deterministic routing. The raw transcript is kept
-            # intact for fallback/debugging, and automation security remains
-            # entirely inside the existing executor/authorization layer.
+            # Phase 8.1: preserve the raw utterance and interpret only when
+            # context, pending state, memory, or a target-sensitive request
+            # makes interpretation useful. Clear known application launches
+            # stay on the deterministic fast path.
             interpretation = None
             memory_context = build_memory_context(query)
+            conversation_context = conversation_manager.build_context()
+            interaction_context = get_interaction_state().as_context()
 
-            if conversation_manager.has_context() or memory_context:
+            should_interpret = should_interpret_query(
+                query,
+                conversation_context=conversation_context,
+                memory_context=memory_context,
+                interaction_state=interaction_context,
+                is_voice_input=is_voice_input,
+            )
+
+            if should_interpret:
                 interpretation = interpret_query(
-                    query,
-                    conversation_context=(
-                        conversation_manager.build_context()
-                    ),
-                    interaction_state="",
+                    raw_transcript,
+                    conversation_context=conversation_context,
+                    interaction_state=interaction_context,
                     memory_context=memory_context,
                     language=query_language or "en",
                 )
@@ -433,6 +445,14 @@ def allCommands(message=1):
                         interpretation.clarification_question
                         or "Could you clarify what you mean?"
                     )
+                    # Retain the pending clarification so the next utterance
+                    # is interpreted as its answer, not as an unrelated command.
+                    get_interaction_state().set(
+                        "clarification",
+                        prompt=clarification,
+                        raw_transcript=raw_transcript,
+                        candidate_query=interpretation.interpreted_query,
+                    )
                     speak(
                         clarification,
                         language=query_language or "en",
@@ -440,6 +460,10 @@ def allCommands(message=1):
                     break
 
                 query = interpretation.query
+                # A previous clarification has now received a usable answer.
+                current_state = get_interaction_state()
+                if current_state.state_type == "clarification":
+                    current_state.clear()
 
             automation_action = route_command(
                 query
@@ -499,18 +523,25 @@ def allCommands(message=1):
                     )
                     try:
                         record_episode(
-                            raw_transcript,
+                            query,
                             outcome=action_message,
                             action_type=automation_action.action_type,
                             conversation_id=conversation_manager.conversation_id,
                             metadata={
                                 "action_type": automation_action.action_type,
+                                "raw_transcript": raw_transcript,
+                                "interpreted_query": query,
+                                "interpretation_confidence": (
+                                    interpretation.confidence
+                                    if interpretation is not None
+                                    else None
+                                ),
                             },
                         )
-                        # Keep the just-completed action available to immediate
-                        # follow-ups in the current conversation context.
+                        # The conversation context uses the understood request;
+                        # the original transcript is retained in memory metadata.
                         conversation_manager.add_turn(
-                            raw_transcript,
+                            query,
                             action_message,
                         )
                     except Exception as memory_error:
@@ -710,6 +741,21 @@ questions using that context.
                         conversation_id=(
                             conversation_manager
                             .conversation_id
+                        ),
+                        raw_user_text=raw_transcript,
+                        interpreted_user_text=query,
+                        interpretation=(
+                            {
+                                "intent": interpretation.intent,
+                                "confidence": interpretation.confidence,
+                                "used_context": interpretation.used_context,
+                            }
+                            if interpretation is not None
+                            else {
+                                "intent": "unmodified",
+                                "confidence": 1.0,
+                                "used_context": False,
+                            }
                         ),
                     )
 
