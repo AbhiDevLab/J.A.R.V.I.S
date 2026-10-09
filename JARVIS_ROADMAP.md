@@ -252,6 +252,8 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 
 **Phase 8.4 implementation checkpoint:** `engine/conversation_summary.py` and `ConversationManager` integration are committed, with seven regression tests in `tests/test_conversation_summarization.py`. The project owner ran the focused Phase 8.4 suite (7/7 passing) and full suite (70/70 passing with six dependency warnings) locally on 2026-10-09. Only the live long-conversation continuity check remains.
 
+**Conversation viewer navigation fix (2026-10-09):** A live UI issue showed that continuing an existing saved conversation hid both the main HUD and SiriWave view after its response; pressing Escape closed the transcript viewer without restoring either view. The viewer close handler now restores the main HUD, and a visible **History** button opens the conversation history sidebar while leaving the current transcript underneath. Three source-level UI regression guards are added in `tests/test_conversation_ui_regression.py`. These tests and the updated full suite still need to be run locally; the expected total is 73 tests if all 70 existing tests and the three new guards pass.
+
 ### Phase 8.5 — Contextual Follow-Ups & Reference Resolution
 
 - [ ] Support natural follow-ups without requiring the user to repeat context
