@@ -766,6 +766,7 @@ The current checked-in test modules include:
 
 - `tests/test_context_interpreter.py`
 - `tests/test_conversation_summarization.py`
+- `tests/test_conversation_ui_regression.py`
 - `tests/test_dialogue_selection.py`
 - `tests/test_filesystem_matching.py`
 - `tests/test_memory.py`
@@ -780,12 +781,12 @@ Run the full suite from the repository root:
 python -m pytest -v
 ~~~
 
-Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; the file-open routing fix brought the reported full suite to 56 passing tests; Phase 8.3 profile/context changes brought it to 63; and Phase 8.4 focused tests passed `7/7` with the full suite at `70 passed, 6 dependency warnings` on 2026-10-09. Only the live long-conversation continuity check remains.
+Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; the file-open routing fix brought the reported full suite to 56 passing tests; Phase 8.3 profile/context changes brought it to 63; and Phase 8.4 focused tests passed `7/7` with the full suite at `70 passed, 6 dependency warnings` on 2026-10-09. The latest conversation-navigation/black-screen fix adds three UI regression guards and still requires a local test run.
 
-The project owner reports the file-open regression tests and live explicit-path open passed, followed by the Phase 8.3 checks. The Phase 8.4 focused tests and full suite have now also passed locally (`7/7` focused, `70/70` total with six dependency warnings); live long-conversation validation is still outstanding.
+The project owner reports the file-open regression tests and live explicit-path open passed, followed by the Phase 8.3 checks. The Phase 8.4 focused tests and full suite passed locally (`7/7` focused, `70/70` total with six dependency warnings). The current UI fix allows switching chat histories from the active transcript and restores the main HUD after Escape; its three source-level regression tests are pending local validation.
 
 ~~~bash
-python -m pytest -v tests/test_conversation_summarization.py
+python -m pytest -v tests/test_conversation_ui_regression.py
 python -m pytest -v
 ~~~
 
@@ -930,6 +931,7 @@ This allows the system to use LLMs for **language understanding without allowing
 - Current LLM requests are non-streaming.
 - Phase 8.2 memory is implemented using local SQLite with lexical relevance retrieval; embedding-based retrieval and a memory-management UI remain future work.
 - Phase 8.3 introduces category-tagged user profile/preferences/project context stored in the existing SQLite memory layer. Only query-relevant profile records are injected; temporary clarification/selection state remains in `engine/interaction_state.py` and is not persisted as a profile fact.
+- The conversation viewer now exposes a History control while a saved conversation is open. Closing it with Escape restores the main HUD and hides the SiriWave processing screen; run the UI regression tests after pulling this fix.
 - Raw transcript and interpreted query are saved as separate fields on MongoDB conversational records when persistence is available; structured automation action history is not yet unified across every legacy route.
 - Phase 7.3 live validation was reported as complete by the project owner; the roadmap records that report, but this audit session did not independently rerun local live checks.
 - Kokoro's first initialization can take longer because the local pipeline/model is loaded and cached.
