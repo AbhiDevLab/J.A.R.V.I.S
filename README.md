@@ -188,6 +188,18 @@ JARVIS_EPISODIC_MEMORY_TTL_DAYS=90
 
 The local database is covered by the repository's database ignore rules. Back up or delete it separately from MongoDB chat history. Disabling memory with `JARVIS_MEMORY_ENABLED=0` prevents memory reads and writes. Automatic extraction can be disabled independently with `JARVIS_MEMORY_AUTO_EXTRACT=0`.
 
+Memory inspection and cleanup are available to Python callers:
+
+~~~python
+from engine.memory import list_memories, forget_memory, clear_memories
+
+memories = list_memories()
+forget_memory(key="user.preferred_voice")  # Permanently forget all versions of this fact.
+clear_memories(memory_type="episodic")     # Permanently delete all episodic memories.
+~~~
+
+There is not yet a HUD control for memory review/cleanup. Use these helpers deliberately: `clear_memories()` without a type deletes all memory records.
+
 **Current boundaries:** retrieval is lexical, not embedding/vector-based; automatic extraction adds an LLM request only for likely durable statements; there is no dedicated UI for reviewing or deleting memories. The wider Phase 8 remains incomplete while Phase 8.1 runtime-hardening, profile/working context, summarization, broader follow-up resolution, failure recovery, and end-to-end validation remain open.
 
 ---
