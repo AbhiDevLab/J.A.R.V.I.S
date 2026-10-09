@@ -175,17 +175,20 @@ JARVIS should treat speech recognition output as an imperfect signal rather than
 - [x] Add regression tests for context-based interpretation
 - [x] Run contextual-interpreter regression checkpoint — 27/27 tests passed at the original checkpoint (historical; not re-verified against the current branch head)
 
-**Phase 8.1 status: 🟡 Partial implementation present; integration/closure remains open.**
+**Phase 8.1 status: 🟡 Hardening implementation committed; regression execution and runtime validation pending.**
 
-The interpreter, structured result, contextual prompt, temporary interaction state, and interpreter tests are present in the branch. The full runtime path is not yet consistently context-aware:
+The latest hardening adds the following:
 
-- General interpretation in `engine/command.py` runs only when in-memory conversation history exists, so a fresh-session request bypasses it.
-- Successful structured automation actions are now added to immediate conversation context and stored as episodic memories. Other legacy automation routes have not all been moved into the same structured context path.
-- Raw and interpreted text are not persisted as separate fields; the result object keeps both only during interpretation.
-- Low-confidence responses restore the raw transcript but also clear `needs_clarification`, which can suppress a clarification that the model requested.
-- The project owner ran the focused memory/context tests (16 passed) and full regression suite (43 passed, 6 dependency warnings) locally on 2026-10-09.
+- Selective interpretation is now triggered by conversation context, relevant memory, pending interaction state, follow-up language, and target-sensitive actions—even in a fresh session.
+- Recognized application launches such as `open Chrome` retain a deterministic fast path when no context requires interpretation.
+- `JARVIS_INTERPRETATION_MODE=auto|always|off` controls the policy. `JARVIS_INTERPRETATION_MIN_CONFIDENCE` sets the default 0.70 threshold.
+- Explicit clarification requests survive low-confidence results. Pending clarification state is retained if the user's answer cannot be interpreted confidently.
+- Conversational MongoDB records preserve `user_text`, `raw_user_text`, `interpreted_user_text`, and structured interpretation metadata separately. Old readers can continue using `user_text`.
+- Successful structured automation events keep the interpreted request in conversation context and record the raw transcript/interpretation confidence in episodic-memory metadata.
+- The contextual interpreter still only produces meaning. Deterministic routing and the existing authorization/face-authentication gate remain responsible for execution.
+- Added regression tests for fresh-session target actions, clear app launch fast paths, pending/context triggers, interpretation mode, explicit low-confidence clarification, boolean normalization, and raw/interpreted persistence.
 
-These are Phase 8.1 integration-hardening tasks. They should be addressed before declaring 8.1 complete, even though much of the interpreter foundation is already implemented.
+Remaining work: some legacy automation routes (such as the older app/YouTube/messaging path) are not yet unified under the structured action-history path. The new Phase 8.1 tests have not yet been run against the latest hardening commits. The previously reported 43-test suite passed before these latest test additions; rerun the focused and full suite before closing Phase 8.1.
 
 ### Phase 8.2 — Long-Term Memory System
 
