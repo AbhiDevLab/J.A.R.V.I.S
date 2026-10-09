@@ -197,7 +197,7 @@ A live clarification test exposed a separate file-open routing gap: `open file <
 - The contextual interpreter still only produces meaning. Deterministic routing and the existing authorization/face-authentication gate remain responsible for execution.
 - Added regression tests for fresh-session voice interpretation, fresh-session target actions, clear app launch fast paths, pending/context triggers, interpretation mode, explicit low-confidence clarification, boolean normalization, and raw/interpreted persistence.
 
-Remaining work: some legacy automation routes (such as the older app/YouTube/messaging path) are not yet unified under the structured action-history path. The owner ran the Phase 8.1 hardening tests locally on 2026-10-09: 16 contextual-interpreter tests and 53 tests across the full suite passed. The later file-open routing/path fix adds three regression tests and has not yet been run locally; run those tests and the full suite before closing Phase 8.1.
+Remaining work: some legacy automation routes (such as the older app/YouTube/messaging path) are not yet unified under the structured action-history path. The owner reports that the post-fix file-open regression tests, full suite, and live file-open test passed on 2026-10-09. The newly added Phase 8.3 profile/interpreter tests are awaiting their first local run.
 
 ### Phase 8.2 — Long-Term Memory System
 
