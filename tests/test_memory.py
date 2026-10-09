@@ -65,9 +65,15 @@ def test_low_confidence_and_sensitive_memory_are_rejected(tmp_path):
         key="user.secret",
         confidence=0.99,
     )
+    sensitive_health = store.save_memory(
+        "The user has a medical condition.",
+        key="user.health",
+        confidence=0.99,
+    )
 
     assert low_confidence is None
     assert sensitive is None
+    assert sensitive_health is None
     assert store.list_memories() == []
 
 
@@ -127,8 +133,10 @@ def test_forget_and_clear_operations_deactivate_memories(tmp_path):
 
     assert store.forget_memory(key="user.style") == 1
     assert len(store.list_memories()) == 1
+    assert len(store.list_memories(include_inactive=True)) == 1
     assert store.clear_memories() == 1
     assert store.list_memories() == []
+    assert store.list_memories(include_inactive=True) == []
 
 
 def test_memory_can_be_disabled_without_creating_database(tmp_path):
