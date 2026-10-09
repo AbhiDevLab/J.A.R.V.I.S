@@ -408,7 +408,7 @@ def allCommands(message=1):
             # intact for fallback/debugging, and automation security remains
             # entirely inside the existing executor/authorization layer.
             interpretation = None
-            memory_context = build_memory_context(query, limit=5)
+            memory_context = build_memory_context(query)
 
             if conversation_manager.has_context() or memory_context:
                 interpretation = interpret_query(
