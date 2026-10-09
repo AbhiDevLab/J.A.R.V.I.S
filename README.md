@@ -723,6 +723,7 @@ The current checked-in test modules include:
 - `tests/test_memory.py`
 - `tests/test_persona_tts.py`
 - `tests/test_security_authorization.py`
+- `tests/test_open_file_routing.py`
 
 Run the full suite from the repository root:
 
@@ -732,7 +733,7 @@ python -m pytest -v
 
 **Latest completed local verification before the current Phase 8.1 hardening edits:** `43 passed, 6 warnings`. The focused memory/context run completed with `16 passed`. The warnings were emitted by dependencies and did not fail the tests.
 
-Additional Phase 8.1 tests have since been added for fresh-session voice interpretation, target-sensitive actions, known-app fast paths, pending interaction context, interpreter mode, clarification behavior, and raw/interpreted transcript persistence. These newer changes have **not yet been run locally**. Run both commands after pulling the latest branch:
+Phase 8.1 hardening tests were run locally on 2026-10-09: `tests/test_context_interpreter.py` reported 16 passed, and the complete suite reported 53 passed with 6 dependency warnings. The explicit file-open routing fix and its three new regression tests were committed afterward and **still need local validation**. After pulling the latest `test-jarvis`, rerun `python -m pytest -v tests/test_open_file_routing.py`, then `python -m pytest -v`.
 
 ~~~bash
 python -m pytest -v tests/test_context_interpreter.py
