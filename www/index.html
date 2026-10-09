@@ -518,15 +518,28 @@
             <h2 id="ConversationViewerTitle">Selected conversation</h2>
           </div>
 
-          <button
-            id="ConversationViewerClose"
-            class="conversation-viewer-close"
-            type="button"
-            aria-label="Close conversation"
-            title="Close conversation"
-          >
-            <i class="bi bi-x-lg"></i>
-          </button>
+          <div class="conversation-viewer-actions">
+            <button
+              id="ConversationViewerHistory"
+              class="conversation-viewer-history"
+              type="button"
+              aria-label="Switch conversation"
+              title="Open conversation history"
+            >
+              <i class="bi bi-chat-left-text"></i>
+              <span>History</span>
+            </button>
+
+            <button
+              id="ConversationViewerClose"
+              class="conversation-viewer-close"
+              type="button"
+              aria-label="Close conversation"
+              title="Close conversation"
+            >
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
         </header>
 
         <div id="ConversationViewerBody" class="conversation-viewer-body"></div>
