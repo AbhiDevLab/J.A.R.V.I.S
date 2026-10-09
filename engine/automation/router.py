@@ -480,6 +480,47 @@ def _route_listing(
     )
 
 
+def _route_open_file(
+    text: str,
+) -> Optional[AutomationAction]:
+    """Route explicit file-open requests before the application-launch fallback."""
+    value = str(text or "").strip()
+
+    # Support commands such as:
+    #   open file C:\Dev\Project\README.md
+    #   open the file README.md
+    explicit = re.match(
+        r"^\s*(?:please\s+)?open\s+(?:the\s+)?file\s+(.+?)\s*[!?]*\s*$",
+        value,
+        re.IGNORECASE,
+    )
+    if explicit:
+        target = explicit.group(1).strip()
+    else:
+        # Support: "open the README.md file in C:\Dev\Project"
+        located = re.match(
+            r"^\s*(?:please\s+)?open\s+(?:the\s+)?(.+?)\s+file\s+in\s+(.+?)\s*[!?]*\s*$",
+            value,
+            re.IGNORECASE,
+        )
+        if located:
+            name = located.group(1).strip().strip("\"'")
+            directory = located.group(2).strip().strip("\"'").rstrip(".!?;:")
+            target = str(Path(directory) / name)
+        else:
+            return None
+
+    target = target.strip().strip("\"'")
+    if not target:
+        return None
+
+    return AutomationAction(
+        action_type="open_file",
+        parameters={"source": target},
+        risk=RiskLevel.LOW,
+    )
+
+
 def _route_open(
     text: str,
 ) -> Optional[AutomationAction]:
@@ -775,6 +816,11 @@ def route_command(
         return action
 
     action = _route_shell(text)
+
+    if action:
+        return action
+
+    action = _route_open_file(text)
 
     if action:
         return action
