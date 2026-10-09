@@ -34,6 +34,32 @@ class ConversationManager:
             context_turns = 8
 
         self.context_turns = max(1, context_turns)
+        self._summary = ""
+
+        summary_enabled = os.getenv("JARVIS_CONVERSATION_SUMMARY_ENABLED", "1")
+        self.summary_enabled = str(summary_enabled).strip().lower() not in {
+            "0", "false", "no", "off", "",
+        }
+
+        default_trigger = self.context_turns + max(4, self.context_turns // 2)
+        try:
+            configured_trigger = int(
+                os.getenv("JARVIS_SUMMARY_TRIGGER_TURNS", str(default_trigger))
+            )
+        except (TypeError, ValueError):
+            configured_trigger = default_trigger
+        self.summary_trigger_turns = max(
+            self.context_turns + 1,
+            configured_trigger,
+        )
+
+        try:
+            summary_max_chars = int(
+                os.getenv("JARVIS_CONVERSATION_SUMMARY_MAX_CHARS", "1800")
+            )
+        except (TypeError, ValueError):
+            summary_max_chars = 1800
+        self.summary_max_chars = max(300, min(summary_max_chars, 5000))
 
     @staticmethod
     def _new_conversation_id() -> str:
@@ -43,6 +69,7 @@ class ConversationManager:
         """Start a fresh conversation and clear in-memory context."""
         self.conversation_id = self._new_conversation_id()
         self._messages.clear()
+        self._summary = ""
         return self.conversation_id
 
 
@@ -72,6 +99,7 @@ class ConversationManager:
 
             self.conversation_id = conversation_id
             self._messages.clear()
+            self._summary = ""
 
             for turn in turns:
                 user_text = turn.get(
@@ -135,11 +163,45 @@ class ConversationManager:
         self._trim_messages()
 
     def _trim_messages(self) -> None:
-        """Keep only the configured number of conversational turns."""
-        max_messages = self.context_turns * 2
+        """Compress older turns and retain a bounded recent-turn window."""
+        max_recent_messages = self.context_turns * 2
 
-        if len(self._messages) > max_messages:
-            self._messages = self._messages[-max_messages:]
+        if not self.summary_enabled:
+            if len(self._messages) > max_recent_messages:
+                self._messages = self._messages[-max_recent_messages:]
+            return
+
+        trigger_messages = self.summary_trigger_turns * 2
+        if len(self._messages) <= trigger_messages:
+            return
+
+        older_messages = self._messages[:-max_recent_messages]
+        if not older_messages:
+            return
+
+        try:
+            from engine.conversation_summary import summarize_conversation
+
+            updated_summary = summarize_conversation(
+                self._summary,
+                older_messages,
+                max_chars=self.summary_max_chars,
+            )
+        except Exception as exc:
+            # Retain raw history if even importing/calling the summarizer fails.
+            print(f"Conversation compaction failed; preserving raw history: {exc}")
+            return
+
+        if not updated_summary:
+            print("Conversation compaction produced no summary; preserving raw history.")
+            return
+
+        self._summary = updated_summary
+        self._messages = self._messages[-max_recent_messages:]
+
+    def get_summary(self) -> str:
+        """Return the current rolling summary, primarily for tests/diagnostics."""
+        return self._summary
 
     def load_persistent_context(self) -> None:
         """
@@ -157,6 +219,7 @@ class ConversationManager:
             )
 
             self._messages.clear()
+            self._summary = ""
 
             for turn in turns:
                 user_text = turn.get("user_text", "")
@@ -202,6 +265,13 @@ class ConversationManager:
             "Previous conversation context:",
             "",
         ]
+
+        if self._summary:
+            lines.extend([
+                "Rolling summary of earlier turns (may omit minor details):",
+                self._summary,
+                "",
+            ])
 
         for message in self._messages:
             role = message["role"]
