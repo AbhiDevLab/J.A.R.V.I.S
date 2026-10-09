@@ -643,9 +643,19 @@ def record_episode(
     )
 
 
-def build_memory_context(query: str, *, limit: int = _DEFAULT_CONTEXT_LIMIT) -> str:
+def build_memory_context(query: str, *, limit: Optional[int] = None) -> str:
     """Format only query-relevant memories for a prompt or contextual interpreter."""
-    memories = memory_store.retrieve(query, limit=limit)
+    context_limit = (
+        _bounded_int(
+            os.getenv("JARVIS_MEMORY_CONTEXT_ITEMS", str(_DEFAULT_CONTEXT_LIMIT)),
+            1,
+            25,
+            _DEFAULT_CONTEXT_LIMIT,
+        )
+        if limit is None
+        else _bounded_int(limit, 1, 25, _DEFAULT_CONTEXT_LIMIT)
+    )
+    memories = memory_store.retrieve(query, limit=context_limit)
     if not memories:
         return ""
     lines = [
