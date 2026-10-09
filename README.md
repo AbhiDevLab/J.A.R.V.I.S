@@ -831,16 +831,15 @@ The Phase 8 objective is:
 
 > Give JARVIS the ability to infer what the user means from imperfect speech, conversation history, memory, and current interaction state.
 
-The codebase contains a contextual interpreter, recent-turn conversation context, temporary interaction state, and a SQLite-backed long-term memory module. The project owner reported a passing local validation run of 43 tests, including the Phase 8.2 memory tests.
+The codebase contains a contextual interpreter, recent-turn conversation context, temporary interaction state, SQLite-backed long-term memory, and a structured profile/preferences context layer. The project owner reports the file-open fix and 56-test suite passed locally before the new Phase 8.3 profile changes; the added profile tests still require local validation.
 
-### Remaining Phase 8.1 work
+### Remaining Phase 8 work
 
-- Successful structured automation actions are added to immediate conversation context and recorded as episodic memories. Some legacy application, YouTube, and messaging routes are not yet unified under the same structured action-history path.
-- Raw/interpreted fields are saved on MongoDB conversational records when persistence is available. Structured action events retain transcript details in episodic-memory metadata; they are not currently written as standard MongoDB chat-turn records.
-- Regression tests for the newest Phase 8.1 changes are committed but must be run locally before closure.
-- Live validation should confirm that low-confidence clarifications persist across turns, fresh-session misheard file/application targets are clarified or corrected appropriately, and the existing authorization gate remains fail-closed.
+- Some legacy application, YouTube, and messaging routes are not yet unified under the same structured action-history path.
+- User profile/preferences/project context is now passed selectively into interpretation and response prompts; its seven new tests await local validation.
+- Conversation summarization, broader contextual reference resolution, structured intent detection, intelligent failure recovery, runtime provider/model fallback, and final integration validation remain open.
 
-Phase 7.3 live validation is recorded as complete based on the project owner's local report on 2026-10-09; this session did not independently repeat desktop/voice tests. Phase 8.2 is implemented and its previously added automated tests passed. Phase 8.1 hardening and the remaining Phase 8 sub-phases are still outstanding.
+Phase 7.3 live validation and the 56-test pre-Phase-8.3 suite are recorded as owner-reported results. The newly added Phase 8.3 tests have not yet been run in the local environment.
 
 ---
 
@@ -870,7 +869,7 @@ The following describes the project accurately without reducing it to a simple c
 - Added deterministic authorization gates for high-risk actions.
 - Integrated Android automation through ADB.
 - Built a cinematic Eel-based HUD for voice interaction and conversational feedback.
-- Added regression tests for contextual interpretation, persistent memory lifecycle/retrieval, and persona/TTS behavior.
+- Added regression tests for contextual interpretation, persistent memory lifecycle/retrieval, secure authorization, filesystem routing, persona/TTS behavior, and structured profile context.
 
 ### Portfolio-friendly one-line description
 
