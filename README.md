@@ -213,7 +213,22 @@ clear_memories(memory_type="episodic")     # Permanently delete all episodic mem
 
 There is not yet a HUD control for memory review/cleanup. Use these helpers deliberately: `clear_memories()` without a type deletes all memory records.
 
-**Current boundaries:** retrieval is lexical, not embedding/vector-based; automatic extraction adds an LLM request only for likely durable statements; there is no dedicated UI for reviewing or deleting memories. The wider Phase 8 remains incomplete while Phase 8.1 runtime-hardening, profile/working context, summarization, broader follow-up resolution, failure recovery, and end-to-end validation remain open.
+**Current boundaries:** retrieval is lexical, not embedding/vector-based; automatic extraction adds an LLM request only for likely durable statements; there is no dedicated UI for reviewing or deleting memories. The wider Phase 8 remains incomplete while conversation summarization, broader follow-up resolution, structured intent detection, failure recovery, provider fallback, and end-to-end validation remain open. Phase 8.3 profile/context changes are implemented in the branch but still require local regression validation.
+
+
+### Phase 8.3 — Structured User Profile / Preferences / Working Context
+
+The new `engine/user_context.py` module provides a structured profile layer over the existing SQLite memory store.
+
+- Stores profile facts under stable, category-tagged keys: `profile.preference.*`, `profile.communication.*`, `profile.project.*`, and `profile.general.*`.
+- Exposes `save_profile_item()`, `get_profile_items()`, and `build_user_profile_context()` for durable profile creation, inspection, and query-relevant retrieval.
+- Recognizes compatible existing semantic keys such as `user.preferred_voice`, `user.response_style`, and `project.jarvis.stack` as profile context without migrating or duplicating them.
+- Sends only lexically relevant profile items to the contextual interpreter and response prompt. Profile text is labelled as reference data, not instructions; unrelated profile entries should not be injected.
+- Keeps temporary selections/clarifications in `engine/interaction_state.py`, separate from durable SQLite profile facts.
+- The new `JARVIS_PROFILE_CONTEXT_ITEMS=5` setting caps profile items included per query.
+- Regression tests cover profile persistence/categorization, relevance filtering, sensitive/low-confidence rejection, legacy-key compatibility, and interpreter wiring.
+
+**Validation status:** implementation committed; the new profile-specific tests and updated full test suite still need to be run locally before this sub-phase can be closed.
 
 ---
 
@@ -546,6 +561,7 @@ J.A.R.V.I.S/
 │   ├── conversation.py
 │   ├── interaction_state.py
 │   ├── memory.py
+│   ├── user_context.py
 │   ├── llm_client.py
 │   ├── persona.py
 │   ├── stt.py
@@ -554,6 +570,7 @@ J.A.R.V.I.S/
 ├── tests/
 │   ├── test_context_interpreter.py
 │   ├── test_memory.py
+│   ├── test_user_context.py
 │   └── test_persona_tts.py
 │
 ├── www/
@@ -724,6 +741,7 @@ The current checked-in test modules include:
 - `tests/test_persona_tts.py`
 - `tests/test_security_authorization.py`
 - `tests/test_open_file_routing.py`
+- `tests/test_user_context.py`
 
 Run the full suite from the repository root:
 
@@ -733,7 +751,7 @@ python -m pytest -v
 
 **Latest completed local verification before the current Phase 8.1 hardening edits:** `43 passed, 6 warnings`. The focused memory/context run completed with `16 passed`. The warnings were emitted by dependencies and did not fail the tests.
 
-Phase 8.1 hardening tests were run locally on 2026-10-09: `tests/test_context_interpreter.py` reported 16 passed, and the complete suite reported 53 passed with 6 dependency warnings. The explicit file-open routing fix and its three new regression tests were committed afterward and **still need local validation**. After pulling the latest `test-jarvis`, rerun `python -m pytest -v tests/test_open_file_routing.py`, then `python -m pytest -v`.
+The project owner reports that the three file-open regression tests passed, the full suite passed, and the explicit README.md file-open command succeeded live. The baseline following the file-open fix was 56 passing tests. Phase 8.3 adds 5 profile tests and 2 interpreter-context tests; run the new focused checks and the full suite locally before treating Phase 8.3 as validated.
 
 ~~~bash
 python -m pytest -v tests/test_context_interpreter.py
@@ -782,9 +800,9 @@ Phase 7
         ↓
 Phase 8
   🟡 Contextual foundation exists; overall phase incomplete
-      ├─ 8.1 🟡 Hardening committed; tests and runtime validation pending
-      ├─ 8.2 ✅ Persistent memory implemented; Phase 8.2 tests passed
-      ├─ 8.3 ⏳ User profile / working context
+      ├─ 8.1 ✅ Context interpreter + file-open path verified by owner; legacy routes still need integration
+      ├─ 8.2 ✅ Persistent memory implemented; included in passing 56-test suite
+      ├─ 8.3 🟡 Structured profile context implemented; local regression validation pending
       ├─ 8.4 ⏳ Conversation summarization
       ├─ 8.5 ⏳ Contextual follow-ups across actions
       ├─ 8.6 ⏳ Smarter structured intent detection
@@ -881,7 +899,7 @@ This allows the system to use LLMs for **language understanding without allowing
 - OmniRoute must be available for conversational LLM functionality.
 - Current LLM requests are non-streaming.
 - Phase 8.2 memory is implemented using local SQLite with lexical relevance retrieval; embedding-based retrieval and a memory-management UI remain future work.
-- General contextual interpretation still has Phase 8.1 integration gaps; stored memories are passed to the interpreter when relevant memories are retrieved.
+- Phase 8.3 introduces category-tagged user profile/preferences/project context stored in the existing SQLite memory layer. Only query-relevant profile records are injected; temporary clarification/selection state remains in `engine/interaction_state.py` and is not persisted as a profile fact.
 - Raw transcript and interpreted query are not persisted as separate chat fields.
 - Phase 7.3 live validation was reported as complete by the project owner; the roadmap records that report, but this audit session did not independently rerun local live checks.
 - Kokoro's first initialization can take longer because the local pipeline/model is loaded and cached.
