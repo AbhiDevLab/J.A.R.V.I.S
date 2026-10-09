@@ -397,16 +397,23 @@ def _complete_open_file(
         if source is None:
             return None
 
-    matches = search_paths(
-        source,
-        expected_type="file",
-        max_results=50,
-    )
+    # Prefer an exact path (absolute or relative) before performing a
+    # name-based search. This avoids turning Windows path separators and
+    # punctuation into a fuzzy filename query.
+    direct_path = resolve_path(source)
+    if direct_path.is_file():
+        resolved = direct_path
+    else:
+        matches = search_paths(
+            source,
+            expected_type="file",
+            max_results=50,
+        )
 
-    resolved = _choose_match(
-        matches,
-        source,
-    )
+        resolved = _choose_match(
+            matches,
+            source,
+        )
 
     if resolved is None:
         from engine.command import speak
