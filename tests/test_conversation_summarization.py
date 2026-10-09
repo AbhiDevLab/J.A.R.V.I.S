@@ -42,6 +42,7 @@ def test_conversation_is_summarized_only_after_trigger(monkeypatch):
 def test_rolling_summary_is_updated_with_previous_summary(monkeypatch):
     monkeypatch.setenv("JARVIS_CONTEXT_TURNS", "2")
     monkeypatch.setenv("JARVIS_SUMMARY_TRIGGER_TURNS", "4")
+    monkeypatch.setenv("JARVIS_CONVERSATION_SUMMARY_ENABLED", "1")
     manager = ConversationManager()
 
     with patch(
@@ -61,6 +62,7 @@ def test_rolling_summary_is_updated_with_previous_summary(monkeypatch):
 def test_new_conversation_clears_summary_and_recent_turns(monkeypatch):
     monkeypatch.setenv("JARVIS_CONTEXT_TURNS", "1")
     monkeypatch.setenv("JARVIS_SUMMARY_TRIGGER_TURNS", "2")
+    monkeypatch.setenv("JARVIS_CONVERSATION_SUMMARY_ENABLED", "1")
     manager = ConversationManager()
 
     with patch(
