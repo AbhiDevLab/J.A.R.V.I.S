@@ -132,6 +132,19 @@ clarification_question
 used_context
 ~~~
 
+The runtime uses a selective policy instead of sending every request to a second LLM call. It invokes contextual interpretation when conversation history, relevant stored memory, a pending interaction/clarification, follow-up wording, or a target-sensitive action suggests it can help. Clear known application launches can use the deterministic fast path when there is no context that needs resolution.
+
+Configuration:
+
+~~~env
+JARVIS_INTERPRETATION_MODE=auto
+JARVIS_INTERPRETATION_MIN_CONFIDENCE=0.70
+~~~
+
+Set the mode to `always` to interpret every non-empty utterance, or `off` to disable the interpreter. Explicit clarification requests are preserved even below the rewrite-confidence threshold. Pending clarification state remains active if the answer is still too uncertain.
+
+For persisted chat turns, the effective `user_text` remains backward-compatible, while `raw_user_text`, `interpreted_user_text`, and interpretation metadata are saved separately when MongoDB persistence is available.
+
 ### Safety boundary
 
 Contextual interpretation **does not execute actions**.
@@ -717,9 +730,16 @@ Run the full suite from the repository root:
 python -m pytest -v
 ~~~
 
-**Latest local verification reported on October 9, 2026:** `43 passed, 6 warnings`. The focused memory/context run completed with `16 passed`. The warnings were emitted by dependencies and did not fail the tests.
+**Latest completed local verification before the current Phase 8.1 hardening edits:** `43 passed, 6 warnings`. The focused memory/context run completed with `16 passed`. The warnings were emitted by dependencies and did not fail the tests.
 
-The automated suite covers contextual interpretation, memory persistence/retrieval/update/expiry, dialogue selection, filesystem matching, persona/TTS behavior, and authorization. Live voice and desktop end-to-end validation remains a separate checkpoint; the project owner reports that Phase 7.3 was completed locally.
+Additional Phase 8.1 tests have since been added for fresh-session target actions, known-app fast paths, pending interaction context, interpreter mode, clarification behavior, and raw/interpreted transcript persistence. These newer changes have **not yet been run locally**. Run both commands after pulling the latest branch:
+
+~~~bash
+python -m pytest -v tests/test_context_interpreter.py
+python -m pytest -v
+~~~
+
+The prior automated suite covers contextual interpretation, memory persistence/retrieval/update/expiry, dialogue selection, filesystem matching, persona/TTS behavior, and authorization. Live voice and desktop end-to-end validation remains separate; the project owner reports Phase 7.3 was completed locally.
 
 ---
 
@@ -761,7 +781,7 @@ Phase 7
         ↓
 Phase 8
   🟡 Contextual foundation exists; overall phase incomplete
-      ├─ 8.1 🟡 Interpretation code exists; integration gaps remain
+      ├─ 8.1 🟡 Hardening committed; tests and runtime validation pending
       ├─ 8.2 ✅ Persistent memory implemented; 43-test suite passing
       ├─ 8.3 ⏳ User profile / working context
       ├─ 8.4 ⏳ Conversation summarization
@@ -790,15 +810,14 @@ The Phase 8 objective is:
 
 The codebase contains a contextual interpreter, recent-turn conversation context, temporary interaction state, and a SQLite-backed long-term memory module. The project owner reported a passing local validation run of 43 tests, including the Phase 8.2 memory tests.
 
-### Verified implementation gaps
+### Remaining Phase 8.1 work
 
-- General contextual interpretation in `engine/command.py` is conditional on existing in-memory chat context or a retrieved memory. A fresh request with no relevant memory can bypass it.
-- Successful structured automation actions are added to immediate conversation context and recorded as episodic memories. Other legacy automation routes have not all been refactored into the same structured flow.
-- The raw transcript and interpreted query are not persisted as separate chat fields.
-- The low-confidence path in `engine/context_interpreter.py` can suppress a clarification requested by the model; Phase 8.1 hardening remains open.
-- The project owner's local run confirms the current automated suite passes: 43 tests, with six dependency warnings.
+- Successful structured automation actions are added to immediate conversation context and recorded as episodic memories. Some legacy application, YouTube, and messaging routes are not yet unified under the same structured action-history path.
+- Raw/interpreted fields are saved on MongoDB conversational records when persistence is available. Structured action events retain transcript details in episodic-memory metadata; they are not currently written as standard MongoDB chat-turn records.
+- Regression tests for the newest Phase 8.1 changes are committed but must be run locally before closure.
+- Live validation should confirm that low-confidence clarifications persist across turns, fresh-session misheard file/application targets are clarified or corrected appropriately, and the existing authorization gate remains fail-closed.
 
-Phase 7.3 live validation is recorded as complete based on the project owner's local report on 2026-10-09; this session did not independently repeat desktop/voice tests. Phase 8.2 is implemented and its automated tests are reported passing. Phase 8.1 hardening and the remaining Phase 8 sub-phases are still outstanding.
+Phase 7.3 live validation is recorded as complete based on the project owner's local report on 2026-10-09; this session did not independently repeat desktop/voice tests. Phase 8.2 is implemented and its previously added automated tests passed. Phase 8.1 hardening and the remaining Phase 8 sub-phases are still outstanding.
 
 ---
 
