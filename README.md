@@ -132,7 +132,7 @@ clarification_question
 used_context
 ~~~
 
-The runtime uses a selective policy instead of sending every request to a second LLM call. It invokes contextual interpretation when conversation history, relevant stored memory, a pending interaction/clarification, follow-up wording, or a target-sensitive action suggests it can help. Clear known application launches can use the deterministic fast path when there is no context that needs resolution.
+The runtime uses a selective policy instead of sending every request to a second LLM call. In `auto` mode, microphone speech is interpreted by default so standalone speech-recognition errors can be corrected; clear known application launches such as `open Chrome` use a deterministic fast path when no context needs resolution. Typed text is interpreted when conversation history, relevant stored memory, pending interaction/clarification, follow-up wording, or a target-sensitive action suggests it can help.
 
 Configuration:
 
@@ -732,7 +732,7 @@ python -m pytest -v
 
 **Latest completed local verification before the current Phase 8.1 hardening edits:** `43 passed, 6 warnings`. The focused memory/context run completed with `16 passed`. The warnings were emitted by dependencies and did not fail the tests.
 
-Additional Phase 8.1 tests have since been added for fresh-session target actions, known-app fast paths, pending interaction context, interpreter mode, clarification behavior, and raw/interpreted transcript persistence. These newer changes have **not yet been run locally**. Run both commands after pulling the latest branch:
+Additional Phase 8.1 tests have since been added for fresh-session voice interpretation, target-sensitive actions, known-app fast paths, pending interaction context, interpreter mode, clarification behavior, and raw/interpreted transcript persistence. These newer changes have **not yet been run locally**. Run both commands after pulling the latest branch:
 
 ~~~bash
 python -m pytest -v tests/test_context_interpreter.py
