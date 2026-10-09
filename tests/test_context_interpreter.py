@@ -94,3 +94,21 @@ def test_interpreter_never_executes_automation():
     assert result.intent == "automation"
     # Interpretation produces meaning only. Execution remains the job of
     # route_command()/complete_action()/execute_action() and its security gate.
+
+def test_interpreter_uses_relevant_persistent_memory():
+    with patch(
+        "engine.context_interpreter.ask_llm",
+        return_value='{"interpreted_query":"which voice should I use?","intent":"conversation","confidence":0.93,"needs_clarification":false,"clarification_question":""}',
+    ) as ask_llm:
+        result = interpret_query(
+            "what voice should I use?",
+            memory_context=(
+                "Relevant stored memory:\n"
+                "- [semantic] The user prefers a British English voice."
+            ),
+        )
+
+    assert result.used_context is True
+    assert result.interpreted_query == "which voice should I use?"
+    assert "British English voice" in ask_llm.call_args.args[0]
+
