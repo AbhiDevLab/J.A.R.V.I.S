@@ -216,6 +216,30 @@ There is not yet a HUD control for memory review/cleanup. Use these helpers deli
 **Current boundaries:** retrieval is lexical, not embedding/vector-based; automatic extraction adds an LLM request only for likely durable statements; there is no dedicated UI for reviewing or deleting memories. The wider Phase 8 remains incomplete while conversation summarization, broader follow-up resolution, structured intent detection, failure recovery, provider fallback, and end-to-end validation remain open. Phase 8.3 profile/context changes are implemented in the branch but still require local regression validation.
 
 
+### Phase 8.4 — Conversation Summarization & Context Compression
+
+J.A.R.V.I.S now has a rolling summary layer in `engine/conversation_summary.py`, integrated with `ConversationManager`.
+
+- After the conversation exceeds the configured summary trigger, earlier turns are summarized and the configured recent-turn window is retained verbatim.
+- The rolling summary is updated with new older turns, and `build_context()` supplies both the summary and recent turns to the contextual interpreter and response prompt.
+- The summary prompt is instructed to preserve goals, key facts, decisions, filenames/paths, constraints, unresolved questions and pending tasks without inventing outcomes or following instructions embedded in the transcript.
+- If OmniRoute fails, returns an empty response, or returns an overlong summary, JARVIS falls back to a bounded extractive recap instead of dropping the older turns without a summary.
+- Starting a new conversation clears its in-memory summary. Saved conversation loading rebuilds a summary from older loaded turns when the trigger is exceeded.
+- Summary is session-memory state, not a new database: when MongoDB history is available, loading a saved conversation can reconstruct it; with no persistence, it does not survive application restart.
+- Seven regression tests cover trigger behavior, rolling updates, conversation reset, disabled mode, summary prompt content, and LLM-failure/empty-response fallback.
+
+Configuration:
+
+~~~env
+JARVIS_CONVERSATION_SUMMARY_ENABLED=1
+JARVIS_SUMMARY_TRIGGER_TURNS=12
+JARVIS_CONVERSATION_SUMMARY_MAX_CHARS=1800
+JARVIS_SUMMARY_INPUT_MAX_CHARS=12000
+~~~
+
+**Validation status:** implementation and regression tests are committed; local focused tests, the complete suite, and long-conversation live continuity checks remain to be run.
+
+
 ### Phase 8.3 — Structured User Profile / Preferences / Working Context
 
 The new `engine/user_context.py` module provides a structured profile layer over the existing SQLite memory store.
@@ -559,6 +583,7 @@ J.A.R.V.I.S/
 │   ├── command.py
 │   ├── context_interpreter.py
 │   ├── conversation.py
+│   ├── conversation_summary.py
 │   ├── interaction_state.py
 │   ├── memory.py
 │   ├── user_context.py
@@ -569,6 +594,7 @@ J.A.R.V.I.S/
 │
 ├── tests/
 │   ├── test_context_interpreter.py
+│   ├── test_conversation_summarization.py
 │   ├── test_dialogue_selection.py
 │   ├── test_filesystem_matching.py
 │   ├── test_memory.py
@@ -755,7 +781,7 @@ python -m pytest -v
 
 **Latest completed local verification before the current Phase 8.1 hardening edits:** `43 passed, 6 warnings`. The focused memory/context run completed with `16 passed`. The warnings were emitted by dependencies and did not fail the tests.
 
-The project owner reports that the three file-open regression tests passed, the full suite passed, and the explicit README.md file-open command succeeded live. The baseline following the file-open fix was 56 passing tests. Phase 8.3 adds 5 profile tests and 2 interpreter-context tests; run the new focused checks and the full suite locally before treating Phase 8.3 as validated.
+The project owner reports that the file-open regression tests and live explicit-path open passed, and that the complete suite passed after Phase 8.3 changes (63 tests). Phase 8.4 adds seven conversation-summarization tests; run the focused tests and full suite locally before treating Phase 8.4 as validated.
 
 ~~~bash
 python -m pytest -v tests/test_user_context.py tests/test_context_interpreter.py
@@ -806,8 +832,8 @@ Phase 8
   🟡 Contextual foundation exists; overall phase incomplete
       ├─ 8.1 ✅ Context interpreter + file-open path verified by owner; legacy routes still need integration
       ├─ 8.2 ✅ Persistent memory implemented; included in passing 56-test suite
-      ├─ 8.3 🟡 Structured profile context implemented; local regression validation pending
-      ├─ 8.4 ⏳ Conversation summarization
+      ├─ 8.3 ✅ Structured profile context implemented and validated by owner
+      ├─ 8.4 🟡 Rolling conversation summarization implemented; local validation pending
       ├─ 8.5 ⏳ Contextual follow-ups across actions
       ├─ 8.6 ⏳ Smarter structured intent detection
       ├─ 8.7 ⏳ Error recovery
@@ -839,7 +865,7 @@ The codebase contains a contextual interpreter, recent-turn conversation context
 - User profile/preferences/project context is now passed selectively into interpretation and response prompts; its seven new tests await local validation.
 - Conversation summarization, broader contextual reference resolution, structured intent detection, intelligent failure recovery, runtime provider/model fallback, and final integration validation remain open.
 
-Phase 7.3 live validation and the 56-test pre-Phase-8.3 suite are recorded as owner-reported results. The newly added Phase 8.3 tests have not yet been run in the local environment.
+Phase 7.3 live validation and the 56-test pre-Phase-8.3 suite are recorded as owner-reported results. The Phase 8.3 focused tests, full suite, and live preference-retrieval check are reported passing by the project owner. The Phase 8.4 summary tests are not yet locally validated.
 
 ---
 
