@@ -134,8 +134,8 @@ def should_interpret_query(
     if _TARGET_ACTION_PATTERN.search(raw):
         return True
 
-    # Voice requests that do not match deterministic action grammar stay on
-    # the normal conversational path unless another contextual signal exists.
+    # Ordinary conversational requests stay on the normal answer path
+    # unless another contextual signal indicates they need interpretation.
     return False
 
 
