@@ -781,9 +781,9 @@ Run the full suite from the repository root:
 python -m pytest -v
 ~~~
 
-Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; the file-open routing fix brought the reported full suite to 56 passing tests; Phase 8.3 profile/context changes brought it to 63; and Phase 8.4 focused tests passed `7/7` with the full suite at `70 passed, 6 dependency warnings` on 2026-10-09. The latest conversation-navigation/black-screen fix adds three UI regression guards and still requires a local test run.
+Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; the file-open routing fix brought the reported suite to 56 tests; Phase 8.3 profile/context changes brought it to 63; Phase 8.4 focused tests passed `7/7` with the full suite at `70 passed, 6 dependency warnings`; and the latest conversation UI regression tests and 73-test full suite are reported passing by the project owner on 2026-10-09.
 
-The project owner reports the file-open regression tests and live explicit-path open passed, followed by the Phase 8.3 checks. The Phase 8.4 focused tests and full suite passed locally (`7/7` focused, `70/70` total with six dependency warnings). The current UI fix allows switching chat histories from the active transcript and restores the main HUD after Escape; its three source-level regression tests are pending local validation.
+The conversation viewer now provides a **History** button while viewing a saved chat. Closing the viewer with Escape restores the main HUD and hides the SiriWave screen. The project owner has confirmed both chat switching and Escape recovery work in the live interface. Phase 8.4's live long-conversation continuity test remains outstanding.
 
 ~~~bash
 python -m pytest -v tests/test_conversation_ui_regression.py
