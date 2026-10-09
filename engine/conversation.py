@@ -258,7 +258,7 @@ class ConversationManager:
 
         Returns an empty string when no previous context exists.
         """
-        if not self._messages:
+        if not self._messages and not self._summary:
             return ""
 
         lines = [
@@ -289,7 +289,7 @@ class ConversationManager:
 
     def has_context(self) -> bool:
         """Return True when previous conversational context exists."""
-        return bool(self._messages)
+        return bool(self._messages or self._summary)
 
 
 # One active conversation manager per JARVIS process.
