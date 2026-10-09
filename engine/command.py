@@ -723,21 +723,6 @@ questions using that context.
                     response,
                 )
 
-                # Durable memory extraction is selective and best-effort. It
-                # runs only for user messages that resemble durable statements;
-                # ordinary questions/commands do not incur an extra LLM call.
-                try:
-                    extract_memories_from_turn(
-                        raw_transcript,
-                        response,
-                        conversation_id=conversation_manager.conversation_id,
-                    )
-                except Exception as memory_error:
-                    print(
-                        "Long-term memory extraction unavailable: "
-                        f"{memory_error}"
-                    )
-
                 _safe_display(
                     "assistantResponse",
                     response,
@@ -749,6 +734,21 @@ questions using that context.
                     language=response_language,
                     respect_voice_setting=True,
                 )
+
+                # Run selective durable-memory extraction after the response
+                # has been displayed/spoken, so memory maintenance does not
+                # delay the user's current answer.
+                try:
+                    extract_memories_from_turn(
+                        raw_transcript,
+                        response,
+                        conversation_id=conversation_manager.conversation_id,
+                    )
+                except Exception as memory_error:
+                    print(
+                        "Long-term memory extraction unavailable: "
+                        f"{memory_error}"
+                    )
 
                 if interrupted:
                     print(
