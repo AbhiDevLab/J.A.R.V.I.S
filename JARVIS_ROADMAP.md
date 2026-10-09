@@ -182,14 +182,15 @@ JARVIS should treat speech recognition output as an imperfect signal rather than
 
 The latest hardening adds the following:
 
-- Selective interpretation is now triggered by conversation context, relevant memory, pending interaction state, follow-up language, and target-sensitive actions—even in a fresh session.
+- In `auto` mode, microphone utterances are interpreted by default, including in fresh sessions, so standalone speech-recognition errors can be corrected.
 - Recognized application launches such as `open Chrome` retain a deterministic fast path when no context requires interpretation.
+- Typed text uses selective interpretation based on conversation context, relevant memory, pending interaction state, follow-up language, and target-sensitive actions.
 - `JARVIS_INTERPRETATION_MODE=auto|always|off` controls the policy. `JARVIS_INTERPRETATION_MIN_CONFIDENCE` sets the default 0.70 threshold.
 - Explicit clarification requests survive low-confidence results. Pending clarification state is retained if the user's answer cannot be interpreted confidently.
 - Conversational MongoDB records preserve `user_text`, `raw_user_text`, `interpreted_user_text`, and structured interpretation metadata separately. Old readers can continue using `user_text`.
 - Successful structured automation events keep the interpreted request in conversation context and record the raw transcript/interpretation confidence in episodic-memory metadata.
 - The contextual interpreter still only produces meaning. Deterministic routing and the existing authorization/face-authentication gate remain responsible for execution.
-- Added regression tests for fresh-session target actions, clear app launch fast paths, pending/context triggers, interpretation mode, explicit low-confidence clarification, boolean normalization, and raw/interpreted persistence.
+- Added regression tests for fresh-session voice interpretation, fresh-session target actions, clear app launch fast paths, pending/context triggers, interpretation mode, explicit low-confidence clarification, boolean normalization, and raw/interpreted persistence.
 
 Remaining work: some legacy automation routes (such as the older app/YouTube/messaging path) are not yet unified under the structured action-history path. The new Phase 8.1 tests have not yet been run against the latest hardening commits. The previously reported 43-test suite passed before these latest test additions; rerun the focused and full suite before closing Phase 8.1.
 
