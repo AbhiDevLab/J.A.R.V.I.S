@@ -175,12 +175,17 @@ JARVIS should treat speech recognition output as an imperfect signal rather than
 - [x] Add regression tests for context-based interpretation
 - [x] Run contextual-interpreter regression checkpoint — 27/27 tests passed at the original checkpoint (historical)
 - [x] Add hardening regression tests for selective interpretation, clarification state, and transcript persistence
-- [ ] Run focused contextual-interpreter tests after the latest Phase 8.1 hardening commits
-- [ ] Run the full regression suite after the latest Phase 8.1 hardening commits
+- [x] Run focused contextual-interpreter tests after the Phase 8.1 hardening commits — 16 passed locally on 2026-10-09
+- [x] Run the full regression suite after the Phase 8.1 hardening commits — 53 passed, 6 dependency warnings, on 2026-10-09
+- [ ] Run the three new file-open routing/path regression tests after the latest fix commit
+- [ ] Rerun the full regression suite after the latest file-open routing/path fix
+- [ ] Complete live file-open clarification/path validation after the fix
 
 **Phase 8.1 status: 🟡 Hardening implementation committed; regression execution and runtime validation pending.**
 
 The latest hardening adds the following:
+
+A live clarification test exposed a separate file-open routing gap: `open file <absolute path>` fell through to application-launch routing, and file completion used fuzzy name search even for an exact path. The branch now routes explicit file-open phrases to the `open_file` action and checks an exact path before fuzzy search. Three regression tests were added; they remain pending local execution.
 
 - In `auto` mode, microphone utterances are interpreted by default, including in fresh sessions, so standalone speech-recognition errors can be corrected.
 - Recognized application launches such as `open Chrome` retain a deterministic fast path when no context requires interpretation.
@@ -192,7 +197,7 @@ The latest hardening adds the following:
 - The contextual interpreter still only produces meaning. Deterministic routing and the existing authorization/face-authentication gate remain responsible for execution.
 - Added regression tests for fresh-session voice interpretation, fresh-session target actions, clear app launch fast paths, pending/context triggers, interpretation mode, explicit low-confidence clarification, boolean normalization, and raw/interpreted persistence.
 
-Remaining work: some legacy automation routes (such as the older app/YouTube/messaging path) are not yet unified under the structured action-history path. The new Phase 8.1 tests have not yet been run against the latest hardening commits. The previously reported 43-test suite passed before these latest test additions; rerun the focused and full suite before closing Phase 8.1.
+Remaining work: some legacy automation routes (such as the older app/YouTube/messaging path) are not yet unified under the structured action-history path. The owner ran the Phase 8.1 hardening tests locally on 2026-10-09: 16 contextual-interpreter tests and 53 tests across the full suite passed. The later file-open routing/path fix adds three regression tests and has not yet been run locally; run those tests and the full suite before closing Phase 8.1.
 
 ### Phase 8.2 — Long-Term Memory System
 
@@ -207,7 +212,7 @@ Remaining work: some legacy automation routes (such as the older app/YouTube/mes
 - [x] Support memory expiration; episodic records default to a configurable 90-day TTL
 - [x] Add memory persistence/retrieval/update/expiry regression tests in `tests/test_memory.py`
 - [x] Run focused memory/context regression suite — 16/16 tests passed locally on 2026-10-09
-- [x] Run the complete regression suite — 43/43 tests passed locally on 2026-10-09 (6 dependency warnings; no test failures)
+- [x] Run the complete regression suite — 53/53 tests passed locally on 2026-10-09 before the later file-open routing/path fix (6 dependency warnings; no test failures)
 
 **Phase 8.2 status:** ✅ Implemented and automated regression suite passing. The implementation uses SQLite and lexical retrieval; embeddings/vector search and a dedicated memory-management HUD are not part of this sub-phase implementation.
 
@@ -416,8 +421,8 @@ PHASE 7
         ↓
 PHASE 8
   🟡 Contextual foundation present; overall phase incomplete
-      ├─ 8.1 🟡 Hardening committed; tests and runtime validation pending
-      ├─ 8.2 ✅ Long-Term Memory — implementation and 43-test regression suite passing
+      ├─ 8.1 🟡 16 focused + 53 full tests pass; file-open fix validation pending
+      ├─ 8.2 ✅ Long-Term Memory — implementation and 53-test regression suite passing
       ├─ 8.3 ⏳ User Profile / Working Context
       ├─ 8.4 ⏳ Conversation Summarization
       ├─ 8.5 ⏳ Contextual Follow-Ups
