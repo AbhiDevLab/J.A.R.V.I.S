@@ -316,6 +316,19 @@ $(document).ready(function () {
             oval.classList.remove(
                 "conversation-mode"
             );
+
+            // ShowHood() hides both the normal HUD and SiriWave while the
+            // transcript viewer is active. Restore the normal HUD when the
+            // viewer closes (including via Escape), or the app can be left
+            // with every main view hidden and appear completely black.
+            oval.hidden = false;
+            oval.removeAttribute("hidden");
+        }
+
+        const siriWave = document.getElementById("SiriWave");
+        if (siriWave) {
+            siriWave.hidden = true;
+            siriWave.setAttribute("hidden", "");
         }
 
         viewer.classList.remove(
@@ -340,6 +353,16 @@ $(document).ready(function () {
         "click",
         function () {
             closeConversationViewer();
+        }
+    );
+
+    // Keep chat switching available while continuing an existing conversation.
+    // The history sidebar is layered above the viewer and selecting a chat
+    // loads it into the same transcript workspace.
+    $("#ConversationViewerHistory").on(
+        "click",
+        function () {
+            openHistorySidebar();
         }
     );
 
