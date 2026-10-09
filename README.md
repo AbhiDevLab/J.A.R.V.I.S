@@ -160,21 +160,35 @@ JARVIS_CHAT_COLLECTION=chats
 JARVIS_CONTEXT_TURNS=8
 ~~~
 
-Conversation persistence is intentionally separate from future long-term semantic memory.
+Conversation persistence is separate from the dedicated long-term memory subsystem below.
 
-### Current Phase 8 direction
+### Phase 8.2 — Persistent Long-Term Memory
 
-The current context system is the foundation for future:
+J.A.R.V.I.S now has a dedicated memory layer in `engine/memory.py`, separate from the recent-turn conversation manager and temporary interaction state.
 
-- Long-term memory.
-- User preferences.
-- Working context.
-- Conversation summarization.
-- Reference resolution.
-- Smarter intent detection.
-- Intelligent fallback/recovery.
+- **Semantic memory:** stores high-confidence, durable, non-sensitive user-stated facts, preferences, and project context.
+- **Episodic memory:** records successful structured automation actions with their user request and outcome.
+- **Local persistence:** uses SQLite from Python's standard library; it does not require MongoDB or a vector database.
+- **Memory updates:** a new semantic value with the same key supersedes the active prior value while retaining inactive history.
+- **Relevance retrieval:** ranks memories by lexical overlap, importance, and memory type. Only query-relevant entries are added to the LLM/context-interpreter prompt.
+- **Expiration:** episodic memories expire after a configurable period (90 days by default); explicit TTLs are supported for other temporary entries.
+- **Selective extraction:** an LLM extraction prompt is attempted only for user utterances that look like durable first-person statements. Confidence thresholds, length checks, and sensitive-term filtering gate storage.
+- **Memory management API:** the module exposes helpers to list, forget, clear, retrieve, and format memory for context. A dedicated HUD management panel is not yet implemented.
 
-These are planned follow-up phases rather than claiming they are already complete.
+Configuration:
+
+~~~env
+JARVIS_MEMORY_ENABLED=1
+JARVIS_MEMORY_DB_PATH=data/jarvis_memory.db
+JARVIS_MEMORY_AUTO_EXTRACT=1
+JARVIS_MEMORY_MIN_CONFIDENCE=0.72
+JARVIS_MEMORY_CONTEXT_ITEMS=5
+JARVIS_EPISODIC_MEMORY_TTL_DAYS=90
+~~~
+
+The local database is covered by the repository's database ignore rules. Back up or delete it separately from MongoDB chat history. Disabling memory with `JARVIS_MEMORY_ENABLED=0` prevents memory reads and writes. Automatic extraction can be disabled independently with `JARVIS_MEMORY_AUTO_EXTRACT=0`.
+
+**Current boundaries:** retrieval is lexical, not embedding/vector-based; automatic extraction adds an LLM request only for likely durable statements; there is no dedicated UI for reviewing or deleting memories. The wider Phase 8 remains incomplete while Phase 8.1 runtime-hardening, profile/working context, summarization, broader follow-up resolution, failure recovery, and end-to-end validation remain open.
 
 ---
 
@@ -506,6 +520,7 @@ J.A.R.V.I.S/
 │   ├── context_interpreter.py
 │   ├── conversation.py
 │   ├── interaction_state.py
+│   ├── memory.py
 │   ├── llm_client.py
 │   ├── persona.py
 │   ├── stt.py
@@ -513,6 +528,7 @@ J.A.R.V.I.S/
 │
 ├── tests/
 │   ├── test_context_interpreter.py
+│   ├── test_memory.py
 │   └── test_persona_tts.py
 │
 ├── www/
@@ -677,6 +693,7 @@ When `run.py` is used, the application manages the main JARVIS process and hotwo
 The branch snapshot reviewed here contains these test modules:
 
 - `tests/test_context_interpreter.py`
+- `tests/test_memory.py`
 - `tests/test_persona_tts.py`
 
 Run the tests from the repository root:
@@ -687,7 +704,7 @@ pytest -v
 
 The previous README reported `32 passed`, but that count could not be verified against the current branch snapshot during this audit. Treat it as historical until the suite is rerun against the exact checkout and the result is recorded.
 
-The test modules currently listed above cover contextual-interpretation behavior and persona/TTS behavior. Do not assume filesystem automation, dialogue selection, authorization, Kokoro integration, or end-to-end voice workflows are covered by checked-in regression tests merely because those capabilities exist in the application.
+The test modules cover contextual interpretation, memory persistence/retrieval/update/expiry behavior, and persona/TTS behavior. Filesystem automation, dialogue selection, authorization, Kokoro integration, and end-to-end voice workflows still require their own checked-in tests or live validation; do not infer coverage merely because the capabilities exist in the application.
 
 The standalone voice-audition script is not present at `tests/voice_audition.py` in the inspected branch snapshot. 
 
@@ -798,8 +815,7 @@ The following describes the project accurately without reducing it to a simple c
 - Added deterministic authorization gates for high-risk actions.
 - Integrated Android automation through ADB.
 - Built a cinematic Eel-based HUD for voice interaction and conversational feedback.
-- Created regression tests for context interpretation, automation selection, filesystem matching, security and TTS/persona behavior.
-- Added a standalone voice-audition tool so neural voices can be evaluated without starting the full assistant.
+- Added regression tests for contextual interpretation, persistent memory lifecycle/retrieval, and persona/TTS behavior.
 
 ### Portfolio-friendly one-line description
 
@@ -831,11 +847,10 @@ This allows the system to use LLMs for **language understanding without allowing
 - Google STT fallback requires internet access.
 - OmniRoute must be available for conversational LLM functionality.
 - Current LLM requests are non-streaming.
-- Long-term semantic memory is not implemented as a dedicated Phase 8 subsystem; MongoDB currently stores conversation turns.
-- General interpretation is conditional on existing in-memory chat context, and automation actions are not preserved as conversation turns.
-- The raw transcript and interpreted query are not persisted as separate fields.
-- Some Phase 7 automation functionality still requires live end-to-end validation.
-- The previously documented `tests/voice_audition.py` script is not present at that path in this branch snapshot.
+- Phase 8.2 memory is implemented using local SQLite with lexical relevance retrieval; embedding-based retrieval and a memory-management UI remain future work.
+- General contextual interpretation still has Phase 8.1 integration gaps; stored memories are passed to the interpreter when relevant memories are retrieved.
+- Raw transcript and interpreted query are not persisted as separate chat fields.
+- Phase 7.3 live validation was reported as complete by the project owner; the roadmap records that report, but this audit session did not independently rerun local live checks.
 - Kokoro's first initialization can take longer because the local pipeline/model is loaded and cached.
 - Full provider/model configuration remains planned for a later phase.
 
