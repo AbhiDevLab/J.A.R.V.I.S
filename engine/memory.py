@@ -613,7 +613,8 @@ def record_episode(
         parts.append(f"Action: {str(action_type).strip()[:100]}")
     parts.append(f"User request: {event_text[:400]}")
     if outcome:
-        parts.append(f"Outcome: {re.sub(r'\\s+', ' ', str(outcome)).strip()[:400]}")
+        outcome_text = re.sub(r"\\s+", " ", str(outcome)).strip()[:400]
+        parts.append(f"Outcome: {outcome_text}")
     key_seed = f"{conversation_id}|{action_type}|{event_text}|{outcome}"
     key = "episode_" + uuid.uuid5(uuid.NAMESPACE_URL, key_seed).hex[:24]
     return remember(
