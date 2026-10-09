@@ -216,6 +216,21 @@ There is not yet a HUD control for memory review/cleanup. Use these helpers deli
 **Current boundaries:** retrieval is lexical, not embedding/vector-based; automatic extraction adds an LLM request only for likely durable statements; there is no dedicated UI for reviewing or deleting memories. The wider Phase 8 remains incomplete while conversation summarization, broader follow-up resolution, structured intent detection, failure recovery, provider fallback, and end-to-end validation remain open. Phase 8.3 profile/context changes are implemented in the branch but still require local regression validation.
 
 
+### Phase 8.3 — Structured User Profile / Preferences / Working Context
+
+The new `engine/user_context.py` module provides a structured profile layer over the existing SQLite memory store.
+
+- Stores profile facts under stable, category-tagged keys: `profile.preference.*`, `profile.communication.*`, `profile.project.*`, and `profile.general.*`.
+- Exposes `save_profile_item()`, `get_profile_items()`, and `build_user_profile_context()` for durable profile creation, inspection, and query-relevant retrieval.
+- Recognizes compatible existing semantic keys such as `user.preferred_voice`, `user.response_style`, and `project.jarvis.stack` as profile context without migrating or duplicating them.
+- Sends only lexically relevant profile items to the contextual interpreter and response prompt. Profile text is labelled as reference data, not instructions; unrelated profile entries should not be injected.
+- Keeps temporary selections/clarifications in `engine/interaction_state.py`, separate from durable SQLite profile facts.
+- The new `JARVIS_PROFILE_CONTEXT_ITEMS=5` setting caps profile items included per query.
+- Regression tests cover profile persistence/categorization, relevance filtering, sensitive/low-confidence rejection, legacy-key compatibility, and interpreter wiring.
+
+**Validation status:** the project owner reports the profile-specific tests, updated full suite, and live preference-retrieval check passing locally on 2026-10-09.
+
+
 ### Phase 8.4 — Conversation Summarization & Context Compression
 
 J.A.R.V.I.S now has a rolling summary layer in `engine/conversation_summary.py`, integrated with `ConversationManager`.
@@ -238,21 +253,6 @@ JARVIS_SUMMARY_INPUT_MAX_CHARS=12000
 ~~~
 
 **Validation status:** implementation and regression tests are committed; local focused tests, the complete suite, and long-conversation live continuity checks remain to be run.
-
-
-### Phase 8.3 — Structured User Profile / Preferences / Working Context
-
-The new `engine/user_context.py` module provides a structured profile layer over the existing SQLite memory store.
-
-- Stores profile facts under stable, category-tagged keys: `profile.preference.*`, `profile.communication.*`, `profile.project.*`, and `profile.general.*`.
-- Exposes `save_profile_item()`, `get_profile_items()`, and `build_user_profile_context()` for durable profile creation, inspection, and query-relevant retrieval.
-- Recognizes compatible existing semantic keys such as `user.preferred_voice`, `user.response_style`, and `project.jarvis.stack` as profile context without migrating or duplicating them.
-- Sends only lexically relevant profile items to the contextual interpreter and response prompt. Profile text is labelled as reference data, not instructions; unrelated profile entries should not be injected.
-- Keeps temporary selections/clarifications in `engine/interaction_state.py`, separate from durable SQLite profile facts.
-- The new `JARVIS_PROFILE_CONTEXT_ITEMS=5` setting caps profile items included per query.
-- Regression tests cover profile persistence/categorization, relevance filtering, sensitive/low-confidence rejection, legacy-key compatibility, and interpreter wiring.
-
-**Validation status:** implementation committed; the new profile-specific tests and updated full test suite still need to be run locally before this sub-phase can be closed.
 
 ---
 
