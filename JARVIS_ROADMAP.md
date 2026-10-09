@@ -124,29 +124,28 @@ These include the multiple-result selection UX, natural-language selection parsi
 
 **Phase 7.3 implementation status:** ✅ Implemented / refined
 
-### Phase 7.3 checkpoint still required
+### Phase 7.3 validation checkpoint
 
-The implementation is not considered fully closed until we complete live end-to-end testing.
+The project owner reported completing the Phase 7.3 live validation checks locally on **2026-10-09**. The checks below are recorded as owner-verified; this editing session did not independently execute live desktop/voice tests.
 
-- [x] Run complete automated regression suite — 22/22 tests passing
+- [x] Run complete automated regression suite — previously reported 22/22 tests passing (historical result; not rerun in this session)
 - [x] Verify Porcupine hotword startup with the pinned legacy local version
 - [x] Verify local Kokoro English TTS startup with `am_michael`
 - [x] Verify Faster-Whisper English speech reaches OmniRoute
 - [x] Fix and validate low-confidence/incorrect Whisper language classification for valid English transcripts
+- [x] Test safe application automation through J.A.R.V.I.S.
+- [x] Test folder open/list operations
+- [x] Test file search
+- [x] Test multiple-result selection
+- [x] Test create/rename/move/copy using disposable test data
+- [x] Test protected delete operations using disposable test data
+- [x] Test authorization cancellation/failure paths
+- [x] Test error handling for nonexistent targets
+- [x] Complete remaining live E2E automation tests
+- [x] Record final Phase 7.3 checkpoint
+- [x] Record the completed checkpoint in this branch
 
-- [ ] Test safe application automation through J.A.R.V.I.S.
-- [ ] Test folder open/list operations
-- [ ] Test file search
-- [ ] Test multiple-result selection
-- [ ] Test create/rename/move/copy using disposable test data
-- [ ] Test protected delete operations using disposable test data
-- [ ] Test authorization cancellation/failure paths
-- [ ] Test error handling for nonexistent targets
-- [ ] Complete remaining live E2E automation tests
-- [ ] Record final Phase 7.3 checkpoint
-- [ ] Commit Phase 7.3 checkpoint
-
-**Current Phase 7 status:** 🔄 Phase 7.3 live E2E validation
+**Current Phase 7 status:** ✅ Phase 7.3 validation complete according to the project owner's local report
 
 ---
 
@@ -190,16 +189,19 @@ These are Phase 8.1 integration-hardening tasks. They should be addressed before
 
 ### Phase 8.2 — Long-Term Memory System
 
-- [ ] Design a dedicated JARVIS memory architecture instead of treating conversation history as memory
-- [ ] Separate episodic memory from persistent semantic memory
-- [ ] Store relevant user facts and durable information
-- [ ] Store relevant interaction history/events
-- [ ] Add memory creation/update rules
-- [ ] Prevent irrelevant or low-value conversation from becoming persistent memory
-- [ ] Support memory relevance retrieval for the current query
-- [ ] Support memory updates when newer information supersedes older information
-- [ ] Support memory expiration for temporary working context
-- [ ] Add memory persistence and retrieval regression tests
+- [x] Design a dedicated JARVIS memory architecture instead of treating conversation history as memory
+- [x] Separate episodic memory from persistent semantic memory
+- [x] Store high-confidence durable user facts and preferences via selective LLM extraction
+- [x] Store successful automation interaction events as episodic memories
+- [x] Add explicit memory creation/update rules and confidence/importance gates
+- [x] Prevent ordinary questions and low-value conversation from automatically becoming persistent memory through a heuristic extraction gate
+- [x] Support query-relevance retrieval using lexical ranking over active memories
+- [x] Supersede previous semantic values when a new value arrives for the same key
+- [x] Support memory expiration; episodic records default to a configurable 90-day TTL
+- [x] Add memory persistence/retrieval/update/expiry regression tests in `tests/test_memory.py`
+- [ ] Run `pytest -v tests/test_memory.py` and the full suite in the local Python 3.11 environment
+
+**Phase 8.2 status:** 🟡 Implementation committed; local regression execution remains pending. The implementation uses SQLite and lexical retrieval; embeddings/vector search and a dedicated memory-management HUD are not part of this sub-phase implementation.
 
 ### Phase 8.3 — User Profile / Preferences / Working Context
 
@@ -399,15 +401,15 @@ PHASE 6
   ✅ Conversational System
         ↓
 PHASE 7
-  🔄 Desktop Automation / Agent
+  ✅ Desktop Automation / Agent
       ├─ 7.1 ✅ Secure Automation Foundation
       ├─ 7.2 ✅ Desktop Application Control
-      └─ 7.3 🔄 Filesystem Automation — Live E2E Checkpoint
+      └─ 7.3 ✅ Filesystem Automation — local E2E validation reported complete
         ↓
 PHASE 8
   🟡 Contextual foundation present; overall phase incomplete
       ├─ 8.1 🟡 Interpreter exists; runtime integration and validation open
-      ├─ 8.2 ⏳ Long-Term Memory
+      ├─ 8.2 🟡 Long-Term Memory — implementation committed; tests pending
       ├─ 8.3 ⏳ User Profile / Working Context
       ├─ 8.4 ⏳ Conversation Summarization
       ├─ 8.5 ⏳ Contextual Follow-Ups
