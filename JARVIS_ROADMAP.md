@@ -197,7 +197,7 @@ A live clarification test exposed a separate file-open routing gap: `open file <
 - The contextual interpreter still only produces meaning. Deterministic routing and the existing authorization/face-authentication gate remain responsible for execution.
 - Added regression tests for fresh-session voice interpretation, fresh-session target actions, clear app launch fast paths, pending/context triggers, interpretation mode, explicit low-confidence clarification, boolean normalization, and raw/interpreted persistence.
 
-Remaining work: some legacy automation routes (such as the older app/YouTube/messaging path) are not yet unified under the structured action-history path. The owner reports that the post-fix file-open regression tests, full suite, and live file-open test passed on 2026-10-09. The newly added Phase 8.3 profile/interpreter tests are awaiting their first local run.
+Remaining work: some legacy automation routes (such as the older app/YouTube/messaging path) are not yet unified under the structured action-history path. The owner reports that the post-fix file-open regression tests, full suite, and live file-open test passed on 2026-10-09. The Phase 8.3 focused tests, full suite, and live preference-retrieval test are now reported passing by the project owner.
 
 ### Phase 8.2 — Long-Term Memory System
 
@@ -212,7 +212,7 @@ Remaining work: some legacy automation routes (such as the older app/YouTube/mes
 - [x] Support memory expiration; episodic records default to a configurable 90-day TTL
 - [x] Add memory persistence/retrieval/update/expiry regression tests in `tests/test_memory.py`
 - [x] Run focused memory/context regression suite — 16/16 tests passed locally on 2026-10-09
-- [x] Run the complete regression suite — 56/56 tests passed locally after the file-open routing/path fix (reported by project owner on 2026-10-09; 6 dependency warnings in the earlier 53-test run)
+- [x] Run the complete regression suite — 63/63 tests reported passing locally after Phase 8.3 profile/context changes (project owner report, 2026-10-09)
 
 **Phase 8.2 status:** ✅ Implemented and automated regression suite passing. The implementation uses SQLite and lexical retrieval; embeddings/vector search and a dedicated memory-management HUD are not part of this sub-phase implementation.
 
@@ -220,7 +220,7 @@ Remaining work: some legacy automation routes (such as the older app/YouTube/mes
 
 Initial implementation is committed on `test-jarvis` across `engine/user_context.py`, contextual interpreter/command wiring, `.env.example`, and `tests/test_user_context.py`. Two interpreter tests cover profile context triggers and prompt isolation. Five profile tests cover category persistence, relevance filtering, unrelated-context exclusion, sensitive/low-confidence rejection, and backward-compatible categorization of existing `user.*`/`project.*` memory keys.
 
-The profile tests and updated full suite have not yet been run locally at this checkpoint. The expected full suite count is 63 if all existing 56 tests and 7 new tests pass; confirm using pytest rather than treating the expected count as a result.
+The project owner subsequently reported that all Phase 8.3 focused tests, the full suite, and live preference-retrieval test passed locally on 2026-10-09.
 
 ### Phase 8.3 — User Profile / Preferences / Working Context
 
@@ -233,19 +233,22 @@ The profile tests and updated full suite have not yet been run locally at this c
 - [x] Pass query-relevant user profile context to the contextual interpreter and response prompt
 - [x] Filter profile retrieval by lexical relevance and label profile text as reference data, not instructions
 - [x] Add focused tests for profile persistence, category mapping, sensitive/low-confidence rejection, and relevance filtering
-- [ ] Run the new Phase 8.3 profile/context tests locally
-- [ ] Run the full regression suite with Phase 8.3 changes
-- [ ] Complete live profile-preference retrieval tests in JARVIS
+- [x] Run the new Phase 8.3 profile/context tests locally — owner reports passing
+- [x] Run the full regression suite with Phase 8.3 changes — owner reports all tests passing (63 tests expected)
+- [x] Complete live profile-preference retrieval tests in JARVIS — owner reports passing
 
 ### Phase 8.4 — Conversation Summarization & Context Compression
 
-- [ ] Summarize long conversations instead of continually expanding the raw prompt
-- [ ] Maintain recent turns plus compact historical summaries
-- [ ] Generate/update summaries when conversations become large
-- [ ] Preserve important facts, decisions, unresolved tasks, and references in summaries
-- [ ] Avoid losing important context during summarization
-- [ ] Validate summarized-context conversations against equivalent full-history conversations
-- [ ] Add regression tests for long-context continuity
+- [x] Add `engine/conversation_summary.py` for rolling conversation summaries
+- [x] Maintain compact historical summary plus a configurable recent-turn window
+- [x] Trigger summary refresh after `JARVIS_SUMMARY_TRIGGER_TURNS` is exceeded
+- [x] Preserve goals, explicit facts, decisions, filenames/paths, constraints, unresolved questions and pending tasks in the summary prompt
+- [x] Fall back to a bounded extractive recap if the LLM fails, returns an empty response, or returns an oversized summary
+- [x] Add summary enable/disable and summary/input size settings to `.env.example`
+- [x] Add tests for trigger behavior, rolling updates, context reset, disabled mode, LLM prompts, and fallback handling
+- [ ] Run Phase 8.4 focused summarization tests locally
+- [ ] Run the full regression suite with Phase 8.4 changes
+- [ ] Validate long-conversation continuity live in JARVIS
 
 ### Phase 8.5 — Contextual Follow-Ups & Reference Resolution
 
@@ -431,9 +434,9 @@ PHASE 7
 PHASE 8
   🟡 Contextual foundation present; overall phase incomplete
       ├─ 8.1 ✅ Context interpreter + explicit file-open path validated locally
-      ├─ 8.2 ✅ Long-Term Memory — implementation and 56-test regression suite passing
-      ├─ 8.3 🟡 Structured profile context implemented; new tests pending
-      ├─ 8.4 ⏳ Conversation Summarization
+      ├─ 8.2 ✅ Long-Term Memory — implementation and 63-test regression suite passing
+      ├─ 8.3 ✅ Structured profile context implemented and validated by owner
+      ├─ 8.4 🟡 Rolling conversation summarization implemented; local tests pending
       ├─ 8.5 ⏳ Contextual Follow-Ups
       ├─ 8.6 ⏳ Smarter Intent Detection
       ├─ 8.7 ⏳ Intelligent Error / Fallback Handling
