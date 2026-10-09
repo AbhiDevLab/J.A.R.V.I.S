@@ -765,6 +765,7 @@ When `run.py` is used, the application manages the main JARVIS process and hotwo
 The current checked-in test modules include:
 
 - `tests/test_context_interpreter.py`
+- `tests/test_conversation_summarization.py`
 - `tests/test_dialogue_selection.py`
 - `tests/test_filesystem_matching.py`
 - `tests/test_memory.py`
@@ -779,7 +780,7 @@ Run the full suite from the repository root:
 python -m pytest -v
 ~~~
 
-**Latest completed local verification before the current Phase 8.1 hardening edits:** `43 passed, 6 warnings`. The focused memory/context run completed with `16 passed`. The warnings were emitted by dependencies and did not fail the tests.
+Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; the file-open routing fix brought the reported full suite to 56 passing tests; and the Phase 8.3 profile/context changes brought the reported full suite to 63 passing tests. Phase 8.4 adds seven new summarization tests and is awaiting local validation.
 
 The project owner reports that the file-open regression tests and live explicit-path open passed, and that the complete suite passed after Phase 8.3 changes (63 tests). Phase 8.4 adds seven conversation-summarization tests; run the focused tests and full suite locally before treating Phase 8.4 as validated.
 
