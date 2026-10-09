@@ -174,7 +174,19 @@ JARVIS should treat speech recognition output as an imperfect signal rather than
 - [x] Detect when the transcript is ambiguous rather than forcing an incorrect interpretation
 - [x] Ask a clarification question only when context cannot safely determine the user's intent
 - [x] Add regression tests for context-based interpretation
-- [x] Run current automated regression suite — 27/27 tests passing
+- [x] Run contextual-interpreter regression checkpoint — 27/27 tests passed at the original checkpoint (historical; not re-verified against the current branch head)
+
+**Phase 8.1 status: 🟡 Partial implementation present; integration/closure remains open.**
+
+The interpreter, structured result, contextual prompt, temporary interaction state, and interpreter tests are present in the branch. The full runtime path is not yet consistently context-aware:
+
+- General interpretation in `engine/command.py` runs only when in-memory conversation history exists, so a fresh-session request bypasses it.
+- Completed automation actions are not added to conversation history, limiting follow-ups such as “close that” or “move the previous one.”
+- Raw and interpreted text are not persisted as separate fields; the result object keeps both only during interpretation.
+- Low-confidence responses restore the raw transcript but also clear `needs_clarification`, which can suppress a clarification that the model requested.
+- Re-run the automated suite against the current branch head before treating any historical test count as current.
+
+These are Phase 8.1 integration-hardening tasks. They should be addressed before declaring 8.1 complete, even though much of the interpreter foundation is already implemented.
 
 ### Phase 8.2 — Long-Term Memory System
 
@@ -270,7 +282,7 @@ This is limited to **runtime reliability and fallback behavior**. Full provider/
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** ⏳ Not started
+**Phase 8 status:** 🟡 Partial foundation present; overall Phase 8 is incomplete. Phase 8.2 and later sub-phases have not been implemented.
 
 ---
 
@@ -393,8 +405,8 @@ PHASE 7
       └─ 7.3 🔄 Filesystem Automation — Live E2E Checkpoint
         ↓
 PHASE 8
-  🟡 Intelligence + Context — Next
-      ├─ 8.1 ⏳ Contextual Interpretation
+  🟡 Contextual foundation present; overall phase incomplete
+      ├─ 8.1 🟡 Interpreter exists; runtime integration and validation open
       ├─ 8.2 ⏳ Long-Term Memory
       ├─ 8.3 ⏳ User Profile / Working Context
       ├─ 8.4 ⏳ Conversation Summarization
