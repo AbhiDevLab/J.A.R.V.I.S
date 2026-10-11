@@ -613,6 +613,9 @@ def allCommands(message=1):
                 f"(confidence={intent_result.confidence:.2f}, "
                 f"source={intent_result.source})"
             )
+            # Use the classifier's preserved/corrected query consistently
+            # for both routing and the conversational response path.
+            query = intent_result.normalized_query or query
 
             # Classification selects the pathway only. The deterministic
             # router still constructs AutomationAction objects, and the
