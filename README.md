@@ -257,12 +257,14 @@ JARVIS_SUMMARY_INPUT_MAX_CHARS=12000
 
 ### Phase 8.5 — Contextual Follow-Ups & Reference Resolution
 
-The first Phase 8.5 change connects the existing pending-selection state to contextual interpretation:
+The first Phase 8.5 changes connect the existing pending-selection state to contextual interpretation and tolerate speech-recognition punctuation loss during file search:
 
 - Clear ordinal choices such as “the second one” and wrapped numeric choices such as “option 3” are resolved deterministically before an LLM can paraphrase them.
 - Descriptive answers such as “the one in Downloads” still go through contextual interpretation with the active candidate list supplied.
+- File-name matching retains literal exact-match priority, then compares a punctuation/spacing-insensitive form so transcripts like `jarvis phase85 selection check 20261011 txt` can match `jarvis-phase85-selection-check-20261011.txt`.
+- Duplicate normalized filename matches remain a candidate list rather than being silently guessed.
 - Cancellation (“no”) and the explicit “all” choice are kept intact.
-- Regression coverage lives in `tests/test_contextual_followups.py`.
+- Regression coverage lives in `tests/test_contextual_followups.py` and `tests/test_speech_filename_matching.py`.
 
 **Status:** Initial selection-resolution work is committed; focused tests and the full suite must be run locally. Resolving arbitrary past file/application/task references and more general multi-turn continuation remain open. Ambiguous “yes” / “do it” responses must never bypass explicit confirmation or automation security gates.
 
@@ -779,6 +781,7 @@ The current checked-in test modules include:
 
 - `tests/test_context_interpreter.py`
 - `tests/test_contextual_followups.py`
+- `tests/test_speech_filename_matching.py`
 - `tests/test_conversation_summarization.py`
 - `tests/test_conversation_ui_regression.py`
 - `tests/test_chat_timestamps.py`
