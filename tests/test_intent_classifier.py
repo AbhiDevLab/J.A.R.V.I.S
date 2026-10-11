@@ -139,3 +139,20 @@ def test_explicit_cancellation_of_pending_clarification_is_safe():
     result = classify_intent("cancel", interaction_state=state)
     assert result.intent is SemanticIntent.CANCELLATION
     assert result.should_route_automation is False
+
+
+def test_compound_find_then_open_command_preserves_existing_route():
+    result = classify_intent("Find Godmother and open it")
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.should_route_automation is True
+
+
+def test_explicit_youtube_command_preserves_existing_route():
+    assert classify_intent("play lo-fi music on YouTube").should_route_automation is True
+    assert classify_intent("youtube lo-fi music").should_route_automation is True
+
+
+def test_question_mentioning_youtube_is_not_classified_as_playback():
+    result = classify_intent("What did you recommend on YouTube?")
+    assert result.intent is SemanticIntent.INFORMATION_REQUEST
+    assert result.should_route_automation is False

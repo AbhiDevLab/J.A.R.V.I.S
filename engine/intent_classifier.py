@@ -74,6 +74,15 @@ _CONTACT_COMMAND = re.compile(
     r"(?:make\s+a\s+)?(?:phone|video)\s+call\b)",
     re.IGNORECASE,
 )
+_COMPOUND_FILE_COMMAND = re.compile(
+    r"^\s*(?:please\s+)?(?:find|search for|locate)\s+.+?\s+"
+    r"(?:and then|then|and)\s+(?:open|delete|remove|move|copy|rename)\b",
+    re.IGNORECASE,
+)
+_YOUTUBE_COMMAND = re.compile(
+    r"^\s*(?:please\s+)?(?:(?:play|watch|search|find)\b.*\byoutube\b|youtube(?:\s|$))",
+    re.IGNORECASE,
+)
 _SHELL_COMMAND = re.compile(
     r"^\s*(?:please\s+)?(?:run|execute)\s+(?:a\s+)?(?:shell\s+)?command\b",
     re.IGNORECASE,
@@ -123,6 +132,8 @@ def _explicit_automation(text: str) -> bool:
         or _FILE_SEARCH_COMMAND.match(value)
         or _FILE_LIST_COMMAND.match(value)
         or _CONTACT_COMMAND.match(value)
+        or _COMPOUND_FILE_COMMAND.match(value)
+        or _YOUTUBE_COMMAND.match(value)
         or _SHELL_COMMAND.match(value)
         or _DIRECTORY_LIST_QUESTION.match(value)
     )
