@@ -109,9 +109,10 @@ def test_pending_confirmation_uses_concrete_contextual_action():
 def test_pending_no_is_a_cancellation_not_a_command():
     state = InteractionState()
     state.set("confirmation", prompt="Would you like me to continue?")
-    result = classify_intent("No, cancel that", interaction_state=state)
-    assert result.intent is SemanticIntent.CANCELLATION
-    assert result.should_route_automation is False
+    for reply in ("No", "No, cancel that", "Never mind", "Cancel it"):
+        result = classify_intent(reply, interaction_state=state)
+        assert result.intent is SemanticIntent.CANCELLATION
+        assert result.should_route_automation is False
 
 
 def test_polite_command_is_normalized_for_existing_router():
