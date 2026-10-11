@@ -275,6 +275,9 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 - [ ] Distinguish continuation of a prior task from a new task and handle yes/no/do-it conservatively
 - [ ] Add multi-turn end-to-end tests for contextual follow-ups
 
+
+**Implementation checkpoint (2026-10-11):** Added `engine/reference_resolver.py` to build a bounded, recency-ranked reference index for recent file paths, known applications, contact names, user tasks, and JARVIS answers. The index is now supplied to contextual interpretation and conversational response prompts. Assistant turns that explicitly ask whether to proceed can create a pending confirmation state; clear cancellations are handled directly, while approvals must resolve to a concrete action above the configured confidence threshold. Focused regression cases were added to `tests/test_contextual_followups.py`. Validation is pending on the project owner's Windows environment; keep Phase 8.5 open until the focused and full regression suites and live multi-turn follow-up scenarios pass.
+
 ### Phase 8.6 — Smarter Intent Detection
 
 - [ ] Introduce structured semantic intent representation
