@@ -8,6 +8,53 @@ $(document).ready(function () {
   }
 
 
+  function formatMessageTimestamp(timestamp) {
+    if (!timestamp) {
+      return "";
+    }
+
+    try {
+      const date = timestamp instanceof Date
+        ? timestamp
+        : new Date(timestamp);
+
+      if (Number.isNaN(date.getTime())) {
+        return "";
+      }
+
+      return date.toLocaleString(undefined, {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZoneName: "short",
+      });
+    } catch (e) {
+      return "";
+    }
+  }
+
+
+  function messageTimestampMarkup(timestamp) {
+    if (!timestamp) {
+      return "";
+    }
+
+    const date = timestamp instanceof Date
+      ? timestamp
+      : new Date(timestamp);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    const iso = date.toISOString();
+    return `<time class="chat-message-timestamp" datetime="${iso}" title="UTC: ${iso}">${escapeHtml(formatMessageTimestamp(date))}</time>`;
+  }
+
+
   function formatHistoryDate(timestamp) {
     if (!timestamp) {
       return "";
@@ -20,12 +67,16 @@ $(document).ready(function () {
         return "";
       }
 
-      return date.toLocaleDateString(
+      return date.toLocaleString(
         undefined,
         {
           day: "numeric",
           month: "short",
           year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          timeZoneName: "short",
         }
       );
     } catch (e) {
@@ -348,7 +399,8 @@ $(document).ready(function () {
             ) {
               appendHistoricalUserMessage(
                 message.content,
-                target
+                target,
+                message.timestamp
               );
 
             } else if (
@@ -356,7 +408,8 @@ $(document).ready(function () {
             ) {
               appendHistoricalAssistantMessage(
                 message.content,
-                target
+                target,
+                message.timestamp
               );
             }
 
@@ -376,7 +429,8 @@ $(document).ready(function () {
 
   function appendHistoricalUserMessage(
     message,
-    target
+    target,
+    timestamp
   ) {
     if (!target) {
       return;
@@ -407,6 +461,13 @@ $(document).ready(function () {
       bubble
     );
 
+    const meta = document.createElement("div");
+    meta.className = "chat-message-meta";
+    meta.innerHTML = messageTimestampMarkup(timestamp);
+    if (meta.textContent.trim()) {
+      width.appendChild(meta);
+    }
+
     row.appendChild(
       width
     );
@@ -419,7 +480,8 @@ $(document).ready(function () {
 
   function appendHistoricalAssistantMessage(
     message,
-    target
+    target,
+    timestamp
   ) {
     if (!target) {
       return;
@@ -502,6 +564,16 @@ $(document).ready(function () {
     card.appendChild(
       body
     );
+
+    const footer = document.createElement("div");
+    footer.className = "jarvis-response-footer";
+    footer.innerHTML = `
+      <span><i class="bi bi-stars"></i> JARVIS</span>
+      <span>${messageTimestampMarkup(timestamp)}</span>
+    `;
+    if (footer.textContent.trim()) {
+      card.appendChild(footer);
+    }
 
     width.appendChild(
       card
@@ -1093,7 +1165,7 @@ $(document).ready(function () {
     );
   }
 
-  function senderText(message) {
+  function senderText(message, timestamp) {
     try {
       var chatBox = getActiveConversationTarget();
 
@@ -1107,6 +1179,9 @@ $(document).ready(function () {
             <div class="width-size">
               <div class="sender_message">
                 ${$("<div>").text(message).html()}
+              </div>
+              <div class="chat-message-meta">
+                ${messageTimestampMarkup(timestamp || new Date())}
               </div>
             </div>
           </div>`;
@@ -1242,8 +1317,9 @@ $(document).ready(function () {
   }
 
 
-  function assistantResponse(message) {
+  function assistantResponse(message, timestamp) {
     try {
+      const messageTimestamp = timestamp || new Date();
       hideConversationVoiceStatus();
       hideThinkingIndicator();
 
@@ -1373,6 +1449,9 @@ $(document).ready(function () {
 
         <span class="jarvis-response-status">
           Response ready
+        </span>
+        <span class="chat-message-meta">
+          ${messageTimestampMarkup(messageTimestamp)}
         </span>
       `;
 
@@ -1569,7 +1648,7 @@ $(document).ready(function () {
   eel.expose(assistantResponse);
 
 
-  function receiverText(message) {
+  function receiverText(message, timestamp) {
     try {
       const chatBox =
         getActiveConversationTarget();
@@ -1587,6 +1666,9 @@ $(document).ready(function () {
                 ${$("<div>")
             .text(message)
             .html()}
+              </div>
+              <div class="chat-message-meta">
+                ${messageTimestampMarkup(timestamp || new Date())}
               </div>
             </div>
           </div>`;
