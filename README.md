@@ -268,8 +268,6 @@ The first Phase 8.5 change connects the existing pending-selection state to cont
 
 ---
 
----
-
 # 🖥️ 6. Structured Desktop Automation
 
 J.A.R.V.I.S has a structured automation layer based around actions, routing, execution and authorization.
