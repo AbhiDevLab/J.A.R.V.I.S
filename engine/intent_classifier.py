@@ -158,14 +158,17 @@ def classify_intent(
     normalized = str(query or "").strip()
     state_type = str(_state_value(interaction_state, "state_type", "") or "").strip().lower()
     threshold = _minimum_confidence()
+    control_text = " ".join(
+        re.sub(r"[,.!?;:]+", " ", raw.casefold()).split()
+    )
 
     if not raw and not normalized:
         return _result(SemanticIntent.UNKNOWN, "", 0.0, "deterministic", "empty utterance")
 
-    if state_type == "confirmation" and _CANCEL.fullmatch(raw):
+    if state_type == "confirmation" and _CANCEL.fullmatch(control_text):
         return _result(SemanticIntent.CANCELLATION, raw, 1.0, "pending_state", "explicitly cancelled the pending continuation")
 
-    if state_type == "confirmation" and _AFFIRMATIVE.fullmatch(raw):
+    if state_type == "confirmation" and _AFFIRMATIVE.fullmatch(control_text):
         interpreted_query = str(getattr(interpretation, "query", "") or normalized).strip()
         try:
             confidence = float(getattr(interpretation, "confidence", 0.0) or 0.0)
@@ -196,7 +199,7 @@ def classify_intent(
         command_query = polite.group("command").strip().rstrip(".,!?;:")
         return _result(SemanticIntent.AUTOMATION, command_query, 0.94, "polite_command_heuristic", "polite request normalized to a concrete command")
 
-    if _CANCEL.fullmatch(raw) and state_type in {"clarification", "selection", "selection_or_all", "authorization_confirmation"}:
+    if _CANCEL.fullmatch(control_text) and state_type in {"clarification", "selection", "selection_or_all", "authorization_confirmation"}:
         return _result(SemanticIntent.CANCELLATION, raw, 1.0, "pending_state", "explicitly cancelled a pending interaction")
 
     if bool(getattr(interpretation, "needs_clarification", False)):
@@ -205,7 +208,7 @@ def classify_intent(
     if _explicit_automation(normalized or raw):
         return _result(SemanticIntent.AUTOMATION, normalized or raw, 0.97, "deterministic", "explicit action command")
 
-    if state_type in {"confirmation", "clarification"} and _AFFIRMATIVE.fullmatch(raw):
+    if state_type in {"confirmation", "clarification"} and _AFFIRMATIVE.fullmatch(control_text):
         return _result(SemanticIntent.CONFIRMATION, raw, 0.6, "pending_state", "short approval does not identify an action", needs_clarification=True)
 
     if interpretation is not None:
