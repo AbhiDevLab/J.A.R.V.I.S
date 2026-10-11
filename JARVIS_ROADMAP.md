@@ -291,7 +291,7 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 - [x] Add ambiguous-intent and misheard-command regression tests
 
 
-**Implementation checkpoint (2026-10-11):** Added `engine/intent_classifier.py` with structured `SemanticIntent`/`IntentClassification` results, conservative question-vs-command separation, confidence-aware contextual intent use, and explicit routing eligibility. Integrated it into `engine/command.py`: only classified automation requests reach the structured router or legacy automation fallbacks; the router still creates `AutomationAction` and the existing executor/security gate remains authoritative. Added `tests/test_intent_classifier.py`; focused/full regression and live validation are pending before this sub-phase can be closed.
+**Implementation checkpoint (2026-10-11):** Added `engine/intent_classifier.py` with structured `SemanticIntent`/`IntentClassification` results, conservative question-vs-command separation, confidence-aware contextual intent use, and explicit routing eligibility. Integrated it into `engine/command.py`: only classified automation requests reach the structured router or legacy automation fallbacks; the router still creates `AutomationAction` and the existing executor/security gate remains authoritative. Added `tests/test_intent_classifier.py`; project owner reported 52/52 focused tests and 106/106 full-suite tests passing on 2026-10-11 (six dependency warnings). Live intent-routing validation remains pending before this sub-phase can be closed.
 
 ### Phase 8.7 — Intelligent Error / Fallback Handling
 
