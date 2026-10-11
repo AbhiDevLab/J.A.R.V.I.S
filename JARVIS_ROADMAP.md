@@ -248,21 +248,25 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 - [x] Add tests for trigger behavior, rolling updates, context reset, disabled mode, LLM prompts, and fallback handling
 - [x] Run Phase 8.4 focused summarization tests locally — 7/7 passed on 2026-10-09
 - [x] Run the full regression suite with Phase 8.4 changes — 70/70 passed, 6 dependency warnings, on 2026-10-09
-- [ ] Validate long-conversation continuity live in JARVIS after the summary trigger is crossed
+- [x] Validate long-conversation continuity live in JARVIS after the summary trigger is crossed — `rolling-summary-checkpoint` and its purpose were recalled on 2026-10-11 after multiple additional exchanges
 
-**Phase 8.4 implementation checkpoint:** `engine/conversation_summary.py` and `ConversationManager` integration are committed, with seven regression tests in `tests/test_conversation_summarization.py`. The project owner ran the focused Phase 8.4 suite (7/7 passing) and full suite (70/70 passing with six dependency warnings) locally on 2026-10-09. Only the live long-conversation continuity check remains.
+**Phase 8.4 checkpoint — complete (2026-10-11):** `engine/conversation_summary.py` and `ConversationManager` integration are committed, with seven regression tests in `tests/test_conversation_summarization.py`. The owner confirmed live recall of `rolling-summary-checkpoint` and its purpose after multiple unrelated exchanges. The owner also ran the full regression suite after adding chat timestamps: 75/75 tests passed, with six dependency warnings. Timestamp UI and persistence tests passed 2/2.
 
 **Conversation viewer navigation fix (2026-10-09):** A live UI issue showed that continuing an existing saved conversation hid both the main HUD and SiriWave view after its response; pressing Escape closed the transcript viewer without restoring either view. The viewer close handler now restores the main HUD, and a visible **History** button opens the conversation history sidebar while leaving the current transcript underneath. The project owner reports the three UI regression tests and full suite passed locally after correcting the test's handler extraction; the user also confirmed the history-switch and Escape-recovery UI behavior works. Record the 73-test suite as owner-reported validation.
 
 ### Phase 8.5 — Contextual Follow-Ups & Reference Resolution
 
-- [ ] Support natural follow-ups without requiring the user to repeat context
+- [ ] Support natural follow-ups across conversations/tasks without requiring the user to repeat context
 - [ ] Resolve references to previously mentioned files, applications, people, tasks, and answers
-- [ ] Connect Phase 7 selection state with Phase 8 contextual interpretation
-- [ ] Understand responses such as “the first one”, “yes”, “no”, “that one”, and “do it”
-- [ ] Preserve pending conversational state across multi-turn interactions
-- [ ] Detect when a follow-up belongs to an existing task versus starting a new task
-- [ ] Add multi-turn E2E tests for contextual follow-ups
+- [x] Connect Phase 7 selection state with Phase 8 contextual interpretation for pending candidate lists
+- [x] Resolve clear ordinal and numeric choices deterministically before LLM interpretation (including wrapped forms such as “option 3”)
+- [x] Keep descriptive/ambiguous selection replies on the contextual interpreter with candidate state supplied
+- [x] Add focused regression tests for ordinal selection, numeric wrappers, cancellation/“all”, and descriptive candidate references (`tests/test_contextual_followups.py`)
+- [ ] Run focused Phase 8.5 tests and the complete regression suite after these changes
+- [ ] Extend contextual resolution to prior files, applications, people, tasks, and answers across turns
+- [ ] Preserve pending conversational state across multi-turn interactions beyond the current selection/clarification flows
+- [ ] Distinguish continuation of a prior task from a new task and handle yes/no/do-it conservatively
+- [ ] Add multi-turn end-to-end tests for contextual follow-ups
 
 ### Phase 8.6 — Smarter Intent Detection
 
@@ -313,7 +317,7 @@ This is limited to **runtime reliability and fallback behavior**. Full provider/
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** 🟡 In progress. Phases 8.1–8.3 are implemented and owner-validated; Phase 8.4 focused and full automated tests are passing, with live long-conversation validation still pending. Phases 8.5–8.9 remain open.
+**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated; Phase 8.4 live rolling-summary recall was confirmed on 2026-10-11. Phase 8.5 has an initial deterministic pending-selection resolver and focused regression tests committed, awaiting local execution; broader cross-turn reference resolution and Phases 8.6–8.9 remain open.
 
 ---
 
@@ -440,8 +444,8 @@ PHASE 8
       ├─ 8.1 ✅ Context interpreter + explicit file-open path validated locally
       ├─ 8.2 ✅ Long-Term Memory — implementation and 63-test regression suite passing
       ├─ 8.3 ✅ Structured profile context implemented and validated by owner
-      ├─ 8.4 🟡 Rolling summaries implemented; 70 automated tests pass; live continuity test pending
-      ├─ 8.5 ⏳ Contextual Follow-Ups
+      ├─ 8.4 ✅ Rolling summaries; 75-test baseline passed and live continuity confirmed
+      ├─ 8.5 🟡 Deterministic pending-selection resolution implemented; focused/full tests pending
       ├─ 8.6 ⏳ Smarter Intent Detection
       ├─ 8.7 ⏳ Intelligent Error / Fallback Handling
       ├─ 8.8 ⏳ LLM Provider / Model Fallback
