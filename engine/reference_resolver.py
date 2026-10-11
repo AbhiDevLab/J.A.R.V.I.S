@@ -198,7 +198,7 @@ def is_clear_negative_confirmation(text: str) -> bool:
     value = " ".join(value.split())
     return value in {
         "no", "nope", "no thanks", "no thank you", "cancel", "cancel that",
-        "stop", "abort", "never mind", "nevermind", "don't do it",
+        "stop", "abort", "never mind", "nevermind", "no cancel that", "no stop", "don't do it",
         "do not do it", "leave it", "forget it", "not now",
     }
 

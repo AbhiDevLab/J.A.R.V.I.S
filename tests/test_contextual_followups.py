@@ -155,7 +155,7 @@ def test_pending_confirmation_yes_is_resolved_against_pending_task_context():
     assert "pending_request: open report.pdf" in ask_llm.call_args.args[0]
 
 
-def test_unresolvable_pending_confirmation_does_not_require_guessing():
+def test_confirmation_classifier_does_not_treat_a_new_command_as_yes_or_no():
     from engine.reference_resolver import (
         is_clear_affirmative_confirmation,
         is_clear_negative_confirmation,
