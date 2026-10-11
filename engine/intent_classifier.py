@@ -168,7 +168,10 @@ def classify_intent(
     # A question about an action is not itself an instruction to execute it.
     # Keep natural directory-listing queries routed to their existing safe action.
     if _QUESTION.match(raw) and not _DIRECTORY_LIST_QUESTION.match(raw):
-        return _result(SemanticIntent.INFORMATION_REQUEST, normalized or raw, 0.94, "question_heuristic", "utterance asks for information rather than direct execution")
+        # Preserve the original question if contextual rewriting accidentally
+        # turned it into a command-shaped string; do not pass that rewrite on
+        # to either the automation router or the conversational model.
+        return _result(SemanticIntent.INFORMATION_REQUEST, raw, 0.94, "question_heuristic", "utterance asks for information rather than direct execution")
 
     polite = _POLITE_COMMAND.match(normalized)
     if polite:

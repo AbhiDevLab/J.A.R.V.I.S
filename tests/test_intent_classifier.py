@@ -33,6 +33,7 @@ def test_question_cannot_become_command_due_to_contextual_rewrite():
     )
     assert result.intent is SemanticIntent.INFORMATION_REQUEST
     assert result.should_route_automation is False
+    assert result.normalized_query == "Which file did you just open?"
 
 
 def test_context_corrected_misheard_command_remains_automation():
