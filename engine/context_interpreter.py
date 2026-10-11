@@ -265,6 +265,9 @@ IMPORTANT RULES:
 2. Correct obvious STT mistakes when context strongly supports the correction.
 3. Resolve references such as "it", "that", "this", "there", "the previous one", "the first one", etc. when the context identifies the referent.
 4. If the user is continuing a pending task, interpret the utterance as a continuation of that task.
+4a. If an active interaction state contains a pending confirmation, resolve a clear "yes", "do it", "go ahead", or similar approval into the concrete next action being approved, but only when the action and target are identifiable from context.
+4b. A clear negative reply to a pending confirmation means cancel that pending continuation. A complete, self-contained new request should be treated as a new task rather than forced into the previous one.
+4c. If a short confirmation cannot be resolved into one concrete intended action with high confidence, ask for clarification instead of guessing.
 5. Never invent a filename, person, application, destination, amount, or other missing detail.
 6. Never invent confirmation for a dangerous action.
 7. Never treat uncertain inference as certain.

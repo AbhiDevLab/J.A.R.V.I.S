@@ -18,6 +18,12 @@ from engine.memory import (
     record_episode,
 )
 from engine.user_context import build_user_profile_context
+from engine.reference_resolver import (
+    assistant_requests_confirmation,
+    build_reference_context,
+    is_clear_affirmative_confirmation,
+    is_clear_negative_confirmation,
+)
 from engine.persona import build_jarvis_prompt
 
 from engine.settings_store import (
@@ -418,6 +424,52 @@ def allCommands(message=1):
                 )
                 break
 
+            # A clear rejection cancels only the outstanding confirmation.
+            # It is handled before interpretation so "no" cannot become an
+            # accidental affirmative or be routed as an automation command.
+            current_state = get_interaction_state()
+            if (
+                current_state.state_type == "confirmation"
+                and is_clear_negative_confirmation(raw_transcript)
+            ):
+                cancellation_response = "Understood. I won't proceed with that request."
+                current_state.clear()
+                conversation_manager.add_turn(
+                    raw_transcript,
+                    cancellation_response,
+                )
+                assistant_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+                try:
+                    from engine.mongo_store import save_chat_turn
+
+                    save_chat_turn(
+                        raw_transcript,
+                        cancellation_response,
+                        conversation_id=conversation_manager.conversation_id,
+                        user_timestamp=user_timestamp,
+                        assistant_timestamp=assistant_timestamp,
+                        raw_user_text=raw_transcript,
+                        interpreted_user_text=raw_transcript,
+                        interpretation={
+                            "intent": "cancellation",
+                            "confidence": 1.0,
+                            "used_context": True,
+                        },
+                    )
+                except Exception as persistence_error:
+                    print(f"Confirmation cancellation persistence unavailable: {persistence_error}")
+
+                _safe_display(
+                    "assistantResponse",
+                    cancellation_response,
+                    assistant_timestamp,
+                )
+                speak(
+                    cancellation_response,
+                    language=query_language or "en",
+                )
+                break
+
             # Phase 8.1: preserve the raw utterance and interpret only when
             # context, pending state, memory, or a target-sensitive request
             # makes interpretation useful. Clear known application launches
@@ -426,6 +478,14 @@ def allCommands(message=1):
             memory_context = build_memory_context(query)
             profile_context = build_user_profile_context(query)
             conversation_context = conversation_manager.build_context()
+            reference_context = build_reference_context(
+                conversation_manager.get_messages(),
+                summary=conversation_manager.get_summary(),
+            )
+            if reference_context:
+                conversation_context = "\n\n".join(
+                    part for part in (conversation_context, reference_context) if part
+                )
             interaction_context = get_interaction_state().as_context()
 
             should_interpret = should_interpret_query(
@@ -497,6 +557,37 @@ def allCommands(message=1):
                             language=query_language or "en",
                         )
                         break
+
+                if current_state.state_type == "confirmation":
+                    if is_clear_affirmative_confirmation(raw_transcript):
+                        try:
+                            minimum_confidence = float(
+                                os.getenv(
+                                    "JARVIS_INTERPRETATION_MIN_CONFIDENCE",
+                                    "0.70",
+                                )
+                            )
+                        except (TypeError, ValueError):
+                            minimum_confidence = 0.70
+
+                        if (
+                            interpretation.confidence < minimum_confidence
+                            or interpretation.query.strip().casefold() == raw_transcript.casefold()
+                            or is_clear_affirmative_confirmation(interpretation.query)
+                        ):
+                            # Never route a bare "yes/do it" when the target action
+                            # could not be recovered with sufficient confidence.
+                            speak(
+                                "I couldn't safely determine which action you are approving. "
+                                + (current_state.prompt or "Please state the action you want me to take."),
+                                language=query_language or "en",
+                            )
+                            break
+                        current_state.clear()
+                    else:
+                        # A complete new request supersedes the pending question;
+                        # its relevant history remains available to the interpreter.
+                        current_state.clear()
 
                 query = interpretation.query
                 # A previous clarification has now received a sufficiently
@@ -744,6 +835,8 @@ questions using that context.
                     context_parts.append(memory_context)
                 if profile_context:
                     context_parts.append(profile_context)
+                if reference_context:
+                    context_parts.append(reference_context)
                 context_section = "\n\n".join(context_parts)
 
                 enhanced_prompt = build_jarvis_prompt(
@@ -812,6 +905,17 @@ questions using that context.
                     query,
                     response,
                 )
+
+                if assistant_requests_confirmation(response):
+                    # Persist the assistant's pending question across allCommands
+                    # calls so a later "yes", "do it", or "cancel" is interpreted
+                    # against the right task instead of as a standalone utterance.
+                    get_interaction_state().set(
+                        "confirmation",
+                        prompt=response,
+                        action_type="confirm_previous_task",
+                        pending_request=query,
+                    )
 
                 _safe_display(
                     "assistantResponse",
