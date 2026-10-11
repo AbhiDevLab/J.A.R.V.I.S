@@ -362,6 +362,15 @@ def _is_full_search_root(
         strict=False
     ) in full_roots
 
+def _compact_filename_text(value: str) -> str:
+    """Normalize punctuation/spacing differences common in speech transcripts."""
+    return "".join(
+        character
+        for character in str(value or "").casefold()
+        if character.isalnum()
+    )
+
+
 def _file_match_rank(
     filename: str,
     target: str,
@@ -370,16 +379,21 @@ def _file_match_rank(
 
     Lower rank means a stronger match:
 
-        0 -> exact filename
-        1 -> exact filename stem
-        2 -> target contained in filename stem
-        None -> no match"""
+        0 -> literal exact filename
+        1 -> literal exact filename stem
+        2 -> exact filename after ignoring punctuation/spacing
+        3 -> exact stem after ignoring punctuation/spacing
+        4 -> literal target contained in filename stem
+        5 -> normalized target contained in filename stem
+        None -> no match
+
+    Literal matches always outrank speech-normalized matches. Compact
+    comparison helps when speech recognition turns filename punctuation
+    into spaces (for example, "my-file.txt" -> "my file txt").
+    """
     filename_lower = filename.casefold()
     target_lower = target.casefold()
-
-    stem_lower = Path(
-        filename
-    ).stem.casefold()
+    stem_lower = Path(filename).stem.casefold()
 
     if filename_lower == target_lower:
         return 0
@@ -387,8 +401,21 @@ def _file_match_rank(
     if stem_lower == target_lower:
         return 1
 
-    if target_lower in stem_lower:
+    filename_compact = _compact_filename_text(filename)
+    target_compact = _compact_filename_text(target)
+    stem_compact = _compact_filename_text(Path(filename).stem)
+
+    if target_compact and filename_compact == target_compact:
         return 2
+
+    if target_compact and stem_compact == target_compact:
+        return 3
+
+    if target_lower and target_lower in stem_lower:
+        return 4
+
+    if target_compact and target_compact in stem_compact:
+        return 5
 
     return None
 
