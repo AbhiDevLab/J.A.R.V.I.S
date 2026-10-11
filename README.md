@@ -163,6 +163,7 @@ J.A.R.V.I.S maintains a conversation manager that provides:
 - New-conversation support.
 - Loading of saved conversations.
 - Optional MongoDB persistence.
+- Separate UTC timestamps for user and assistant messages, displayed in the local timezone in chat history.
 - Compact LLM-ready conversation context.
 
 Configuration:
@@ -501,7 +502,7 @@ Current UI functionality includes:
 - Main conversation display.
 - Markdown-aware assistant responses.
 - Response copy controls.
-- Conversation/history viewer.
+- Conversation/history viewer with per-message date/time to the second, rendered in local time with the stored UTC timestamp available on hover.
 - Settings panel.
 - Voice response controls.
 - Responsive rendering for long filesystem results.
@@ -593,6 +594,7 @@ J.A.R.V.I.S/
 │   └── tts.py
 │
 ├── tests/
+│   ├── test_chat_timestamps.py
 │   ├── test_context_interpreter.py
 │   ├── test_conversation_summarization.py
 │   ├── test_dialogue_selection.py
@@ -767,6 +769,7 @@ The current checked-in test modules include:
 - `tests/test_context_interpreter.py`
 - `tests/test_conversation_summarization.py`
 - `tests/test_conversation_ui_regression.py`
+- `tests/test_chat_timestamps.py`
 - `tests/test_dialogue_selection.py`
 - `tests/test_filesystem_matching.py`
 - `tests/test_memory.py`
@@ -783,7 +786,7 @@ python -m pytest -v
 
 Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; the file-open routing fix brought the reported suite to 56 tests; Phase 8.3 profile/context changes brought it to 63; Phase 8.4 focused tests passed `7/7` with the full suite at `70 passed, 6 dependency warnings`; and the latest conversation UI regression tests and 73-test full suite are reported passing by the project owner on 2026-10-09.
 
-The conversation viewer now provides a **History** button while viewing a saved chat. Closing the viewer with Escape restores the main HUD and hides the SiriWave screen. The project owner has confirmed both chat switching and Escape recovery work in the live interface. Phase 8.4's live long-conversation continuity test remains outstanding.
+The conversation viewer provides a **History** button while viewing a saved chat. Closing the viewer with Escape restores the main HUD and hides the SiriWave screen. User and assistant messages display separate timestamps in local date/time, with UTC timestamps available on hover; saved chats retain separate timestamps in MongoDB while older records fall back to their existing turn timestamp. The project owner has confirmed chat switching and Escape recovery work in the live interface. Phase 8.4's live long-conversation continuity test remains outstanding.
 
 ~~~bash
 python -m pytest -v tests/test_conversation_ui_regression.py
