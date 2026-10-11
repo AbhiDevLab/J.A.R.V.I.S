@@ -178,15 +178,20 @@ def classify_intent(
             return _result(SemanticIntent.AUTOMATION, interpreted_query, confidence, "context_interpreter", "affirmative reply resolved to the pending concrete action")
         return _result(SemanticIntent.CONFIRMATION, raw, confidence, "pending_state", "approval target is unresolved", needs_clarification=True)
 
+    # Polite imperative forms ("Could you open ...?") are requests to act,
+    # unlike questions that merely ask about an earlier action ("Which file
+    # did you open?"). Check both original and rewritten text before applying
+    # the question guard.
+    polite = _POLITE_COMMAND.match(normalized) or _POLITE_COMMAND.match(raw)
+
     # A question about an action is not itself an instruction to execute it.
     # Keep natural directory-listing queries routed to their existing safe action.
-    if _QUESTION.match(raw) and not _DIRECTORY_LIST_QUESTION.match(raw):
+    if _QUESTION.match(raw) and not _DIRECTORY_LIST_QUESTION.match(raw) and not polite:
         # Preserve the original question if contextual rewriting accidentally
         # turned it into a command-shaped string; do not pass that rewrite on
         # to either the automation router or the conversational model.
         return _result(SemanticIntent.INFORMATION_REQUEST, raw, 0.94, "question_heuristic", "utterance asks for information rather than direct execution")
 
-    polite = _POLITE_COMMAND.match(normalized)
     if polite:
         command_query = polite.group("command").strip().rstrip(".,!?;:")
         return _result(SemanticIntent.AUTOMATION, command_query, 0.94, "polite_command_heuristic", "polite request normalized to a concrete command")

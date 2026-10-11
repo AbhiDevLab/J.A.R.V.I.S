@@ -116,10 +116,15 @@ def test_pending_no_is_a_cancellation_not_a_command():
 
 
 def test_polite_command_is_normalized_for_existing_router():
-    result = classify_intent("Can you please open README.md?")
-    assert result.intent is SemanticIntent.AUTOMATION
-    assert result.normalized_query == "open README.md"
-    assert result.should_route_automation is True
+    for request in (
+        "Can you please open README.md?",
+        "Would you open README.md?",
+        "Could you please open README.md?",
+    ):
+        result = classify_intent(request)
+        assert result.intent is SemanticIntent.AUTOMATION
+        assert result.normalized_query == "open README.md"
+        assert result.should_route_automation is True
 
 
 def test_ambiguous_statement_defaults_to_conversation_not_automation():
