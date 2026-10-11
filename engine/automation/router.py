@@ -566,6 +566,25 @@ def _route_open(
             risk=RiskLevel.LOW,
         )
 
+    # If the target is neither a known application nor a folder, try it as a
+    # filename before falling back to a guessed executable. This lets a natural
+    # request such as "open project-notes txt" reach the structured file-open
+    # flow, where ambiguous matches can be presented for explicit selection.
+    file_matches = search_paths(
+        target,
+        expected_type="file",
+        max_results=50,
+    )
+
+    if file_matches:
+        return AutomationAction(
+            action_type="open_file",
+            parameters={
+                "source": target,
+            },
+            risk=RiskLevel.LOW,
+        )
+
     return AutomationAction(
         action_type="open_application",
         parameters={
