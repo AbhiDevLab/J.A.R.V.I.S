@@ -67,14 +67,39 @@ def _cancelled(
 def _interpret_dialogue_response(
     response: str,
 ) -> str:
-    """Interpret a short response against the active dialogue state."""
+    """Resolve clear pending-task replies deterministically before using an LLM.
+
+    Phase 8.5: short ordinal/number choices must not be paraphrased by the
+    contextual interpreter before the Phase 7 selection parser receives them.
+    Descriptive or genuinely ambiguous replies still use the active state as
+    interpretation context. This function never executes the selected action.
+    """
+    cleaned = _clean(response)
     state = get_interaction_state()
 
     if not state.has_state():
-        return _clean(response)
+        return cleaned
+
+    normalized = _normalize(cleaned)
+
+    # Explicit cancellation is always left untouched so the caller can cancel
+    # the pending action using its existing cancellation policy.
+    if normalized in CANCELLATION_PHRASES:
+        return normalized
+
+    if state.state_type in {"selection", "selection_or_all"}:
+        if state.state_type == "selection_or_all" and normalized == "all":
+            return "all"
+
+        # Reuse the established Phase 7 parser. Returning its canonical index
+        # prevents the LLM from accidentally changing "the second one" into a
+        # natural-language paraphrase the downstream parser cannot recognize.
+        index = _parse_selection_index(cleaned, len(state.candidates))
+        if index is not None:
+            return str(index)
 
     result = interpret_query(
-        response,
+        cleaned,
         conversation_context="",
         interaction_state=state.as_context(),
     )
@@ -84,7 +109,7 @@ def _interpret_dialogue_response(
     if interpreted:
         return interpreted
 
-    return _clean(response)
+    return cleaned
 
 SELECTION_NUMBER_WORDS = {
     "one": 1,
