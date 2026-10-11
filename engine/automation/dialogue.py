@@ -261,6 +261,14 @@ def _parse_selection_index(
         tokens
     )
 
+    # Numeric choices may include wrappers ("option 3", "choice 2"),
+    # so re-check for digits after removing those wrappers.
+    if normalized_core.isdigit():
+        index = int(normalized_core)
+        if 1 <= index <= max_items:
+            return index
+        return None
+
     # ---------------------------------------------------------
     # Spoken cardinal numbers.
     # ---------------------------------------------------------
