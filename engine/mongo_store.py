@@ -173,6 +173,8 @@ def save_chat_turn(
     raw_user_text: Optional[str] = None,
     interpreted_user_text: Optional[str] = None,
     interpretation: Optional[Dict[str, Any]] = None,
+    user_timestamp: Optional[str] = None,
+    assistant_timestamp: Optional[str] = None,
 ) -> None:
     """
     Save one user/assistant conversation turn.
@@ -186,10 +188,14 @@ def save_chat_turn(
         return
 
     try:
+        turn_timestamp = (
+            assistant_timestamp
+            or datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+        )
         doc = {
-            "timestamp": datetime.now(
-                timezone.utc
-            ).isoformat(),
+            # Preserve the existing sort/list field while retaining separate
+            # timestamps for each message in the turn.
+            "timestamp": turn_timestamp,
 
             "conversation_id": (
                 conversation_id or ""
@@ -211,6 +217,11 @@ def save_chat_turn(
 
             "meta": meta or {},
         }
+
+        if user_timestamp is not None:
+            doc["user_timestamp"] = str(user_timestamp)
+        if assistant_timestamp is not None:
+            doc["assistant_timestamp"] = str(assistant_timestamp)
 
         # Backward-compatible audit fields: older consumers continue to read
         # user_text, while diagnostics/memory tooling can distinguish speech
@@ -261,6 +272,8 @@ def get_chat_turns(
                 {
                     "_id": 0,
                     "timestamp": 1,
+                    "user_timestamp": 1,
+                    "assistant_timestamp": 1,
                     "conversation_id": 1,
                     "model": 1,
                     "user_text": 1,
@@ -401,6 +414,8 @@ def get_conversation(
                 {
                     "_id": 0,
                     "timestamp": 1,
+                    "user_timestamp": 1,
+                    "assistant_timestamp": 1,
                     "conversation_id": 1,
                     "model": 1,
                     "user_text": 1,
