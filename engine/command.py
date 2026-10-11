@@ -18,6 +18,11 @@ from engine.memory import (
     record_episode,
 )
 from engine.user_context import build_user_profile_context
+from engine.legacy_routing import (
+    is_legacy_message_command,
+    is_legacy_open_command,
+    is_legacy_youtube_command,
+)
 from engine.reference_resolver import (
     assistant_requests_confirmation,
     build_reference_context,
@@ -682,21 +687,17 @@ def allCommands(message=1):
 
                 break
 
-            if "open" in query:
+            if is_legacy_open_command(query):
                 from engine.features import openCommand
 
                 openCommand(query)
 
-            elif "youtube" in query:
+            elif is_legacy_youtube_command(query):
                 from engine.features import PlayYoutube
 
                 PlayYoutube(query)
 
-            elif (
-                "send message" in query
-                or "phone call" in query
-                or "video call" in query
-            ):
+            elif is_legacy_message_command(query):
                 from engine.features import (
                     findContact,
                     whatsApp,

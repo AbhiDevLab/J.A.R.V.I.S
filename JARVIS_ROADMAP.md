@@ -278,6 +278,8 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 
 **Implementation checkpoint (2026-10-11):** Added `engine/reference_resolver.py` to build a bounded, recency-ranked reference index for recent file paths, known applications, contact names, user tasks, and JARVIS answers. The index is now supplied to contextual interpretation and conversational response prompts. Assistant turns that explicitly ask whether to proceed can create a pending confirmation state; clear cancellations are handled directly, while approvals must resolve to a concrete action above the configured confidence threshold. Focused regression cases were added to `tests/test_contextual_followups.py`. Validation is pending on the project owner's Windows environment; keep Phase 8.5 open until the focused and full regression suites and live multi-turn follow-up scenarios pass.
 
+**Legacy fallback routing regression (2026-10-11):** Fixed a bug where the fallback's substring check for `open` treated questions such as “Which file did you just open?” as application-launch commands, causing Windows to try launching `which.exe`. Legacy open, YouTube, and message/call fallbacks now require explicit command prefixes. Added `tests/test_legacy_routing.py`; focused/full local validation is pending.
+
 ### Phase 8.6 — Smarter Intent Detection
 
 - [ ] Introduce structured semantic intent representation
