@@ -799,7 +799,7 @@ Run the full suite from the repository root:
 python -m pytest -v
 ~~~
 
-Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; file-open routing brought the reported suite to 56 tests; Phase 8.3 profile/context changes brought it to 63; Phase 8.4 focused tests passed `7/7` and the full suite reached 70 tests; the 2026-10-11 timestamp update then passed `2/2` focused tests and `75/75` in the full suite, with six dependency warnings. The owner also confirmed live rolling-summary recall on 2026-10-11. Phase 8.5 follow-up tests have since been added and must be run locally.
+Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; file-open routing brought the reported suite to 56 tests; Phase 8.3 profile/context changes brought it to 63; Phase 8.4 focused tests passed `7/7` and the full suite reached 70 tests; the 2026-10-11 timestamp update then passed `2/2` focused tests and `75/75` in the full suite, with six dependency warnings. The owner also confirmed live rolling-summary recall on 2026-10-11. Phase 8.5 follow-up tests and a regression test for generic spoken file-open routing have been added; pull the latest branch and rerun the focused and full suites, then repeat the live ambiguous filename-selection test.
 
 The conversation viewer provides a **History** button while viewing a saved chat. Closing the viewer with Escape restores the main HUD and hides the SiriWave screen. User and assistant messages display separate timestamps in local date/time, with UTC timestamps available on hover; saved chats retain separate timestamps in MongoDB while older records fall back to their existing turn timestamp. The owner confirmed chat switching, Escape recovery, and live long-conversation continuity. Phase 8.4 is closed; Phase 8.5 has started with deterministic pending-selection resolution, while broader reference resolution remains in progress.
 
@@ -854,7 +854,7 @@ Phase 8
       ├─ 8.2 ✅ Persistent memory implemented; included in passing 56-test suite
       ├─ 8.3 ✅ Structured profile context implemented and validated by owner
       ├─ 8.4 ✅ Rolling summaries; 75-test baseline passed and live continuity confirmed
-      ├─ 8.5 🟡 Deterministic pending-selection resolution implemented; focused/full tests pending
+      ├─ 8.5 🟡 Pending-selection resolution and generic spoken file-open fallback implemented; latest changes need focused/full tests and live validation
       ├─ 8.6 ⏳ Smarter structured intent detection
       ├─ 8.7 ⏳ Error recovery
       ├─ 8.8 ⏳ Runtime provider/model fallback
