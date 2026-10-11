@@ -381,15 +381,15 @@ def _file_match_rank(
 
         0 -> literal exact filename
         1 -> literal exact filename stem
-        2 -> exact filename after ignoring punctuation/spacing
-        3 -> exact stem after ignoring punctuation/spacing
-        4 -> literal target contained in filename stem
+        2 -> literal target contained in filename stem (legacy priority)
+        3 -> exact filename after ignoring punctuation/spacing
+        4 -> exact stem after ignoring punctuation/spacing
         5 -> normalized target contained in filename stem
         None -> no match
 
-    Literal matches always outrank speech-normalized matches. Compact
-    comparison helps when speech recognition turns filename punctuation
-    into spaces (for example, "my-file.txt" -> "my file txt").
+    Literal matching priorities remain unchanged. Compact comparison is a
+    lower-priority fallback for speech recognition that turns filename
+    punctuation into spaces (for example, "my-file.txt" -> "my file txt").
     """
     filename_lower = filename.casefold()
     target_lower = target.casefold()
@@ -401,17 +401,18 @@ def _file_match_rank(
     if stem_lower == target_lower:
         return 1
 
+    # Preserve the established literal-substring rank used by existing callers.
+    if target_lower and target_lower in stem_lower:
+        return 2
+
     filename_compact = _compact_filename_text(filename)
     target_compact = _compact_filename_text(target)
     stem_compact = _compact_filename_text(Path(filename).stem)
 
     if target_compact and filename_compact == target_compact:
-        return 2
-
-    if target_compact and stem_compact == target_compact:
         return 3
 
-    if target_lower and target_lower in stem_lower:
+    if target_compact and stem_compact == target_compact:
         return 4
 
     if target_compact and target_compact in stem_compact:
@@ -684,7 +685,7 @@ def _resolve_natural_folder_hierarchy(
         "J.A.R.V.I.S folder under Web folder under Dev folder"
 
     resolves as:
-        C:\Dev -> Web -> J.A.R.V.I.S
+        C:\\Dev -> Web -> J.A.R.V.I.S
     """
 
     parts = _natural_location_parts(
