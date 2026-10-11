@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 import speech_recognition as sr
 import eel
 
@@ -151,6 +152,7 @@ def loadConversation(conversation_id):
                     {
                         "role": "user",
                         "content": str(user_text),
+                        "timestamp": turn.get("user_timestamp") or turn.get("timestamp"),
                     }
                 )
 
@@ -159,6 +161,7 @@ def loadConversation(conversation_id):
                     {
                         "role": "assistant",
                         "content": str(assistant_text),
+                        "timestamp": turn.get("assistant_timestamp") or turn.get("timestamp"),
                     }
                 )
 
@@ -399,10 +402,12 @@ def allCommands(message=1):
     # listens for the next query and continues without another activation.
     while True:
         raw_transcript = str(query or "").strip()
+        user_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         if query:
             _safe_display(
                 "senderText",
                 query,
+                user_timestamp,
             )
 
         try:
@@ -750,6 +755,7 @@ questions using that context.
                 response = ask_llm(
                     enhanced_prompt
                 )
+                assistant_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
                 print(
                     "JARVIS:",
@@ -778,6 +784,8 @@ questions using that context.
                             conversation_manager
                             .conversation_id
                         ),
+                        user_timestamp=user_timestamp,
+                        assistant_timestamp=assistant_timestamp,
                         raw_user_text=raw_transcript,
                         interpreted_user_text=query,
                         interpretation=(
@@ -808,6 +816,7 @@ questions using that context.
                 _safe_display(
                     "assistantResponse",
                     response,
+                    assistant_timestamp,
                 )
 
                 interrupted = speak(
