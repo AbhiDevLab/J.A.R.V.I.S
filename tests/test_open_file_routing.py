@@ -27,6 +27,29 @@ def test_named_file_in_directory_routes_to_open_file():
     ) / "README.md"
 
 
+def test_generic_open_routes_to_matching_file_after_app_lookup(monkeypatch, tmp_path):
+    from engine.automation import router
+
+    target = tmp_path / "jarvis-phase85-selection-check-20261011.txt"
+    target.write_text("TEST FILE", encoding="utf-8")
+
+    monkeypatch.setattr(router, "resolve_application", lambda _name: None)
+
+    def fake_search_paths(name, expected_type=None, max_results=None):
+        if expected_type == "file":
+            return [target]
+        return []
+
+    monkeypatch.setattr(router, "search_paths", fake_search_paths)
+
+    command = "Open jarvis phase85 selection check 20261011 txt"
+    action = route_command(command)
+
+    assert action is not None
+    assert action.action_type == "open_file"
+    assert action.parameters["source"] == "jarvis phase85 selection check 20261011 txt"
+
+
 def test_open_file_prefers_an_exact_path_over_fuzzy_search(tmp_path):
     target = tmp_path / "README.md"
     target.write_text("# test", encoding="utf-8")
