@@ -9,7 +9,7 @@ def test_speech_normalized_filename_matches_hyphens_and_extension_spacing():
             "jarvis-phase85-selection-check-20261011.txt",
             "jarvis phase85 selection check 20261011 txt",
         )
-        == 2
+        == 3
     )
 
 
