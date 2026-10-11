@@ -282,13 +282,16 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 
 ### Phase 8.6 — Smarter Intent Detection
 
-- [ ] Introduce structured semantic intent representation
-- [ ] Distinguish conversation, information requests, automation requests, clarifications, confirmations, and cancellations
-- [ ] Use contextual interpretation to improve intent detection when STT is imperfect
-- [ ] Preserve deterministic routing for security-sensitive automation
-- [ ] Convert interpreted automation intent into existing `AutomationAction` structures
-- [ ] Do not allow LLM interpretation to bypass authorization/security gates
-- [ ] Add ambiguous-intent and misheard-command regression tests
+- [x] Introduce structured semantic intent representation
+- [x] Distinguish conversation, information requests, automation requests, clarifications, confirmations, and cancellations
+- [x] Use contextual interpretation to improve intent detection when STT is imperfect
+- [x] Preserve deterministic routing for security-sensitive automation
+- [x] Convert interpreted automation intent into existing `AutomationAction` structures
+- [x] Do not allow LLM interpretation to bypass authorization/security gates
+- [x] Add ambiguous-intent and misheard-command regression tests
+
+
+**Implementation checkpoint (2026-10-11):** Added `engine/intent_classifier.py` with structured `SemanticIntent`/`IntentClassification` results, conservative question-vs-command separation, confidence-aware contextual intent use, and explicit routing eligibility. Integrated it into `engine/command.py`: only classified automation requests reach the structured router or legacy automation fallbacks; the router still creates `AutomationAction` and the existing executor/security gate remains authoritative. Added `tests/test_intent_classifier.py`; focused/full regression and live validation are pending before this sub-phase can be closed.
 
 ### Phase 8.7 — Intelligent Error / Fallback Handling
 

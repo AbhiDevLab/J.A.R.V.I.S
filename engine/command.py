@@ -7,6 +7,7 @@ from engine.tts import speak as _tts_speak
 from engine.stt import detect_text_language, transcribe_audio
 from engine.llm_client import ask_llm
 from engine.conversation import get_conversation_manager
+from engine.intent_classifier import classify_intent
 from engine.context_interpreter import (
     interpret_query,
     should_interpret_query,
@@ -600,8 +601,26 @@ def allCommands(message=1):
                 if current_state.state_type == "clarification":
                     current_state.clear()
 
-            automation_action = route_command(
-                query
+            intent_result = classify_intent(
+                query,
+                raw_text=raw_transcript,
+                interpretation=interpretation,
+                interaction_state=get_interaction_state(),
+            )
+            print(
+                "Semantic intent: "
+                f"{intent_result.intent.value} "
+                f"(confidence={intent_result.confidence:.2f}, "
+                f"source={intent_result.source})"
+            )
+
+            # Classification selects the pathway only. The deterministic
+            # router still constructs AutomationAction objects, and the
+            # existing executor remains responsible for authorization.
+            automation_action = (
+                route_command(intent_result.normalized_query or query)
+                if intent_result.should_route_automation
+                else None
             )
 
             if automation_action is not None:
@@ -687,17 +706,17 @@ def allCommands(message=1):
 
                 break
 
-            if is_legacy_open_command(query):
+            if intent_result.should_route_automation and is_legacy_open_command(query):
                 from engine.features import openCommand
 
                 openCommand(query)
 
-            elif is_legacy_youtube_command(query):
+            elif intent_result.should_route_automation and is_legacy_youtube_command(query):
                 from engine.features import PlayYoutube
 
                 PlayYoutube(query)
 
-            elif is_legacy_message_command(query):
+            elif intent_result.should_route_automation and is_legacy_message_command(query):
                 from engine.features import (
                     findContact,
                     whatsApp,
