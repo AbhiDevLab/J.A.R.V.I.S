@@ -261,8 +261,11 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 - [x] Connect Phase 7 selection state with Phase 8 contextual interpretation for pending candidate lists
 - [x] Resolve clear ordinal and numeric choices deterministically before LLM interpretation (including wrapped forms such as “option 3”)
 - [x] Keep descriptive/ambiguous selection replies on the contextual interpreter with candidate state supplied
+- [x] Make filename matching tolerant to speech recognition replacing punctuation with spaces, while preserving literal exact-match priority
 - [x] Add focused regression tests for ordinal selection, numeric wrappers, cancellation/“all”, and descriptive candidate references (`tests/test_contextual_followups.py`)
-- [ ] Run focused Phase 8.5 tests and the complete regression suite after these changes
+- [x] Add regression tests for hyphen/extension normalization and duplicate normalized filename candidates (`tests/test_speech_filename_matching.py`)
+- [ ] Run focused Phase 8.5 and filename-matching tests, then the complete regression suite after these changes
+
 - [ ] Extend contextual resolution to prior files, applications, people, tasks, and answers across turns
 - [ ] Preserve pending conversational state across multi-turn interactions beyond the current selection/clarification flows
 - [ ] Distinguish continuation of a prior task from a new task and handle yes/no/do-it conservatively
@@ -317,7 +320,7 @@ This is limited to **runtime reliability and fallback behavior**. Full provider/
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated; Phase 8.4 live rolling-summary recall was confirmed on 2026-10-11. Phase 8.5 has an initial deterministic pending-selection resolver and focused regression tests committed, awaiting local execution; broader cross-turn reference resolution and Phases 8.6–8.9 remain open.
+**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated; Phase 8.4 live rolling-summary recall was confirmed on 2026-10-11. Phase 8.5 now includes deterministic pending-selection resolution and speech-tolerant filename matching, with regression tests committed and local execution pending; broader cross-turn reference resolution and Phases 8.6–8.9 remain open.
 
 ---
 
@@ -445,7 +448,7 @@ PHASE 8
       ├─ 8.2 ✅ Long-Term Memory — implementation and 63-test regression suite passing
       ├─ 8.3 ✅ Structured profile context implemented and validated by owner
       ├─ 8.4 ✅ Rolling summaries; 75-test baseline passed and live continuity confirmed
-      ├─ 8.5 🟡 Deterministic pending-selection resolution implemented; focused/full tests pending
+      ├─ 8.5 🟡 Pending-selection resolution + speech-tolerant file matching implemented; tests pending
       ├─ 8.6 ⏳ Smarter Intent Detection
       ├─ 8.7 ⏳ Intelligent Error / Fallback Handling
       ├─ 8.8 ⏳ LLM Provider / Model Fallback
