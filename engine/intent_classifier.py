@@ -43,7 +43,7 @@ class IntentClassification:
 _CANCEL = re.compile(
     r"^(?:(?:no|nope)(?:\s*[,;.!?]\s*|\s+)(?:cancel(?:\s+(?:that|it))?|stop|abort|"
     r"never\s+mind|nevermind|forget it|leave it|don't do it|do not do it)|"
-    r"cancel(?:\s+(?:that|it))?|stop|abort|never\s+mind|nevermind|"
+    r"no|nope|cancel(?:\s+(?:that|it))?|stop|abort|never\s+mind|nevermind|"
     r"forget it|leave it|don't do it|do not do it|not now)[.! ]*$",
     re.IGNORECASE,
 )
