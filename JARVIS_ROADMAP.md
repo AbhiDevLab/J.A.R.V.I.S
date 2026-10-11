@@ -266,8 +266,9 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 - [x] Add regression tests for hyphen/extension normalization and duplicate normalized filename candidates (`tests/test_speech_filename_matching.py`)
 - [x] Route generic `open <filename>` requests into structured file-open resolution when no known application or folder matches
 - [x] Add a regression test for generic speech-style file-open routing (`tests/test_open_file_routing.py`)
-- [ ] Run focused Phase 8.5, filename-matching, and file-open routing tests, then the complete regression suite after these routing changes
-- [ ] Re-run the live ambiguous filename-selection test after the generic-open routing fix
+- [x] Run focused Phase 8.5, filename-matching, and file-open routing tests — 23/23 passed locally on 2026-10-11
+- [x] Run the complete regression suite after the routing changes — 84/84 passed, with 6 dependency warnings, on 2026-10-11
+- [x] Re-run the live ambiguous filename-selection test after the generic-open routing fix — JARVIS displayed both matching paths; the spoken selection “the second one” opened the file in folder B containing `TEST FILE B` (owner-verified 2026-10-11)
 
 - [ ] Extend contextual resolution to prior files, applications, people, tasks, and answers across turns
 - [ ] Preserve pending conversational state across multi-turn interactions beyond the current selection/clarification flows
@@ -323,7 +324,7 @@ This is limited to **runtime reliability and fallback behavior**. Full provider/
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated; Phase 8.4 live rolling-summary recall was confirmed on 2026-10-11. Phase 8.5 now includes deterministic pending-selection resolution and speech-tolerant filename matching, with regression tests committed and local execution pending; broader cross-turn reference resolution and Phases 8.6–8.9 remain open.
+**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated; Phase 8.4 live rolling-summary recall was confirmed on 2026-10-11. Phase 8.5 deterministic selection, speech-tolerant filename matching, the focused test suite (23/23), the complete suite (84/84), and the live duplicate-file selection scenario are now owner-validated (2026-10-11). Broader cross-turn reference resolution and Phases 8.6–8.9 remain open.
 
 ---
 
@@ -451,7 +452,7 @@ PHASE 8
       ├─ 8.2 ✅ Long-Term Memory — implementation and 63-test regression suite passing
       ├─ 8.3 ✅ Structured profile context implemented and validated by owner
       ├─ 8.4 ✅ Rolling summaries; 75-test baseline passed and live continuity confirmed
-      ├─ 8.5 🟡 Pending-selection resolution + speech-tolerant file matching implemented; tests pending
+      ├─ 8.5 🟡 Pending-selection resolution + speech-tolerant file matching; 23 focused tests, 84 full-suite tests, and live duplicate-file selection validated
       ├─ 8.6 ⏳ Smarter Intent Detection
       ├─ 8.7 ⏳ Intelligent Error / Fallback Handling
       ├─ 8.8 ⏳ LLM Provider / Model Fallback
