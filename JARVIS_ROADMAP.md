@@ -264,7 +264,10 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 - [x] Make filename matching tolerant to speech recognition replacing punctuation with spaces, while preserving literal exact-match priority
 - [x] Add focused regression tests for ordinal selection, numeric wrappers, cancellation/“all”, and descriptive candidate references (`tests/test_contextual_followups.py`)
 - [x] Add regression tests for hyphen/extension normalization and duplicate normalized filename candidates (`tests/test_speech_filename_matching.py`)
-- [ ] Run focused Phase 8.5 and filename-matching tests, then the complete regression suite after these changes
+- [x] Route generic `open <filename>` requests into structured file-open resolution when no known application or folder matches
+- [x] Add a regression test for generic speech-style file-open routing (`tests/test_open_file_routing.py`)
+- [ ] Run focused Phase 8.5, filename-matching, and file-open routing tests, then the complete regression suite after these routing changes
+- [ ] Re-run the live ambiguous filename-selection test after the generic-open routing fix
 
 - [ ] Extend contextual resolution to prior files, applications, people, tasks, and answers across turns
 - [ ] Preserve pending conversational state across multi-turn interactions beyond the current selection/clarification flows
