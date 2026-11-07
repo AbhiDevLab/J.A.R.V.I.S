@@ -52,6 +52,7 @@ conversation_manager = get_conversation_manager()
 # shared with the Porcupine process so the two listeners never open the device
 # concurrently.
 _continuous_listening_event = threading.Event()
+_hotword_paused_event = None
 _continuous_thread = None
 _continuous_thread_lock = threading.Lock()
 _assistant_ready = False
@@ -93,6 +94,19 @@ def _continuous_listening_loop(stop_event):
     phrase_limit = max(2.0, min(phrase_limit, 20.0))
 
     calibrate = True
+
+    # Do not open the input device until the separate Porcupine process has
+    # acknowledged that it released its stream.
+    if _hotword_paused_event is not None:
+        for _ in range(50):
+            if stop_event.is_set() or not _continuous_listening_event.is_set():
+                return
+            if _hotword_paused_event.is_set():
+                break
+            threading.Event().wait(0.1)
+        if not _hotword_paused_event.is_set():
+            raise RuntimeError("Wake-word listener did not release the microphone.")
+
     _safe_display("setContinuousListeningStatus", True, "Listening")
 
     try:
@@ -458,18 +472,21 @@ def configure_audio_control(
     speaking_event=None,
     mic_busy_event=None,
     continuous_listening_event=None,
+    hotword_paused_event=None,
 ):
     """Configure shared audio-control events supplied by run.py."""
     global _interrupt_event
     global _speaking_event
     global _mic_busy_event
     global _continuous_listening_event
+    global _hotword_paused_event
 
     _interrupt_event = interrupt_event
     _speaking_event = speaking_event
     _mic_busy_event = mic_busy_event
     if continuous_listening_event is not None:
         _continuous_listening_event = continuous_listening_event
+    _hotword_paused_event = hotword_paused_event
 
 
 def _safe_display(fn, *args, **kwargs):
