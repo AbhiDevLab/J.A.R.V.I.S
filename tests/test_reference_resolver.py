@@ -10,15 +10,15 @@ from engine.reference_resolver import (
 
 def test_reference_index_ranks_latest_file_path_and_keeps_distinct_targets():
     messages = [
-        {"role": "user", "content": "Open C:/Archive/report.pdf"},
-        {"role": "assistant", "content": "Opened C:/Archive/report.pdf"},
-        {"role": "user", "content": "Now use C:/Current/report.pdf instead."},
-        {"role": "assistant", "content": "I will use C:/Current/report.pdf."},
+        {"role": "user", "content": "Open C:\\Archive\\report.pdf"},
+        {"role": "assistant", "content": "Opened C:\\Archive\\report.pdf"},
+        {"role": "user", "content": "Now use C:\\Current\\report.pdf instead."},
+        {"role": "assistant", "content": "I will use C:\\Current\\report.pdf."},
     ]
 
     context = build_reference_context(messages)
 
-    assert context.index("C:/Current/report.pdf") < context.index("C:/Archive/report.pdf")
+    assert context.index("C:\\Current\\report.pdf") < context.index("C:\\Archive\\report.pdf")
     assert "report.pdf" in context
     assert "Files and paths" in context
 
