@@ -9,7 +9,7 @@ The project is deliberately engineered as more than a chatbot: the architecture 
 > **Stable/default branch:** `master`  
 > **Active development branch:** `test-jarvis`  
 > **Documentation checkpoint:** 7 November 2026  
-> **Latest owner-reported local baseline:** `149 passed, 6 warnings` in 17.05 seconds on `test-jarvis`, before the current Phase 8.9 context-integration change. This branch adds three regression tests; use its CI result for the updated total.
+> **Latest owner-reported local baseline:** `149 passed, 6 warnings` in 17.05 seconds on `test-jarvis`, before the current Phase 8.9 context-integration change. This branch adds four regression tests; use its CI result for the updated total.
 
 ---
 
@@ -847,7 +847,7 @@ Run the full suite from the repository root:
 python -m pytest -v
 ~~~
 
-Owner-reported local regression checkpoint on 2026-11-07: `149 passed, 6 warnings` in 17.05 seconds using `python -m pytest -q` on `test-jarvis`. This checkpoint includes the merged application reading/closing work and flattened Notepad text regression. The current Phase 8.9 integration branch adds three shared-context tests; its updated total must be taken from the PR's CI result rather than inferred from this earlier baseline.
+Owner-reported local regression checkpoint on 2026-11-07: `149 passed, 6 warnings` in 17.05 seconds using `python -m pytest -q` on `test-jarvis`. This checkpoint includes the merged application reading/closing work and flattened Notepad text regression. The current Phase 8.9 integration branch adds four shared-context tests; its updated total must be taken from the PR's CI result rather than inferred from this earlier baseline.
 
 The conversation viewer provides a **History** button while viewing a saved chat. Closing the viewer with Escape restores the main HUD and hides the SiriWave screen. User and assistant messages display separate timestamps in local date/time, with UTC timestamps available on hover; saved chats retain separate timestamps in MongoDB while older records fall back to their existing turn timestamp. The owner confirmed chat switching, Escape recovery, and live long-conversation continuity. Phase 8.4 is closed. Phases 8.5–8.8 have substantial implementation and regression coverage; broader live validation and Phase 8.9 end-to-end integration remain in progress.
 
