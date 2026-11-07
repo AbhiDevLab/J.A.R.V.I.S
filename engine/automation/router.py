@@ -767,7 +767,7 @@ def _route_find_and_operate(
 
 _APPLICATION_CONTENT_REQUEST = re.compile(
     r"\b(?:read|content|contents|text|written|inside)\b|"
-    r"\bwhat(?:'s|s)?\s+(?:currently\s+)?in\b",
+    r"\bwhat(?:'s| is|s)?\s+(?:currently\s+)?in\b",
     re.IGNORECASE,
 )
 

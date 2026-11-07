@@ -112,7 +112,7 @@ _AFFIRMATIVE = re.compile(
 
 _APPLICATION_CONTENT_MARKER = re.compile(
     r"\b(?:read|content|contents|text|written|inside)\b|"
-    r"\bwhat(?:'s|s)?\s+(?:currently\s+)?in\b",
+    r"\bwhat(?:'s| is|s)?\s+(?:currently\s+)?in\b",
     re.IGNORECASE,
 )
 
