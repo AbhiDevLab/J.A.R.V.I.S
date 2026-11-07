@@ -15,11 +15,9 @@ from engine.context_interpreter import (
 )
 from engine.interaction_state import get_interaction_state
 from engine.memory import (
-    build_memory_context,
     extract_memories_from_turn,
     record_episode,
 )
-from engine.user_context import build_user_profile_context
 from engine.legacy_routing import (
     is_legacy_message_command,
     is_legacy_open_command,
@@ -27,7 +25,6 @@ from engine.legacy_routing import (
 )
 from engine.reference_resolver import (
     assistant_requests_confirmation,
-    build_reference_context,
     is_clear_affirmative_confirmation,
     is_clear_negative_confirmation,
 )
