@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Dict, Optional
@@ -182,4 +183,54 @@ def resolve_application(
         if path.is_file():
             return str(path)
 
+    return None
+
+def canonical_application_name(name: str) -> Optional[str]:
+    """Return the allowlisted canonical key for a known application name."""
+    normalized = normalize_application_name(name)
+    canonical = ALIASES.get(normalized, normalized)
+    return canonical if canonical in APPLICATIONS else None
+
+
+def find_application_reference(text: str) -> Optional[str]:
+    """Find one allowlisted app name/alias mentioned in natural-language text."""
+    value = normalize_application_name(text)
+    candidates = sorted(
+        set(APPLICATIONS) | set(ALIASES),
+        key=len,
+        reverse=True,
+    )
+    matches = []
+    for candidate in candidates:
+        if re.search(
+            rf"(?<![a-z0-9]){re.escape(candidate)}(?![a-z0-9])",
+            value,
+            re.IGNORECASE,
+        ):
+            canonical = canonical_application_name(candidate)
+            if canonical and canonical not in matches:
+                matches.append(canonical)
+    return matches[0] if len(matches) == 1 else None
+
+
+def parse_hindi_application_command(text: str):
+    """Normalize a small, explicit set of Hindi/Hinglish app-control phrases."""
+    value = normalize_application_name(text)
+    patterns = (
+        (
+            "close",
+            r"^(?:is\s+)?(.+?)\s+(?:ko\s+)?(?:band\s+karna\s+hai|band\s+karo|band\s+kijiye|close\s+karna\s+hai)$",
+        ),
+        (
+            "open",
+            r"^(?:is\s+)?(.+?)\s+(?:ko\s+)?(?:open\s+karna\s+hai|kholna\s+hai|khol\s+do)$",
+        ),
+    )
+    for action, pattern in patterns:
+        match = re.match(pattern, value, re.IGNORECASE)
+        if not match:
+            continue
+        application = find_application_reference(match.group(1))
+        if application:
+            return action, application
     return None

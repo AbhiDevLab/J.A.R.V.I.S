@@ -8,6 +8,14 @@ from .actions import (
     requires_confirmation,
 )
 from .applications import resolve_application
+from .application_state import (
+    record_application_opened,
+    record_application_closed,
+)
+from .windows_apps import (
+    close_application_window,
+    read_application_window_text,
+)
 from .filesystem import (
     copy_file,
     create_file,
@@ -138,7 +146,7 @@ def _execute_open_application(
     print(f"Executable: {executable}")
 
     try:
-        if application == {"command prompt", "cmd"}:
+        if application in {"command prompt", "cmd"}:
             subprocess.Popen(
                 [executable, "/K"],
                 shell=False,
@@ -150,6 +158,7 @@ def _execute_open_application(
                 shell=False,
             )
 
+        record_application_opened(application)
         return _result(
             True,
             f"Opening {application}.",
@@ -163,6 +172,28 @@ def _execute_open_application(
             False,
             f"I could not open {application}.",
         )
+
+
+
+def _execute_close_application(action: AutomationAction) -> Dict[str, Any]:
+    application = str(action.parameters.get("application", "")).strip()
+    if not application:
+        return _result(False, "No application was specified.")
+    result = close_application_window(application)
+    if result.get("success") and not result.get("still_open"):
+        record_application_closed(application)
+    return result
+
+
+def _execute_read_application(action: AutomationAction) -> Dict[str, Any]:
+    application = str(action.parameters.get("application", "")).strip()
+    if not application:
+        return _result(False, "No application was specified.")
+    result = read_application_window_text(application)
+    if not result.get("success"):
+        return _result(False, str(result.get("message") or "I could not read that application."))
+    return result
+
 
 def _execute_filesystem_action(
     action: AutomationAction,
@@ -340,6 +371,8 @@ def execute_action(
 
     handlers = {
         "open_application": _execute_open_application,
+        "close_application": _execute_close_application,
+        "read_application": _execute_read_application,
         "shell_command": _execute_shell_command,
         "open_file": _execute_filesystem_action,
         "open_folder": _execute_filesystem_action,

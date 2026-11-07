@@ -12,6 +12,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from engine.automation.applications import (
+    find_application_reference,
+    parse_hindi_application_command,
+)
+
 
 class SemanticIntent(str, Enum):
     AUTOMATION = "automation"
@@ -57,7 +62,7 @@ _DIRECTORY_LIST_QUESTION = re.compile(
     re.IGNORECASE,
 )
 _DIRECT_COMMAND = re.compile(
-    r"^\s*(?:please\s+)?(?:open|launch|start|run|delete|remove|rename|move|copy|"
+    r"^\s*(?:please\s+)?(?:open|launch|start|run|close|quit|exit|read|delete|remove|rename|move|copy|"
     r"create|make|install|uninstall|kill|terminate|play)\b",
     re.IGNORECASE,
 )
@@ -103,6 +108,23 @@ _AFFIRMATIVE = re.compile(
 )
 
 
+
+
+_APPLICATION_CONTENT_MARKER = re.compile(
+    r"\b(?:read|content|contents|text|written|inside)\b|"
+    r"\bwhat(?:'s|s)?\s+(?:currently\s+)?in\b",
+    re.IGNORECASE,
+)
+
+
+def _application_content_request(text: str) -> bool:
+    value = str(text or "").strip()
+    return bool(
+        _APPLICATION_CONTENT_MARKER.search(value)
+        and find_application_reference(value)
+    )
+
+
 def _minimum_confidence() -> float:
     try:
         return max(0.0, min(1.0, float(os.getenv("JARVIS_INTERPRETATION_MIN_CONFIDENCE", "0.70"))))
@@ -131,6 +153,7 @@ def _explicit_automation(text: str) -> bool:
     value = str(text or "").strip()
     return bool(
         _DIRECT_COMMAND.match(value)
+        or _application_content_request(value)
         or _FILE_SEARCH_COMMAND.match(value)
         or _FILE_LIST_COMMAND.match(value)
         or _CONTACT_COMMAND.match(value)
@@ -180,6 +203,41 @@ def classify_intent(
         ):
             return _result(SemanticIntent.AUTOMATION, interpreted_query, confidence, "context_interpreter", "affirmative reply resolved to the pending concrete action")
         return _result(SemanticIntent.CONFIRMATION, raw, confidence, "pending_state", "approval target is unresolved", needs_clarification=True)
+
+    # App-content requests are information-shaped but require a live desktop
+    # accessibility read, not a language-model guess. Normalize Hinglish app
+    # control phrases before the question-vs-command guard as well.
+    hindi_app_command = parse_hindi_application_command(raw)
+    if hindi_app_command:
+        operation, application = hindi_app_command
+        return _result(
+            SemanticIntent.AUTOMATION,
+            f"{operation} {application}",
+            0.99,
+            "hindi_application_command",
+            "explicit Hinglish desktop application command",
+        )
+
+    if _application_content_request(raw):
+        return _result(
+            SemanticIntent.AUTOMATION,
+            normalized or raw,
+            0.98,
+            "application_content_request",
+            "explicit request to inspect text in a known application window",
+        )
+
+    # Preserve explicit raw desktop commands when contextual interpretation has
+    # already run. The interpreter must not turn a clear close/read/open request
+    # into a conversational paraphrase that prevents deterministic execution.
+    if _DIRECT_COMMAND.match(raw) and _explicit_automation(raw):
+        return _result(
+            SemanticIntent.AUTOMATION,
+            raw,
+            0.99,
+            "deterministic_raw_command",
+            "explicit desktop command preserved from the original transcript",
+        )
 
     # Polite imperative forms ("Could you open ...?") are requests to act,
     # unlike questions that merely ask about an earlier action ("Which file

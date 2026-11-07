@@ -38,6 +38,8 @@ from engine.settings_store import (
     update_settings,
 )
 
+from engine.automation.application_state import build_application_activity_context
+
 from engine.automation import (
     route_command,
     complete_action,
@@ -610,13 +612,14 @@ def allCommands(message=1):
             memory_context = build_memory_context(query)
             profile_context = build_user_profile_context(query)
             conversation_context = conversation_manager.build_context()
+            application_context = build_application_activity_context()
             reference_context = build_reference_context(
                 conversation_manager.get_messages(),
                 summary=conversation_manager.get_summary(),
             )
-            if reference_context:
+            if reference_context or application_context:
                 conversation_context = "\n\n".join(
-                    part for part in (conversation_context, reference_context) if part
+                    part for part in (conversation_context, reference_context, application_context) if part
                 )
             interaction_context = get_interaction_state().as_context()
 
@@ -829,7 +832,21 @@ def allCommands(message=1):
                 if automation_result.get(
                     "success"
                 ):
-                    if (
+                    if automation_action.action_type == "read_application":
+                        # Show the extracted text in the UI, but keep TTS concise.
+                        _safe_display(
+                            "receiverText",
+                            automation_result.get("message", ""),
+                        )
+                        speak(
+                            automation_result.get(
+                                "spoken_message",
+                                "I read the visible application text and displayed it.",
+                            ),
+                            display=False,
+                            language=query_language or "en",
+                        )
+                    elif (
                         automation_action.action_type
                         == "find_file"
                         and automation_result.get(
@@ -862,27 +879,30 @@ def allCommands(message=1):
                 if automation_result.get("success"):
                     action_message = str(
                         automation_result.get(
-                            "message",
+                            "summary" if automation_action.action_type == "read_application" else "message",
                             "Action completed successfully.",
                         )
                     )
                     try:
-                        record_episode(
-                            query,
-                            outcome=action_message,
-                            action_type=automation_action.action_type,
-                            conversation_id=conversation_manager.conversation_id,
-                            metadata={
-                                "action_type": automation_action.action_type,
-                                "raw_transcript": raw_transcript,
-                                "interpreted_query": query,
-                                "interpretation_confidence": (
-                                    interpretation.confidence
-                                    if interpretation is not None
-                                    else None
-                                ),
-                            },
-                        )
+                        # Application text can contain private document content. Keep
+                        # it in the immediate UI response, not durable long-term memory.
+                        if automation_action.action_type != "read_application":
+                            record_episode(
+                                query,
+                                outcome=action_message,
+                                action_type=automation_action.action_type,
+                                conversation_id=conversation_manager.conversation_id,
+                                metadata={
+                                    "action_type": automation_action.action_type,
+                                    "raw_transcript": raw_transcript,
+                                    "interpreted_query": query,
+                                    "interpretation_confidence": (
+                                        interpretation.confidence
+                                        if interpretation is not None
+                                        else None
+                                    ),
+                                },
+                            )
                         # The conversation context uses the understood request;
                         # the original transcript is retained in memory metadata.
                         conversation_manager.add_turn(
