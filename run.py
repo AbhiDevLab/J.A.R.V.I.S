@@ -162,6 +162,8 @@ def startJarvis(
     interrupt_event,
     speaking_event,
     mic_busy_event,
+    continuous_listening_event,
+    hotword_paused_event,
 ):
     print("Process 1 is running...")
 
@@ -171,6 +173,8 @@ def startJarvis(
         interrupt_event=interrupt_event,
         speaking_event=speaking_event,
         mic_busy_event=mic_busy_event,
+        continuous_listening_event=continuous_listening_event,
+        hotword_paused_event=hotword_paused_event,
     )
 
 # To run hotword
@@ -178,6 +182,8 @@ def listenHotword(
     interrupt_event,
     speaking_event,
     mic_busy_event,
+    continuous_listening_event,
+    hotword_paused_event,
 ):
     print("Process 2 is running...")
 
@@ -187,6 +193,8 @@ def listenHotword(
         interrupt_event=interrupt_event,
         speaking_event=speaking_event,
         mic_busy_event=mic_busy_event,
+        continuous_listening_event=continuous_listening_event,
+        hotword_paused_event=hotword_paused_event,
     )
 
 # Start all processes
@@ -205,9 +213,15 @@ if __name__ == "__main__":
     # mic_busy_event:
     #   Main process sets this while SpeechRecognition owns
     #   the microphone for a user query.
+    #
+    # continuous_listening_event:
+    #   Pauses Porcupine while the hands-free listener owns
+    #   the microphone between voice requests.
     interrupt_event = multiprocessing.Event()
     speaking_event = multiprocessing.Event()
     mic_busy_event = multiprocessing.Event()
+    continuous_listening_event = multiprocessing.Event()
+    hotword_paused_event = multiprocessing.Event()
 
     # Start GUI / main JARVIS process.
     p1 = multiprocessing.Process(
@@ -216,6 +230,8 @@ if __name__ == "__main__":
             interrupt_event,
             speaking_event,
             mic_busy_event,
+            continuous_listening_event,
+            hotword_paused_event,
         ),
     )
 
@@ -226,6 +242,8 @@ if __name__ == "__main__":
             interrupt_event,
             speaking_event,
             mic_busy_event,
+            continuous_listening_event,
+            hotword_paused_event,
         ),
     )
 

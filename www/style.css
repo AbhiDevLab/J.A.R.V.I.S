@@ -3350,3 +3350,111 @@ body.history-open #ChatBtn {
 .conversation-history-content span {
     overflow-wrap: anywhere;
 }
+
+
+/* =========================================================
+   CONTINUOUS LISTENING STATUS
+   ========================================================= */
+
+.continuous-listening-indicator {
+    position: fixed;
+    top: 18px;
+    right: 20px;
+    z-index: 1200;
+
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+
+    padding: 9px 13px;
+
+    border: 1px solid rgba(0, 170, 255, 0.28);
+    border-radius: 999px;
+
+    color: rgba(225, 247, 255, 0.88);
+    background: rgba(4, 18, 31, 0.88);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+
+    font-size: 10px;
+    letter-spacing: 0.04em;
+
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.continuous-listening-indicator[hidden] {
+    display: none !important;
+}
+
+.continuous-listening-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+
+    border-radius: 50%;
+    background: #32d583;
+    box-shadow: 0 0 0 4px rgba(50, 213, 131, 0.12),
+                0 0 12px rgba(50, 213, 131, 0.72);
+
+    animation: continuousListeningPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes continuousListeningPulse {
+    0%, 100% {
+        opacity: 0.65;
+        transform: scale(0.9);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.08);
+    }
+}
+
+@media (max-width: 700px) {
+    .continuous-listening-indicator {
+        top: 10px;
+        right: 10px;
+        padding: 8px 10px;
+        font-size: 9px;
+    }
+}
+
+
+#MicBtn:disabled,
+#ConversationMicBtn:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+    filter: grayscale(0.75);
+}
+
+
+.continuous-listening-pause {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+
+    padding: 4px 8px;
+
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+
+    color: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.06);
+
+    font: inherit;
+    cursor: pointer;
+
+    transition:
+        background 0.18s ease,
+        border-color 0.18s ease;
+}
+
+.continuous-listening-pause:hover {
+    background: rgba(255, 90, 90, 0.14);
+    border-color: rgba(255, 110, 110, 0.45);
+}
+
+.continuous-listening-pause:focus-visible {
+    outline: 2px solid rgba(0, 170, 255, 0.8);
+    outline-offset: 2px;
+}

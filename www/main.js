@@ -450,6 +450,11 @@ $(document).ready(function () {
                 "auto"
             );
 
+            $("#SettingsContinuousListening").prop(
+                "checked",
+                settings.continuous_listening === true
+            );
+
         } catch (error) {
             console.error(
                 "Settings loading failed:",
@@ -469,6 +474,10 @@ $(document).ready(function () {
                 response_language:
                     $("#SettingsResponseLanguage")
                         .val(),
+
+                continuous_listening:
+                    $("#SettingsContinuousListening")
+                        .prop("checked"),
             };
 
             const result =
@@ -631,6 +640,26 @@ $(document).ready(function () {
         "change",
         function () {
             saveSettings();
+        }
+    );
+
+    $("#SettingsContinuousListening").on(
+        "change",
+        function () {
+            saveSettings();
+        }
+    );
+
+    $("#ContinuousListeningPauseBtn").on(
+        "click",
+        async function () {
+            const result = await eel.saveSettings({
+                continuous_listening: false
+            })();
+
+            if (!result || !result.success) {
+                console.error("Could not pause continuous listening.");
+            }
         }
     );
 

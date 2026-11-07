@@ -876,6 +876,45 @@ $(document).ready(function () {
 
   window.hideConversationVoiceStatus =
     hideConversationVoiceStatus;
+
+
+  function setContinuousListeningStatus(active, message) {
+    const indicator = document.getElementById(
+      "ContinuousListeningIndicator"
+    );
+    const text = document.getElementById(
+      "ContinuousListeningStatusText"
+    );
+
+    if (!indicator) {
+      return;
+    }
+
+    const listening = Boolean(active);
+    indicator.hidden = !listening;
+    indicator.classList.toggle("is-active", listening);
+
+    document.querySelectorAll("#MicBtn, #ConversationMicBtn").forEach(
+      (button) => {
+        button.disabled = listening;
+        button.title = listening
+          ? "Microphone is managed by continuous listening"
+          : "Start voice input";
+      }
+    );
+
+    if (!listening) {
+      $("#SettingsContinuousListening").prop("checked", false);
+    }
+
+    if (text) {
+      text.textContent = message || (
+        listening ? "Listening continuously" : "Paused"
+      );
+    }
+  }
+
+  eel.expose(setContinuousListeningStatus);
   // Define handlers first, then expose them to Python via eel.expose.
   // This ensures the visual hood updates (big-screen) as well as chat (offcanvas).
 

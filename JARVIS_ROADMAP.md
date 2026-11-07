@@ -358,6 +358,20 @@ Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
 
 This is where the assistant becomes substantially more capable as a voice/vision assistant.
 
+## Phase 9.1 — Continuous Listening Engine
+
+- [x] Add an opt-in continuous listening preference, disabled by default
+- [x] Start hands-free capture only after successful face or voice authentication
+- [x] Reuse the contextual voice command pipeline for each captured utterance
+- [x] Use bounded phrase capture and silence-based endpoint detection
+- [x] Keep the Porcupine process from competing for the microphone while continuous mode is active
+- [x] Add a visible listening indicator and a settings toggle
+- [x] Support the voice command "stop listening" and an immediate UI pause control
+- [ ] Verify live Windows microphone ownership and repeated hands-free turns
+- [ ] Verify stop/restart behavior and the existing wake-word mode after continuous mode is disabled
+
+**Scope note:** Phase 9.1 is a sequential, half-duplex listening loop. The microphone is not opened while JARVIS is processing or speaking, which prevents its own TTS output from being transcribed. Voice barge-in without a wake word, acoustic echo cancellation, and full-duplex capture remain Phase 9.2 work.
+
 Possible areas:
 
 - [ ] Better interruption / barge-in handling
@@ -370,7 +384,7 @@ Possible areas:
 
 Recent local Kokoro TTS work belongs to the broader voice capability work, but it does not by itself close Phase 9.
 
-**Phase status:** ⏳ Not started
+**Phase status:** 🟡 In progress
 
 ---
 
