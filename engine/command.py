@@ -5,7 +5,7 @@ import eel
 
 from engine.tts import speak as _tts_speak
 from engine.stt import detect_text_language, transcribe_audio
-from engine.llm_client import ask_llm
+from engine.llm_client import ask_llm, LLMRequestError
 from engine.conversation import get_conversation_manager
 from engine.intent_classifier import classify_intent
 from engine.context_interpreter import (
@@ -390,6 +390,79 @@ def _language_name(language):
     return "English"
 
 
+def _handle_llm_failure(
+    error,
+    query,
+    raw_transcript,
+    response_language,
+    is_voice_input,
+):
+    """Preserve the failed request and offer an explicit, safe retry."""
+    state = get_interaction_state()
+    message = (
+        "The AI service is not configured correctly. "
+        "Your request is preserved; fix the configuration and say 'retry'."
+        if error.category == "configuration"
+        else
+        "I couldn't get a reliable AI response. Your request is preserved "
+        "in this conversation. Say 'retry' to try it again, or send a "
+        "different request."
+    )
+
+    state.set(
+        "llm_retry",
+        prompt="say retry to repeat the preserved request, or send a new request",
+        action_type="retry_llm_request",
+        pending_request=str(query or ""),
+        raw_transcript=str(raw_transcript or query or ""),
+        language=response_language or "en",
+        is_voice_input=bool(is_voice_input),
+        error_category=error.category,
+    )
+
+    assistant_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    conversation_manager.add_turn(
+        str(query or raw_transcript or ""),
+        message,
+    )
+
+    try:
+        from engine.mongo_store import save_chat_turn
+
+        save_chat_turn(
+            str(query or raw_transcript or ""),
+            message,
+            model=os.getenv("OMNIROUTE_MODEL", ""),
+            meta={
+                "provider": os.getenv("LLM_PROVIDER", "omniroute"),
+                "error_category": error.category,
+                "recovery": "pending_user_retry",
+            },
+            conversation_id=conversation_manager.conversation_id,
+            user_timestamp=datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            assistant_timestamp=assistant_timestamp,
+            raw_user_text=str(raw_transcript or query or ""),
+            interpreted_user_text=str(query or raw_transcript or ""),
+            interpretation={
+                "intent": "llm_error",
+                "confidence": 0.0,
+                "used_context": True,
+            },
+        )
+    except Exception as persistence_error:
+        print(f"LLM recovery history persistence unavailable: {persistence_error}")
+
+    _safe_display(
+        "assistantResponse",
+        message,
+        assistant_timestamp,
+    )
+    speak(
+        message,
+        language=response_language or "en",
+    )
+
+
 @eel.expose
 def allCommands(message=1):
     # Initial query comes either from the microphone or the text box.
@@ -409,11 +482,36 @@ def allCommands(message=1):
             str(query)
         )
 
+    # A previous model failure keeps its original request in ephemeral state.
+    # Only an explicit retry replays that request; a different utterance starts
+    # a new request and clears the stale retry state.
+    retry_state = get_interaction_state()
+    retry_replay = None
+    retry_cancelled = False
+    if retry_state.state_type == "llm_retry":
+        retry_reply = " ".join(str(query or "").casefold().split())
+        if retry_reply in {"retry", "try again", "retry request", "try that again"}:
+            retry_replay = dict(retry_state.data)
+            query = str(retry_replay.get("pending_request") or "")
+            query_language = retry_replay.get("language") or query_language
+            is_voice_input = bool(retry_replay.get("is_voice_input", is_voice_input))
+            retry_state.clear()
+        elif retry_reply in {"cancel", "stop", "no", "never mind", "nevermind"}:
+            retry_state.clear()
+            retry_cancelled = True
+        else:
+            retry_state.clear()
+
     # Phase 3/5 conversation loop:
     # If an LLM response is interrupted by saying "Jarvis", the loop
     # listens for the next query and continues without another activation.
     while True:
         raw_transcript = str(query or "").strip()
+        if retry_replay is not None:
+            raw_transcript = str(
+                retry_replay.get("raw_transcript") or raw_transcript
+            ).strip()
+            retry_replay = None
         user_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         if query:
             _safe_display(
@@ -423,6 +521,13 @@ def allCommands(message=1):
             )
 
         try:
+            if retry_cancelled:
+                speak(
+                    "Understood. I won't retry the previous request.",
+                    language=query_language or "en",
+                )
+                break
+
             if query == "":
                 speak(
                     "I didn't catch that. Please try again.",
@@ -504,14 +609,27 @@ def allCommands(message=1):
             )
 
             if should_interpret:
-                interpretation = interpret_query(
-                    raw_transcript,
-                    conversation_context=conversation_context,
-                    interaction_state=interaction_context,
-                    memory_context=memory_context,
-                    profile_context=profile_context,
-                    language=query_language or "en",
-                )
+                try:
+                    interpretation = interpret_query(
+                        raw_transcript,
+                        conversation_context=conversation_context,
+                        interaction_state=interaction_context,
+                        memory_context=memory_context,
+                        profile_context=profile_context,
+                        language=query_language or "en",
+                    )
+                except LLMRequestError as error:
+                    # Do not discard a pending selection/clarification when the
+                    # interpreter cannot reach its model. Keep the original
+                    # request available for an explicit retry.
+                    _handle_llm_failure(
+                        error,
+                        raw_transcript,
+                        raw_transcript,
+                        query_language or "en",
+                        is_voice_input,
+                    )
+                    break
 
                 print(
                     "Context interpretation: "
@@ -868,9 +986,20 @@ questions using that context.
                     context_section,
                 )
 
-                response = ask_llm(
-                    enhanced_prompt
-                )
+                try:
+                    response = ask_llm(
+                        enhanced_prompt
+                    )
+                except LLMRequestError as error:
+                    _handle_llm_failure(
+                        error,
+                        query,
+                        raw_transcript,
+                        response_language,
+                        is_voice_input,
+                    )
+                    break
+
                 assistant_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
                 print(
