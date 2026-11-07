@@ -163,6 +163,7 @@ def startJarvis(
     speaking_event,
     mic_busy_event,
     continuous_listening_event,
+    hotword_paused_event,
 ):
     print("Process 1 is running...")
 
@@ -173,6 +174,7 @@ def startJarvis(
         speaking_event=speaking_event,
         mic_busy_event=mic_busy_event,
         continuous_listening_event=continuous_listening_event,
+        hotword_paused_event=hotword_paused_event,
     )
 
 # To run hotword
@@ -217,6 +219,7 @@ if __name__ == "__main__":
     speaking_event = multiprocessing.Event()
     mic_busy_event = multiprocessing.Event()
     continuous_listening_event = multiprocessing.Event()
+    hotword_paused_event = multiprocessing.Event()
 
     # Start GUI / main JARVIS process.
     p1 = multiprocessing.Process(
@@ -226,6 +229,7 @@ if __name__ == "__main__":
             speaking_event,
             mic_busy_event,
             continuous_listening_event,
+            hotword_paused_event,
         ),
     )
 
@@ -237,6 +241,7 @@ if __name__ == "__main__":
             speaking_event,
             mic_busy_event,
             continuous_listening_event,
+            hotword_paused_event,
         ),
     )
 
