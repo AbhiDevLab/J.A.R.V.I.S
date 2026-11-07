@@ -162,3 +162,50 @@ def test_question_mentioning_youtube_is_not_classified_as_playback():
     result = classify_intent("What did you recommend on YouTube?")
     assert result.intent is SemanticIntent.INFORMATION_REQUEST
     assert result.should_route_automation is False
+
+
+def test_contextual_reference_target_replaces_explicit_raw_command():
+    interpretation = SimpleNamespace(
+        query="open the file C:\\Reports\\orion.pdf",
+        intent="automation",
+        confidence=0.95,
+        needs_clarification=False,
+    )
+
+    result = classify_intent(
+        "open that report",
+        raw_text="open that report",
+        interpretation=interpretation,
+    )
+
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.normalized_query == "open the file C:\\Reports\\orion.pdf"
+    assert result.source == "context_interpreter"
+    assert result.should_route_automation is True
+
+
+def test_unresolved_contextual_target_cannot_fall_through_to_application_launch():
+    interpretation = SimpleNamespace(
+        query="open that report",
+        intent="unknown",
+        confidence=0.0,
+        needs_clarification=False,
+    )
+
+    result = classify_intent(
+        "open that report",
+        raw_text="open that report",
+        interpretation=interpretation,
+    )
+
+    assert result.intent is SemanticIntent.CLARIFICATION
+    assert result.needs_clarification is True
+    assert result.should_route_automation is False
+
+
+def test_self_contained_explicit_command_keeps_deterministic_fast_path():
+    result = classify_intent("close Notepad")
+
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.normalized_query == "close Notepad"
+    assert result.source == "deterministic_raw_command"

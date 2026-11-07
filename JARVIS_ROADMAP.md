@@ -336,6 +336,7 @@ Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
 - [x] Keep extracted document contents out of the shared context snapshot and long-term memory
 - [x] Add regression tests for source composition, prompt-context separation, and empty-context behavior in `tests/test_intelligence_context.py`
 - [ ] Integrate contextual interpretation into the existing STT → command/automation → LLM pipeline end-to-end
+- [x] Add command-pipeline E2E regressions for cross-turn file references and pending approvals; verify an approved high-risk delete still passes through the authorization gate
 - [ ] Verify imperfect-transcript recovery using realistic speech-recognition errors
 - [ ] Verify context-aware file/application references
 - [ ] Verify multi-turn follow-up conversations

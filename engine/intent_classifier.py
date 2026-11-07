@@ -66,6 +66,12 @@ _DIRECT_COMMAND = re.compile(
     r"create|make|install|uninstall|kill|terminate|play)\b",
     re.IGNORECASE,
 )
+
+_CONTEXTUAL_TARGET_REFERENCE = re.compile(
+    r"\b(?:it|that|this|those|these|there|the\s+(?:previous|first|second|other|same)\s+"
+    r"(?:one|file|folder|document|report|application))\b",
+    re.IGNORECASE,
+)
 _FILE_SEARCH_COMMAND = re.compile(
     r"^\s*(?:please\s+)?(?:find|locate|search for)\s+"
     r"(?:(?:a|the)\s+)?(?:file|folder|document|directory|filename|file named|file called)\b",
@@ -229,16 +235,54 @@ def classify_intent(
             "explicit request to inspect text in a known application window",
         )
 
-    # Preserve explicit raw desktop commands when contextual interpretation has
-    # already run. The interpreter must not turn a clear close/read/open request
-    # into a conversational paraphrase that prevents deterministic execution.
+    # Preserve self-contained raw desktop commands, but do not discard a
+    # contextual target resolution for commands such as "open that report" or
+    # "close it". A referential target must resolve to a concrete command with
+    # sufficient confidence; otherwise it must not fall through to a guessed
+    # application/executable route.
     if _DIRECT_COMMAND.match(raw) and _explicit_automation(raw):
+        if _CONTEXTUAL_TARGET_REFERENCE.search(raw):
+            try:
+                contextual_confidence = float(
+                    getattr(interpretation, "confidence", 0.0) or 0.0
+                )
+            except (TypeError, ValueError):
+                contextual_confidence = 0.0
+            contextual_intent = str(
+                getattr(interpretation, "intent", "unknown") or "unknown"
+            ).strip().lower()
+            contextual_query = str(
+                getattr(interpretation, "query", "") or normalized
+            ).strip()
+            if (
+                contextual_confidence >= threshold
+                and contextual_intent == "automation"
+                and contextual_query
+                and contextual_query.casefold() != raw.casefold()
+                and _explicit_automation(contextual_query)
+                and not _CONTEXTUAL_TARGET_REFERENCE.search(contextual_query)
+            ):
+                return _result(
+                    SemanticIntent.AUTOMATION,
+                    contextual_query,
+                    contextual_confidence,
+                    "context_interpreter",
+                    "contextual interpretation resolved the command target",
+                )
+            return _result(
+                SemanticIntent.CLARIFICATION,
+                raw,
+                contextual_confidence,
+                "context_reference_unresolved",
+                "the command contains a reference whose target is not safely resolved",
+                needs_clarification=True,
+            )
         return _result(
             SemanticIntent.AUTOMATION,
             raw,
             0.99,
             "deterministic_raw_command",
-            "explicit desktop command preserved from the original transcript",
+            "explicit self-contained desktop command preserved from the original transcript",
         )
 
     # Polite imperative forms ("Could you open ...?") are requests to act,
