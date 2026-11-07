@@ -367,8 +367,8 @@ This is where the assistant becomes substantially more capable as a voice/vision
 - [x] Keep the Porcupine process from competing for the microphone while continuous mode is active
 - [x] Add a visible listening indicator and a settings toggle
 - [x] Support the voice command "stop listening" and an immediate UI pause control
-- [ ] Verify live Windows microphone ownership and repeated hands-free turns
-- [ ] Verify stop/restart behavior and the existing wake-word mode after continuous mode is disabled
+- [x] Verify live Windows microphone ownership and repeated hands-free turns (owner-verified on Windows, 2026-11-07)
+- [x] Verify stop/restart behavior and the existing wake-word mode after continuous mode is disabled (owner-verified on Windows, 2026-11-07)
 
 **Scope note:** Phase 9.1 is a sequential, half-duplex listening loop. The microphone is not opened while JARVIS is processing or speaking, which prevents its own TTS output from being transcribed. Voice barge-in without a wake word, acoustic echo cancellation, and full-duplex capture remain Phase 9.2 work.
 
@@ -384,7 +384,28 @@ Possible areas:
 
 Recent local Kokoro TTS work belongs to the broader voice capability work, but it does not by itself close Phase 9.
 
-**Phase status:** 🟡 In progress
+**Validation checkpoint (2026-11-08):** Owner-reported live Windows verification completed. The automated suite passed **163 tests**, with 6 dependency warnings and no failures. Continuous Listening, consecutive commands, stop/pause, microphone handoff, Notepad open/read, and wake-word restoration were verified.
+
+**Phase status:** ✅ Phase 9.1 validated
+
+---
+
+## Phase 9.2 — Advanced Voice Interaction
+
+- [x] Add TTS-window-only Porcupine microphone handoff while Continuous Listening is enabled
+- [x] Route a wake-word hit during Kokoro/SAPI5 playback into the shared TTS interrupt event
+- [x] Ignore wake-word hits outside the TTS window in continuous mode to prevent duplicate activation flows
+- [x] Add bounded adaptive-energy VAD and phrase-endpoint configuration
+- [x] Add focused regression tests for microphone gating, interruption routing, and VAD configuration
+- [ ] Run the focused and complete pytest suites and inspect CI results
+- [ ] Validate barge-in timing and microphone handoff on Windows hardware
+- [ ] Implement wake-word-free speech barge-in after reliable AEC is available
+- [ ] Evaluate and integrate a Windows-compatible acoustic echo cancellation path
+- [ ] Validate no TTS self-triggering, false interruptions, or competing microphone readers
+
+**Implementation note:** The current increment is wake-word barge-in: say "Jarvis" during playback to stop JARVIS. It does not yet support interrupting with arbitrary speech. Acoustic echo cancellation and full-duplex capture remain open; see `docs/phase-9.2-voice-interaction.md`.
+
+**Phase status:** 🟡 Implementation started; automated and live validation pending
 
 ---
 
