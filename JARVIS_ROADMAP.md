@@ -384,7 +384,7 @@ Possible areas:
 
 Recent local Kokoro TTS work belongs to the broader voice capability work, but it does not by itself close Phase 9.
 
-**Phase status:** ⏳ Not started
+**Phase status:** 🟡 In progress
 
 ---
 
