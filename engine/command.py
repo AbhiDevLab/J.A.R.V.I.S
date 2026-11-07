@@ -278,12 +278,22 @@ def speak(
         ):
             return False
 
-    return _tts_speak(
-        text,
-        language=language,
-        interrupt_event=_interrupt_event,
-        speaking_event=_speaking_event,
-    )
+    try:
+        return _tts_speak(
+            text,
+            language=language,
+            interrupt_event=_interrupt_event,
+            speaking_event=_speaking_event,
+        )
+    except Exception as exc:
+        # Keep the already-rendered text answer usable when the audio device
+        # or TTS engine fails. A voice failure must not discard the response.
+        print(f"TTS failure: {type(exc).__name__}")
+        _safe_display(
+            "DisplayMessage",
+            "Voice output is unavailable. The text response remains visible.",
+        )
+        return False
 
 
 def takecommand(return_language=False):
@@ -370,8 +380,12 @@ def takecommand(return_language=False):
 
     except Exception as e:
         print(
-            "Speech recognition error:",
-            e,
+            "Speech recognition failure: "
+            f"{type(e).__name__}: {e}"
+        )
+        _safe_display(
+            "DisplayMessage",
+            "Speech input failed. Please try speaking again or type your request.",
         )
 
         if return_language:
@@ -752,16 +766,62 @@ def allCommands(message=1):
             )
 
             if automation_action is not None:
-                automation_action = complete_action(
-                    automation_action
-                )
+                try:
+                    automation_action = complete_action(
+                        automation_action
+                    )
 
-                if automation_action is None:
+                    if automation_action is None:
+                        break
+
+                    automation_result = execute_action(
+                        automation_action
+                    )
+                except Exception as automation_error:
+                    # Do not claim success or automatically repeat an action
+                    # when an exception leaves its final execution state uncertain.
+                    print(
+                        "Automation execution failure: "
+                        f"{type(automation_error).__name__}"
+                    )
+                    recovery_message = (
+                        "I couldn't verify whether that desktop action completed. "
+                        "Please check the target before asking me to repeat it."
+                    )
+                    assistant_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+                    conversation_manager.add_turn(
+                        query,
+                        recovery_message,
+                    )
+                    try:
+                        from engine.mongo_store import save_chat_turn
+
+                        save_chat_turn(
+                            query,
+                            recovery_message,
+                            meta={
+                                "error_category": "automation_execution_uncertain",
+                                "action_type": getattr(automation_action, "action_type", "unknown"),
+                            },
+                            conversation_id=conversation_manager.conversation_id,
+                            user_timestamp=user_timestamp,
+                            assistant_timestamp=assistant_timestamp,
+                            raw_user_text=raw_transcript,
+                            interpreted_user_text=query,
+                        )
+                    except Exception as persistence_error:
+                        print(f"Automation recovery persistence unavailable: {persistence_error}")
+
+                    _safe_display(
+                        "assistantResponse",
+                        recovery_message,
+                        assistant_timestamp,
+                    )
+                    speak(
+                        recovery_message,
+                        language=query_language or "en",
+                    )
                     break
-
-                automation_result = execute_action(
-                    automation_action
-                )
 
                 if automation_result.get(
                     "success"
