@@ -3426,3 +3426,35 @@ body.history-open #ChatBtn {
     cursor: not-allowed;
     filter: grayscale(0.75);
 }
+
+
+.continuous-listening-pause {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+
+    padding: 4px 8px;
+
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+
+    color: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.06);
+
+    font: inherit;
+    cursor: pointer;
+
+    transition:
+        background 0.18s ease,
+        border-color 0.18s ease;
+}
+
+.continuous-listening-pause:hover {
+    background: rgba(255, 90, 90, 0.14);
+    border-color: rgba(255, 110, 110, 0.45);
+}
+
+.continuous-listening-pause:focus-visible {
+    outline: 2px solid rgba(0, 170, 255, 0.8);
+    outline-offset: 2px;
+}
