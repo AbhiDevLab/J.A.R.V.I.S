@@ -65,7 +65,7 @@ def test_connection_timeout_retries_once_then_succeeds(monkeypatch):
             assert client.ask("hello") == "JARVIS response"
 
     assert post.call_count == 2
-    sleep.assert_called_once_with(0)
+    sleep.assert_not_called()
 
 
 def test_non_retryable_http_401_is_not_retried_or_fallen_back(monkeypatch):
