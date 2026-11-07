@@ -95,6 +95,7 @@ def hotword(
     speaking_event=None,
     mic_busy_event=None,
     continuous_listening_event=None,
+    hotword_paused_event=None,
 ):
     porcupine = None
     paud = None
@@ -135,8 +136,14 @@ def hotword(
 
                     audio_stream = None
 
+                if continuous_mode and hotword_paused_event is not None:
+                    hotword_paused_event.set()
+
                 time.sleep(0.05)
                 continue
+
+            if hotword_paused_event is not None:
+                hotword_paused_event.clear()
 
             # ---------------------------------------------------------
             # Re-open the Porcupine stream when the microphone
@@ -207,6 +214,9 @@ def hotword(
         print("Hotword listener stopped:", e)
 
     finally:
+
+        if hotword_paused_event is not None:
+            hotword_paused_event.set()
 
         if porcupine is not None:
             try:
