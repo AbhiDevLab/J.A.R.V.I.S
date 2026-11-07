@@ -215,9 +215,6 @@ def hotword(
 
     finally:
 
-        if hotword_paused_event is not None:
-            hotword_paused_event.set()
-
         if porcupine is not None:
             try:
                 porcupine.delete()
@@ -240,6 +237,9 @@ def hotword(
                 paud.terminate()
             except Exception:
                 pass
+
+        if hotword_paused_event is not None:
+            hotword_paused_event.set()
 
 # Whatsapp Message Sending 
 def findContact(query):
