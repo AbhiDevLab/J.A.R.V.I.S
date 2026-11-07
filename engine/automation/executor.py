@@ -195,21 +195,31 @@ def _answer_application_question(question: str, content: str, application: str) 
         return "I could not find enough readable text to answer that question."
 
     # High-value named-field questions get deterministic extraction first.
+    # Windows UI Automation may flatten a multi-line document into one line,
+    # so stop at the next recognized field label as well as at a line ending.
     if re.search(r"\bproject\s+(?:name|title)\b", question_text, re.IGNORECASE):
-        patterns = (
-            r"^[ \\t]*project(?:[ \\t]+(?:name|title))?[ \\t]*[:=—-][ \\t]*(.+?)(?=[ \\t]+(?:status|date|owner|author|description|meeting|experiment)\\s*[:=—-]|[ \\t]*$)",
-            r"\bproject\s+(?:is|called|named)\s+['\"]?([^.!?\r\n]+)",
-            r"\b(?:my|the)\s+project\s+(?:is\s+)?(?:called|named)\s+['\"]?([^.!?\r\n]+)",
+        following_field_labels = (
+            r"last[ \t]+updated|due[ \t]+date|start[ \t]+date|end[ \t]+date|"
+            r"project[ \t]+manager|meeting[ \t]+time|"
+            r"status|date|owner|author|developer|description|meeting|"
+            r"experiment|version|priority|created|updated|"
+            r"language|framework|technology|team|department|email|"
+            r"contact|phone|deadline|repository|repo|branch|"
+            r"website|url|location|notes|summary|objective|goal"
         )
-        for pattern in patterns:
-            match = re.search(pattern, source_text, re.IGNORECASE | re.MULTILINE)
-            if match:
-                value = match.group(1).strip().strip("\"' ")
-                if value:
-                    return f"The project name shown in {application.title()} is {value}."
+        project_field_pattern = (
+            r"(?im)^[ \t]*project[ \t]+(?:name|title)[ \t]*[:=—-][ \t]*"
+            r"(?P<value>.*?)"
+            rf"(?=(?:[ \t]+|[|;,][ \t]*)(?:{following_field_labels})"
+            r"[ \t]*[:=—-]|[ \t]*$)"
+        )
+        match = re.search(project_field_pattern, source_text)
+        if match:
+            value = re.sub(r"\s+", " ", match.group("value")).strip().strip("\"' ")
+            if value:
+                return f"The project name shown in {application.title()} is {value}."
         return (
-            f"The visible {application.title()} text does not explicitly state a project name. "
-            "It describes a series of quantum-computing experiments."
+            f"The visible {application.title()} text does not explicitly state a project name."
         )
 
     prompt = f"""
@@ -237,7 +247,6 @@ SOURCE TEXT (the only evidence):
     if not answer:
         return f"The visible text in {application.title()} does not provide an answer to that question."
     return answer
-
 
 def _execute_read_application(action: AutomationAction) -> Dict[str, Any]:
     application = str(action.parameters.get("application", "")).strip()
