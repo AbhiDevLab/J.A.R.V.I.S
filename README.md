@@ -6,7 +6,10 @@ J.A.R.V.I.S is a Windows-focused personal desktop AI assistant that combines **b
 
 The project is deliberately engineered as more than a chatbot: the architecture separates **speech, interpretation, conversation, automation, security, execution, and presentation** so individual capabilities can be tested and evolved independently.
 
-> **Current development branch:** `test-jarvis`
+> **Stable/default branch:** `master`  
+> **Active development branch:** `test-jarvis`  
+> **Documentation checkpoint:** 7 November 2026  
+> **Latest owner-reported local baseline:** `149 passed, 6 warnings` in 17.05 seconds on `test-jarvis`, before the current Phase 8.9 context-integration change. This branch adds four regression tests; use its CI result for the updated total.
 
 ---
 
@@ -77,8 +80,11 @@ Capabilities:
 - OpenAI-compatible request format.
 - Non-streaming responses.
 - Provider/model information logged for diagnostics.
-- Compatible with single-model or OmniRoute routing configurations.
-- OmniRoute can provide model/provider fallback when configured externally.
+- Bounded retries with backoff for retryable connection, timeout, HTTP, and malformed/empty-response failures.
+- Optional `OMNIROUTE_FALLBACK_MODEL` selection through the same OmniRoute endpoint.
+- Failed requests and pending dialogue state can be retained for explicit retry or cancellation.
+- Response text remains available when speech output fails.
+- The runtime remains non-streaming and does not yet expose a multi-provider selection UI; provider configuration is planned for Phase 10.
 
 The JARVIS application itself does not need to know the credentials of every downstream provider; those are handled by the OmniRoute layer.
 
@@ -90,11 +96,13 @@ A major Phase 8 capability is the **contextual interpretation layer**.
 
 Instead of assuming speech-to-text output is perfect, J.A.R.V.I.S can treat it as an imperfect signal and use:
 
-- Current transcript.
-- Recent conversation history.
-- Active interaction state.
-- User language.
-- Pending task context.
+- Current raw transcript and detected language.
+- Recent conversation history and rolling summary.
+- Query-relevant SQLite long-term memory.
+- Query-relevant structured user profile/preferences.
+- Bounded cross-turn references to files, applications, people, tasks, and recent answers.
+- Verified recent desktop application activity.
+- Active selection, clarification, confirmation, and retry state.
 
 to infer the user's intended meaning.
 
@@ -299,6 +307,19 @@ Example:
 "Launch Spotify."
 "Start File Explorer."
 ~~~
+
+### Application window reading and state
+
+On Windows, the application automation layer can:
+
+- Detect visible windows for supported allowlisted applications.
+- Read text exposed by supported Windows UI Automation controls (for example, Notepad edit/document controls) through `pywinauto`.
+- Answer questions using extracted visible text, with deterministic extraction for supported named fields and a source-grounded LLM path for other questions.
+- Distinguish recent JARVIS application actions from a live window-state check.
+- Request a graceful close through `WM_CLOSE`, preserving the application's own unsaved-changes prompt rather than force-terminating its process.
+- Keep extracted document contents transient for the immediate response rather than automatically saving them as long-term memory.
+
+Reading depends on the application exposing accessible controls. This is not a universal screenshot/OCR engine and does not guarantee that every application exposes its full document contents.
 
 ---
 
@@ -575,7 +596,7 @@ The frontend is intentionally kept separate from the Python engine so presentati
 
 # 📂 Project Structure
 
-~~~text
+```text
 J.A.R.V.I.S/
 │
 ├── engine/
@@ -587,35 +608,55 @@ J.A.R.V.I.S/
 │   │
 │   ├── automation/
 │   │   ├── actions.py
+│   │   ├── application_state.py
 │   │   ├── applications.py
 │   │   ├── dialogue.py
 │   │   ├── executor.py
 │   │   ├── filesystem.py
 │   │   ├── router.py
-│   │   └── security.py
+│   │   ├── security.py
+│   │   └── windows_apps.py
 │   │
 │   ├── command.py
 │   ├── context_interpreter.py
 │   ├── conversation.py
 │   ├── conversation_summary.py
+│   ├── intelligence_context.py
+│   ├── intent_classifier.py
 │   ├── interaction_state.py
-│   ├── memory.py
-│   ├── user_context.py
+│   ├── legacy_routing.py
 │   ├── llm_client.py
+│   ├── llm_recovery.py
+│   ├── memory.py
+│   ├── mongo_store.py
 │   ├── persona.py
+│   ├── reference_resolver.py
+│   ├── settings_store.py
 │   ├── stt.py
-│   └── tts.py
+│   ├── tts.py
+│   └── user_context.py
 │
 ├── tests/
+│   ├── test_application_automation.py
 │   ├── test_chat_timestamps.py
+│   ├── test_command_recovery.py
 │   ├── test_context_interpreter.py
+│   ├── test_contextual_followups.py
 │   ├── test_conversation_summarization.py
+│   ├── test_conversation_ui_regression.py
 │   ├── test_dialogue_selection.py
 │   ├── test_filesystem_matching.py
+│   ├── test_intelligence_context.py
+│   ├── test_intent_classifier.py
+│   ├── test_legacy_routing.py
+│   ├── test_llm_client.py
+│   ├── test_llm_recovery.py
 │   ├── test_memory.py
 │   ├── test_open_file_routing.py
 │   ├── test_persona_tts.py
+│   ├── test_reference_resolver.py
 │   ├── test_security_authorization.py
+│   ├── test_speech_filename_matching.py
 │   └── test_user_context.py
 │
 ├── www/
@@ -629,8 +670,7 @@ J.A.R.V.I.S/
 ├── requirements.txt
 ├── .env.example
 └── JARVIS_ROADMAP.md
-~~~
-
+```
 ---
 
 # ⚙️ Installation
@@ -792,6 +832,14 @@ The current checked-in test modules include:
 - `tests/test_security_authorization.py`
 - `tests/test_open_file_routing.py`
 - `tests/test_user_context.py`
+- `tests/test_application_automation.py`
+- `tests/test_command_recovery.py`
+- `tests/test_intent_classifier.py`
+- `tests/test_legacy_routing.py`
+- `tests/test_llm_client.py`
+- `tests/test_llm_recovery.py`
+- `tests/test_reference_resolver.py`
+- `tests/test_intelligence_context.py` (Phase 8.9 shared-context integration)
 
 Run the full suite from the repository root:
 
@@ -799,16 +847,16 @@ Run the full suite from the repository root:
 python -m pytest -v
 ~~~
 
-Historical checkpoints: Phase 8.1 hardening reported `53 passed, 6 dependency warnings`; file-open routing brought the reported suite to 56 tests; Phase 8.3 profile/context changes brought it to 63; Phase 8.4 focused tests passed `7/7` and the full suite reached 70 tests; the 2026-10-11 timestamp update then passed `2/2` focused tests and `75/75` in the full suite, with six dependency warnings. The owner also confirmed live rolling-summary recall on 2026-10-11. Phase 8.5 follow-up tests and a regression test for generic spoken file-open routing have been added; pull the latest branch and rerun the focused and full suites, then repeat the live ambiguous filename-selection test.
+Owner-reported local regression checkpoint on 2026-11-07: `149 passed, 6 warnings` in 17.05 seconds using `python -m pytest -q` on `test-jarvis`. This checkpoint includes the merged application reading/closing work and flattened Notepad text regression. The current Phase 8.9 integration branch adds four shared-context tests; its updated total must be taken from the PR's CI result rather than inferred from this earlier baseline.
 
-The conversation viewer provides a **History** button while viewing a saved chat. Closing the viewer with Escape restores the main HUD and hides the SiriWave screen. User and assistant messages display separate timestamps in local date/time, with UTC timestamps available on hover; saved chats retain separate timestamps in MongoDB while older records fall back to their existing turn timestamp. The owner confirmed chat switching, Escape recovery, and live long-conversation continuity. Phase 8.4 is closed; Phase 8.5 has started with deterministic pending-selection resolution, while broader reference resolution remains in progress.
+The conversation viewer provides a **History** button while viewing a saved chat. Closing the viewer with Escape restores the main HUD and hides the SiriWave screen. User and assistant messages display separate timestamps in local date/time, with UTC timestamps available on hover; saved chats retain separate timestamps in MongoDB while older records fall back to their existing turn timestamp. The owner confirmed chat switching, Escape recovery, and live long-conversation continuity. Phase 8.4 is closed. Phases 8.5–8.8 have substantial implementation and regression coverage; broader live validation and Phase 8.9 end-to-end integration remain in progress.
 
 ~~~bash
 python -m pytest -v tests/test_conversation_ui_regression.py
 python -m pytest -v
 ~~~
 
-The prior automated suite covers contextual interpretation, memory persistence/retrieval/update/expiry, dialogue selection, filesystem matching, persona/TTS behavior, and authorization. Live voice and desktop end-to-end validation remains separate; the project owner reports Phase 7.3 was completed locally.
+The regression suite covers contextual interpretation, memory/profile retrieval, conversation summarization, cross-turn references, structured intent classification, desktop/application routing, authorization, LLM retry/fallback, TTS recovery, and shared per-turn intelligence-context assembly. Automated tests do not replace the remaining live Windows microphone, TTS-device, face-authentication/security, and end-to-end desktop checks.
 
 ---
 
@@ -836,7 +884,7 @@ This avoids using the entire application as the only test harness.
 
 The roadmap is maintained in `JARVIS_ROADMAP.md`.
 
-Current branch assessment:
+Current branch assessment (7 November 2026):
 
 ~~~text
 Phase 6
@@ -846,19 +894,19 @@ Phase 7
   ✅ Desktop Automation / Agent
       ├─ 7.1 ✅ Secure automation foundation
       ├─ 7.2 ✅ Desktop application control
-      └─ 7.3 ✅ Live E2E validation reported complete by owner
+      └─ 7.3 ✅ Filesystem automation; owner-reported local E2E checkpoint
         ↓
 Phase 8
-  🟡 Contextual foundation exists; overall phase incomplete
-      ├─ 8.1 ✅ Context interpreter + file-open path verified by owner; legacy routes still need integration
-      ├─ 8.2 ✅ Persistent memory implemented; included in passing 56-test suite
-      ├─ 8.3 ✅ Structured profile context implemented and validated by owner
-      ├─ 8.4 ✅ Rolling summaries; 75-test baseline passed and live continuity confirmed
-      ├─ 8.5 🟡 Pending-selection resolution and generic spoken file-open fallback implemented; latest changes need focused/full tests and live validation
-      ├─ 8.6 ⏳ Smarter structured intent detection
-      ├─ 8.7 ⏳ Error recovery
-      ├─ 8.8 ⏳ Runtime provider/model fallback
-      └─ 8.9 ⏳ Full integration and E2E validation
+  🟡 Intelligence / Context — implementation substantially present; final live E2E open
+      ├─ 8.1 ✅ Contextual interpretation foundation
+      ├─ 8.2 ✅ SQLite semantic + episodic memory
+      ├─ 8.3 ✅ Structured user profile/preferences
+      ├─ 8.4 ✅ Rolling conversation summaries
+      ├─ 8.5 🟡 Selection and reference index implemented; broader live task-continuity checks open
+      ├─ 8.6 🟡 Structured intent classifier implemented; live routing checks open
+      ├─ 8.7 🟡 Error recovery implemented and regression-tested; live device/failure checks open
+      ├─ 8.8 ✅ OmniRoute bounded retry + fallback-model implementation and CI coverage
+      └─ 8.9 🟡 Shared per-turn context integration underway; complete E2E checkpoint open
         ↓
 Phase 9
   ⏳ Advanced Voice + Vision
@@ -877,15 +925,18 @@ The Phase 8 objective is:
 
 > Give JARVIS the ability to infer what the user means from imperfect speech, conversation history, memory, and current interaction state.
 
-The codebase contains a contextual interpreter, recent-turn conversation context, temporary interaction state, SQLite-backed long-term memory, and a structured profile/preferences context layer. The project owner reports the file-open fix and 56-test suite passed locally before the new Phase 8.3 profile changes; the added profile tests still require local validation.
+The codebase now contains a contextual interpreter, rolling conversation summaries, temporary interaction state, SQLite-backed semantic/episodic memory, structured user profile/preferences, a bounded cross-turn reference index, structured intent classification, error recovery, and OmniRoute retry/fallback behavior. On 7 November 2026 the owner reported `149 passed, 6 warnings` locally on `test-jarvis`; the current Phase 8.9 branch adds a shared context snapshot and three additional integration tests, pending CI.
 
 ### Remaining Phase 8 work
 
-- Some legacy application, YouTube, and messaging routes are not yet unified under the same structured action-history path.
-- User profile/preferences/project context is now passed selectively into interpretation and response prompts; its seven new tests await local validation.
-- Conversation summarization, broader contextual reference resolution, structured intent detection, intelligent failure recovery, runtime provider/model fallback, and final integration validation remain open.
+- Complete cross-turn continuity tests for files, applications, tasks, and previous answers, including genuinely ambiguous references.
+- Validate long-term memory and profile/preferences retrieval across fresh sessions and long conversations.
+- Complete live Windows voice/STT, TTS-device failure, face-authentication/authorization denial, and guarded desktop-action checks.
+- Verify explicit retry/cancel/new-request behavior under live OmniRoute failure and recovery.
+- Reconcile legacy application, YouTube, and messaging routes with the structured action-history path where required; do not bypass existing security gates.
+- Finish Phase 8.9 end-to-end validation, then record and commit the final Phase 8 checkpoint.
 
-Phase 7.3 live validation and the 56-test pre-Phase-8.3 suite are recorded as owner-reported results. The Phase 8.3 focused tests, full suite, and live preference-retrieval check are reported passing. The user verified live Phase 8.4 summary recall on 2026-10-11; the latest completed full suite before Phase 8.5 changes was `75 passed, 6 warnings`. Run the new `tests/test_contextual_followups.py` plus the full suite to validate the Phase 8.5 kickoff.
+The last owner-reported local baseline on `test-jarvis` was `149 passed, 6 warnings` on 7 November 2026. This baseline predates the current Phase 8.9 integration branch, which adds three tests for the shared per-turn context snapshot. Its updated total and CI status must be read from the pull request checks, not inferred from the earlier baseline.
 
 ---
 
