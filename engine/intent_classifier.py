@@ -221,7 +221,7 @@ def classify_intent(
     if _application_content_request(raw):
         return _result(
             SemanticIntent.AUTOMATION,
-            normalized or raw,
+            raw,
             0.98,
             "application_content_request",
             "explicit request to inspect text in a known application window",

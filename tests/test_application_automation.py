@@ -150,3 +150,19 @@ def test_executor_returns_accessibility_content_without_reinterpreting_it(monkey
         )
     )
     assert result == expected
+
+
+def test_what_is_in_notepad_question_routes_to_window_reader():
+    action = route_command("What is in Notepad?")
+    assert action is not None
+    assert action.action_type == "read_application"
+
+
+def test_classifier_preserves_original_app_content_request_for_router():
+    result = classify_intent(
+        "Tell me about Notepad",
+        raw_text="What is in Notepad?",
+    )
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.normalized_query == "What is in Notepad?"
+    assert result.should_route_automation is True
