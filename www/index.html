@@ -644,6 +644,17 @@
     </div>
 
     <div
+      id="ContinuousListeningIndicator"
+      class="continuous-listening-indicator"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      <span class="continuous-listening-dot" aria-hidden="true"></span>
+      <span id="ContinuousListeningStatusText">Listening continuously</span>
+    </div>
+
+    <div
       id="SettingsBackdrop"
       class="settings-backdrop"
       aria-hidden="true"
@@ -689,6 +700,18 @@
             <label class="settings-switch">
               <input type="checkbox" id="SettingsVoiceEnabled" />
 
+              <span class="settings-switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="settings-item">
+            <div class="settings-item-content">
+              <strong>Continuous listening</strong>
+              <span>Keep the microphone ready for normal speech. Say “stop listening” or switch this off to pause. Background audio is not saved as a recording.</span>
+            </div>
+
+            <label class="settings-switch">
+              <input type="checkbox" id="SettingsContinuousListening" />
               <span class="settings-switch-slider"></span>
             </label>
           </div>
