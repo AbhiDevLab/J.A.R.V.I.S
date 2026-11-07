@@ -1,5 +1,6 @@
 import os
 import re
+import queue
 import threading
 from datetime import datetime, timezone
 import speech_recognition as sr
@@ -54,6 +55,7 @@ _continuous_listening_event = threading.Event()
 _continuous_thread = None
 _continuous_thread_lock = threading.Lock()
 _assistant_ready = False
+_continuous_input_queue = queue.Queue()
 
 
 def _is_stop_listening_request(text):
@@ -98,14 +100,20 @@ def _continuous_listening_loop(stop_event):
             not stop_event.is_set()
             and _continuous_listening_event.is_set()
         ):
-            query, language = takecommand(
-                return_language=True,
-                recognizer=recognizer,
-                listen_timeout=1.0,
-                phrase_time_limit=phrase_limit,
-                calibrate=calibrate,
-            )
-            calibrate = False
+            try:
+                query, language, is_voice_input = (
+                    _continuous_input_queue.get_nowait()
+                )
+            except queue.Empty:
+                query, language = takecommand(
+                    return_language=True,
+                    recognizer=recognizer,
+                    listen_timeout=1.0,
+                    phrase_time_limit=phrase_limit,
+                    calibrate=calibrate,
+                )
+                calibrate = False
+                is_voice_input = True
 
             if stop_event.is_set() or not _continuous_listening_event.is_set():
                 break
@@ -130,7 +138,7 @@ def _continuous_listening_loop(stop_event):
             )
             allCommands(
                 query,
-                voice_input=True,
+                voice_input=is_voice_input,
                 detected_language=language,
             )
 
@@ -229,6 +237,11 @@ def setContinuousListening(enabled):
         }
 
     _continuous_listening_event.clear()
+    while True:
+        try:
+            _continuous_input_queue.get_nowait()
+        except queue.Empty:
+            break
     with _continuous_thread_lock:
         worker = _continuous_thread
         if worker is not None and worker.is_alive():
@@ -525,6 +538,8 @@ def takecommand(
     (query, detected_language).
     """
     r = recognizer or sr.Recognizer()
+    if recognizer is None:
+        r.pause_threshold = 1
 
     if _mic_busy_event is not None:
         _mic_busy_event.set()
@@ -715,6 +730,28 @@ def _handle_llm_failure(
 
 @eel.expose
 def allCommands(message=1, *, voice_input=None, detected_language=None):
+    # While hands-free mode is active, typed requests are queued for the same
+    # serialized worker so they cannot race the microphone or be transcribed
+    # from JARVIS's own TTS output. Manual microphone buttons are disabled by
+    # the UI and rejected here as a second line of protection.
+    if _continuous_listening_event.is_set() and voice_input is None:
+        if message == 1:
+            return {
+                "success": False,
+                "message": "Continuous listening is already active.",
+            }
+        if isinstance(message, str) and message.strip():
+            _continuous_input_queue.put((
+                message,
+                detect_text_language(message),
+                False,
+            ))
+            _safe_display(
+                "DisplayMessage",
+                "Request queued for continuous listening mode.",
+            )
+            return {"success": True, "queued": True}
+
     # Initial query comes either from the microphone or the text box. The
     # continuous-listener worker supplies an already captured voice transcript.
     is_voice_input = (
