@@ -26,7 +26,8 @@ else:
 def start(
     interrupt_event=None,
     speaking_event=None,
-    mic_busy_event=None
+    mic_busy_event=None,
+    continuous_listening_event=None,
     ):
     
     # Configure shared audio state for command.py.
@@ -36,6 +37,7 @@ def start(
         interrupt_event=interrupt_event,
         speaking_event=speaking_event,
         mic_busy_event=mic_busy_event,
+        continuous_listening_event=continuous_listening_event,
     )
     
     # If dotenv was missing earlier, print a hint only when start runs.
@@ -107,6 +109,7 @@ def start(
                 "Welcome Back Sir, it's a pleasure to see you working!"
             )
 
+            set_assistant_ready(True)
             eel.hideStart()
             playAssistantSound()
 
@@ -149,6 +152,7 @@ def start(
                         "System unlocked."
                     )
 
+                    set_assistant_ready(True)
                     eel.hideFaceAuthSuccess()
                     eel.hideStart()
                     playAssistantSound()
@@ -211,6 +215,7 @@ def start(
                 "System unlocked."
             )
 
+            set_assistant_ready(True)
             playAssistantSound()
             return True
 
