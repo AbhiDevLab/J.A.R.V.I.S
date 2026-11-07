@@ -94,6 +94,7 @@ def hotword(
     interrupt_event=None,
     speaking_event=None,
     mic_busy_event=None,
+    continuous_listening_event=None,
 ):
     porcupine = None
     paud = None
@@ -113,7 +114,11 @@ def hotword(
             # SpeechRecognition owns the microphone.
             # Release the Porcupine audio stream while it is busy.
             # ---------------------------------------------------------
-            if (
+            continuous_mode = (
+                continuous_listening_event is not None
+                and continuous_listening_event.is_set()
+            )
+            if continuous_mode or (
                 mic_busy_event is not None
                 and mic_busy_event.is_set()
             ):
