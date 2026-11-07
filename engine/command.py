@@ -6,6 +6,7 @@ import eel
 from engine.tts import speak as _tts_speak
 from engine.stt import detect_text_language, transcribe_audio
 from engine.llm_client import ask_llm, LLMRequestError
+from engine.llm_recovery import resolve_pending_retry
 from engine.conversation import get_conversation_manager
 from engine.intent_classifier import classify_intent
 from engine.context_interpreter import (
@@ -496,28 +497,17 @@ def allCommands(message=1):
     retry_state = get_interaction_state()
     retry_replay = None
     retry_cancelled = False
-    if retry_state.state_type == "llm_retry":
-        retry_reply = " ".join(str(query or "").casefold().split())
-        if retry_reply in {"retry", "try again", "retry request", "try that again"}:
-            retry_replay = dict(retry_state.data)
-            query = str(retry_replay.get("pending_request") or "")
-            query_language = retry_replay.get("language") or query_language
-            is_voice_input = bool(retry_replay.get("is_voice_input", is_voice_input))
-            previous_interaction = retry_replay.get("previous_interaction_state") or {}
-            retry_state.clear()
-            if previous_interaction.get("state_type"):
-                retry_state.set(
-                    previous_interaction.get("state_type", ""),
-                    prompt=previous_interaction.get("prompt", ""),
-                    action_type=previous_interaction.get("action_type", ""),
-                    candidates=previous_interaction.get("candidates", []),
-                    **(previous_interaction.get("data") or {}),
-                )
-        elif retry_reply in {"cancel", "stop", "no", "never mind", "nevermind"}:
-            retry_state.clear()
+    retry_resolution = resolve_pending_retry(query, retry_state)
+    if retry_resolution is not None:
+        if retry_resolution.action == "retry":
+            retry_replay = {
+                "raw_transcript": retry_resolution.raw_transcript,
+            }
+            query = retry_resolution.pending_request
+            query_language = retry_resolution.language or query_language
+            is_voice_input = retry_resolution.is_voice_input
+        elif retry_resolution.action == "cancel":
             retry_cancelled = True
-        else:
-            retry_state.clear()
 
     # Phase 3/5 conversation loop:
     # If an LLM response is interrupted by saying "Jarvis", the loop
