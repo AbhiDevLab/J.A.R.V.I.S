@@ -76,40 +76,45 @@ def _is_stop_listening_request(text):
 def _continuous_listening_loop(stop_event):
     global _continuous_thread
 
-    recognizer = sr.Recognizer()
     try:
-        pause_threshold = float(
-            os.getenv("JARVIS_CONTINUOUS_PAUSE_THRESHOLD", "0.8")
+        recognizer = sr.Recognizer()
+        try:
+            pause_threshold = float(
+                os.getenv("JARVIS_CONTINUOUS_PAUSE_THRESHOLD", "0.8")
+            )
+        except (TypeError, ValueError):
+            pause_threshold = 0.8
+        recognizer.pause_threshold = max(0.35, min(pause_threshold, 2.0))
+
+        try:
+            phrase_limit = float(
+                os.getenv("JARVIS_CONTINUOUS_PHRASE_LIMIT", "8")
+            )
+        except (TypeError, ValueError):
+            phrase_limit = 8.0
+        phrase_limit = max(2.0, min(phrase_limit, 20.0))
+
+        # Do not open the input device until the separate Porcupine process has
+        # acknowledged that it released its stream.
+        if _hotword_paused_event is not None:
+            for _ in range(50):
+                if stop_event.is_set() or not _continuous_listening_event.is_set():
+                    return
+                if _hotword_paused_event.is_set():
+                    break
+                stop_event.wait(0.1)
+            if not _hotword_paused_event.is_set():
+                raise RuntimeError(
+                    "Wake-word listener did not release the microphone."
+                )
+
+        calibrate = True
+        _safe_display(
+            "setContinuousListeningStatus",
+            True,
+            "Listening",
         )
-    except (TypeError, ValueError):
-        pause_threshold = 0.8
-    recognizer.pause_threshold = max(0.35, min(pause_threshold, 2.0))
 
-    try:
-        phrase_limit = float(
-            os.getenv("JARVIS_CONTINUOUS_PHRASE_LIMIT", "8")
-        )
-    except (TypeError, ValueError):
-        phrase_limit = 8.0
-    phrase_limit = max(2.0, min(phrase_limit, 20.0))
-
-    calibrate = True
-
-    # Do not open the input device until the separate Porcupine process has
-    # acknowledged that it released its stream.
-    if _hotword_paused_event is not None:
-        for _ in range(50):
-            if stop_event.is_set() or not _continuous_listening_event.is_set():
-                return
-            if _hotword_paused_event.is_set():
-                break
-            threading.Event().wait(0.1)
-        if not _hotword_paused_event.is_set():
-            raise RuntimeError("Wake-word listener did not release the microphone.")
-
-    _safe_display("setContinuousListeningStatus", True, "Listening")
-
-    try:
         while (
             not stop_event.is_set()
             and _continuous_listening_event.is_set()
