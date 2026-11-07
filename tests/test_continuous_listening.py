@@ -120,3 +120,99 @@ def test_typed_requests_are_queued_when_continuous_mode_owns_the_mic(monkeypatch
     assert is_voice_input is False
 
     event.clear()
+
+def test_continuous_recognizer_configures_adaptive_vad_and_clamps_values(monkeypatch):
+    class FakeRecognizer:
+        pass
+
+    monkeypatch.setenv("JARVIS_CONTINUOUS_PAUSE_THRESHOLD", "99")
+    monkeypatch.setenv("JARVIS_CONTINUOUS_PHRASE_LIMIT", "0")
+    monkeypatch.setenv("JARVIS_VAD_DYNAMIC_ENERGY", "true")
+    monkeypatch.setenv("JARVIS_VAD_ADJUSTMENT_DAMPING", "-5")
+    monkeypatch.setenv("JARVIS_VAD_ENERGY_RATIO", "20")
+    monkeypatch.setenv("JARVIS_VAD_PHRASE_THRESHOLD", "0.01")
+    monkeypatch.setenv("JARVIS_VAD_NON_SPEAKING_DURATION", "9")
+
+    recognizer = FakeRecognizer()
+    phrase_limit = command._configure_continuous_recognizer(recognizer)
+
+    assert recognizer.pause_threshold == 2.0
+    assert recognizer.dynamic_energy_threshold is True
+    assert recognizer.dynamic_energy_adjustment_damping == 0.01
+    assert recognizer.dynamic_energy_ratio == 3.0
+    assert recognizer.phrase_threshold == 0.1
+    assert recognizer.non_speaking_duration == 1.5
+    assert phrase_limit == 2.0
+
+
+def test_continuous_vad_can_disable_dynamic_energy_adjustment(monkeypatch):
+    class FakeRecognizer:
+        pass
+
+    monkeypatch.setenv("JARVIS_VAD_DYNAMIC_ENERGY", "off")
+    recognizer = FakeRecognizer()
+
+    command._configure_continuous_recognizer(recognizer)
+
+    assert recognizer.dynamic_energy_threshold is False
+
+
+def test_hotword_is_paused_during_continuous_capture_and_processing():
+    assert command._should_pause_hotword(
+        continuous_mode=True, mic_busy=True, speaking=False
+    ) is True
+    assert command._should_pause_hotword(
+        continuous_mode=True, mic_busy=False, speaking=False
+    ) is True
+
+
+def test_hotword_is_available_only_during_tts_in_continuous_mode():
+    assert command._should_pause_hotword(
+        continuous_mode=True, mic_busy=False, speaking=True
+    ) is False
+
+
+def test_hotword_keeps_existing_non_continuous_behavior():
+    assert command._should_pause_hotword(
+        continuous_mode=False, mic_busy=False, speaking=False
+    ) is False
+    assert command._should_pause_hotword(
+        continuous_mode=False, mic_busy=True, speaking=True
+    ) is True
+
+
+def test_wake_word_interrupts_tts_without_launching_a_second_flow():
+    interrupt_event = threading.Event()
+
+    decision = command._route_hotword_activation(
+        continuous_mode=True,
+        speaking=True,
+        interrupt_event=interrupt_event,
+    )
+
+    assert decision == "interrupted"
+    assert interrupt_event.is_set() is True
+
+
+def test_wake_word_outside_tts_is_ignored_in_continuous_mode():
+    interrupt_event = threading.Event()
+
+    decision = command._route_hotword_activation(
+        continuous_mode=True,
+        speaking=False,
+        interrupt_event=interrupt_event,
+    )
+
+    assert decision == "ignored"
+    assert interrupt_event.is_set() is False
+
+
+def test_regular_wake_word_activation_is_preserved():
+    decision = command._route_hotword_activation(
+        continuous_mode=False,
+        speaking=False,
+        interrupt_event=threading.Event(),
+    )
+
+    assert decision == "activate"
+
