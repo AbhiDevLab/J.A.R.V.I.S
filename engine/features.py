@@ -9,7 +9,12 @@ from playsound import playsound
 import eel
 import pyaudio
 import pyautogui
-from engine.command import speak, takecommand
+from engine.command import (
+    speak,
+    takecommand,
+    _route_hotword_activation,
+    _should_pause_hotword,
+)
 from engine.config import ASSISTANT_NAME, PRIMARY_ASSISTANT_NAME
 import pywhatkit as kit
 import pvporcupine
@@ -119,10 +124,19 @@ def hotword(
                 continuous_listening_event is not None
                 and continuous_listening_event.is_set()
             )
-            if continuous_mode or (
+            mic_busy = (
                 mic_busy_event is not None
                 and mic_busy_event.is_set()
-            ):
+            )
+            speaking = (
+                speaking_event is not None
+                and speaking_event.is_set()
+            )
+
+            # Continuous STT owns the microphone during capture. Between
+            # captures, Porcupine stays paused except while TTS is active,
+            # allowing a wake-word barge-in without a second recorder.
+            if _should_pause_hotword(continuous_mode, mic_busy, speaking):
                 if audio_stream is not None:
                     try:
                         audio_stream.stop_stream()
@@ -136,8 +150,11 @@ def hotword(
 
                     audio_stream = None
 
-                if continuous_mode and hotword_paused_event is not None:
-                    hotword_paused_event.set()
+                if hotword_paused_event is not None:
+                    if continuous_mode:
+                        hotword_paused_event.set()
+                    else:
+                        hotword_paused_event.clear()
 
                 time.sleep(0.05)
                 continue
@@ -175,31 +192,23 @@ def hotword(
                 print("hotword detected")
 
                 # -----------------------------------------------------
-                # Phase 1 behavior:
-                #
-                # If JARVIS is speaking, mark the hotword as an
-                # interruption request.
-                #
-                # We deliberately do NOT stop pyttsx3 yet.
-                # That comes in Phase 2.
+                # Phase 9.2: a hotword during TTS interrupts playback.
+                # In continuous mode a stray wake-word hit outside TTS
+                # must never launch a second UI/listening flow.
                 # -----------------------------------------------------
-                if (
-                    speaking_event is not None
-                    and speaking_event.is_set()
-                ):
-
-                    print(
-                        "Hotword detected while JARVIS "
-                        "is speaking."
-                    )
-
-                    if interrupt_event is not None:
-                        interrupt_event.set()
-
+                decision = _route_hotword_activation(
+                    continuous_mode,
+                    speaking,
+                    interrupt_event,
+                )
+                if decision == "interrupted":
+                    print("Wake-word barge-in detected; stopping JARVIS speech.")
+                    continue
+                if decision == "ignored":
                     continue
 
                 # -----------------------------------------------------
-                # Normal hotword activation remains unchanged.
+                # Normal wake-word activation remains unchanged.
                 # -----------------------------------------------------
                 import pyautogui as autogui
 

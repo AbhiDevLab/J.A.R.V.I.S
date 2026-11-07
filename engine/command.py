@@ -48,9 +48,9 @@ from engine.automation import (
 
 conversation_manager = get_conversation_manager()
 
-# The continuous mode owns one microphone capture cycle at a time. Its event is
-# shared with the Porcupine process so the two listeners never open the device
-# concurrently.
+# Continuous STT and Porcupine share the microphone by alternating ownership:
+# STT marks mic_busy_event during capture; Porcupine is allowed to listen only
+# during TTS playback, when STT has released the device.
 _continuous_listening_event = threading.Event()
 _hotword_paused_event = None
 _continuous_thread = None
@@ -73,26 +73,73 @@ def _is_stop_listening_request(text):
     }
 
 
+def _bounded_env_float(name, default, minimum, maximum):
+    """Read and clamp an audio-tuning value from the environment."""
+    try:
+        value = float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        value = float(default)
+    return max(minimum, min(value, maximum))
+
+
+def _environment_flag(name, default=True):
+    value = os.getenv(name)
+    if value is None:
+        return bool(default)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _configure_continuous_recognizer(recognizer):
+    """Apply conservative adaptive-energy VAD and phrase-endpoint settings."""
+    pause_threshold = _bounded_env_float(
+        "JARVIS_CONTINUOUS_PAUSE_THRESHOLD", 0.8, 0.35, 2.0
+    )
+    recognizer.pause_threshold = pause_threshold
+    recognizer.dynamic_energy_threshold = _environment_flag(
+        "JARVIS_VAD_DYNAMIC_ENERGY", True
+    )
+    recognizer.dynamic_energy_adjustment_damping = _bounded_env_float(
+        "JARVIS_VAD_ADJUSTMENT_DAMPING", 0.15, 0.01, 0.99
+    )
+    recognizer.dynamic_energy_ratio = _bounded_env_float(
+        "JARVIS_VAD_ENERGY_RATIO", 1.5, 1.0, 3.0
+    )
+    recognizer.phrase_threshold = _bounded_env_float(
+        "JARVIS_VAD_PHRASE_THRESHOLD", 0.3, 0.1, 1.5
+    )
+    recognizer.non_speaking_duration = min(
+        _bounded_env_float(
+            "JARVIS_VAD_NON_SPEAKING_DURATION", 0.5, 0.1, 1.5
+        ),
+        pause_threshold,
+    )
+    return _bounded_env_float(
+        "JARVIS_CONTINUOUS_PHRASE_LIMIT", 8.0, 2.0, 20.0
+    )
+
+
+def _should_pause_hotword(continuous_mode, mic_busy, speaking):
+    """Keep Porcupine off the device except during a continuous-mode TTS window."""
+    return bool(mic_busy) or (bool(continuous_mode) and not bool(speaking))
+
+
+def _route_hotword_activation(continuous_mode, speaking, interrupt_event):
+    """Route a wake-word hit to TTS interruption or the normal wake action."""
+    if speaking:
+        if interrupt_event is not None:
+            interrupt_event.set()
+        return "interrupted"
+    if continuous_mode:
+        return "ignored"
+    return "activate"
+
+
 def _continuous_listening_loop(stop_event):
     global _continuous_thread
 
     try:
         recognizer = sr.Recognizer()
-        try:
-            pause_threshold = float(
-                os.getenv("JARVIS_CONTINUOUS_PAUSE_THRESHOLD", "0.8")
-            )
-        except (TypeError, ValueError):
-            pause_threshold = 0.8
-        recognizer.pause_threshold = max(0.35, min(pause_threshold, 2.0))
-
-        try:
-            phrase_limit = float(
-                os.getenv("JARVIS_CONTINUOUS_PHRASE_LIMIT", "8")
-            )
-        except (TypeError, ValueError):
-            phrase_limit = 8.0
-        phrase_limit = max(2.0, min(phrase_limit, 20.0))
+        phrase_limit = _configure_continuous_recognizer(recognizer)
 
         # Do not open the input device until the separate Porcupine process has
         # acknowledged that it released its stream.
