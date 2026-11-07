@@ -5,7 +5,8 @@ import eel
 
 from engine.tts import speak as _tts_speak
 from engine.stt import detect_text_language, transcribe_audio
-from engine.llm_client import ask_llm
+from engine.llm_client import ask_llm, LLMRequestError
+from engine.llm_recovery import resolve_pending_retry
 from engine.conversation import get_conversation_manager
 from engine.intent_classifier import classify_intent
 from engine.context_interpreter import (
@@ -36,6 +37,8 @@ from engine.settings_store import (
     load_settings,
     update_settings,
 )
+
+from engine.automation.application_state import build_application_activity_context
 
 from engine.automation import (
     route_command,
@@ -277,12 +280,22 @@ def speak(
         ):
             return False
 
-    return _tts_speak(
-        text,
-        language=language,
-        interrupt_event=_interrupt_event,
-        speaking_event=_speaking_event,
-    )
+    try:
+        return _tts_speak(
+            text,
+            language=language,
+            interrupt_event=_interrupt_event,
+            speaking_event=_speaking_event,
+        )
+    except Exception as exc:
+        # Keep the already-rendered text answer usable when the audio device
+        # or TTS engine fails. A voice failure must not discard the response.
+        print(f"TTS failure: {type(exc).__name__}")
+        _safe_display(
+            "DisplayMessage",
+            "Voice output is unavailable. The text response remains visible.",
+        )
+        return False
 
 
 def takecommand(return_language=False):
@@ -369,8 +382,12 @@ def takecommand(return_language=False):
 
     except Exception as e:
         print(
-            "Speech recognition error:",
-            e,
+            "Speech recognition failure: "
+            f"{type(e).__name__}: {e}"
+        )
+        _safe_display(
+            "DisplayMessage",
+            "Speech input failed. Please try speaking again or type your request.",
         )
 
         if return_language:
@@ -388,6 +405,87 @@ def _language_name(language):
         return "Hindi"
 
     return "English"
+
+
+def _handle_llm_failure(
+    error,
+    query,
+    raw_transcript,
+    response_language,
+    is_voice_input,
+):
+    """Preserve the failed request and offer an explicit, safe retry."""
+    state = get_interaction_state()
+    previous_interaction = {
+        "state_type": state.state_type,
+        "prompt": state.prompt,
+        "action_type": state.action_type,
+        "candidates": list(state.candidates),
+        "data": dict(state.data),
+    } if state.has_state() else {}
+    message = (
+        "The AI service is not configured correctly. "
+        "Your request is preserved; fix the configuration and say 'retry'."
+        if error.category == "configuration"
+        else
+        "I couldn't get a reliable AI response. Your request is preserved "
+        "in this conversation. Say 'retry' to try it again, or send a "
+        "different request."
+    )
+
+    state.set(
+        "llm_retry",
+        prompt="say retry to repeat the preserved request, or send a new request",
+        action_type="retry_llm_request",
+        pending_request=str(query or ""),
+        raw_transcript=str(raw_transcript or query or ""),
+        language=response_language or "en",
+        is_voice_input=bool(is_voice_input),
+        error_category=error.category,
+        previous_interaction_state=previous_interaction,
+    )
+
+    assistant_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    conversation_manager.add_turn(
+        str(query or raw_transcript or ""),
+        message,
+    )
+
+    try:
+        from engine.mongo_store import save_chat_turn
+
+        save_chat_turn(
+            str(query or raw_transcript or ""),
+            message,
+            model=os.getenv("OMNIROUTE_MODEL", ""),
+            meta={
+                "provider": os.getenv("LLM_PROVIDER", "omniroute"),
+                "error_category": error.category,
+                "recovery": "pending_user_retry",
+            },
+            conversation_id=conversation_manager.conversation_id,
+            user_timestamp=datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            assistant_timestamp=assistant_timestamp,
+            raw_user_text=str(raw_transcript or query or ""),
+            interpreted_user_text=str(query or raw_transcript or ""),
+            interpretation={
+                "intent": "llm_error",
+                "confidence": 0.0,
+                "used_context": True,
+            },
+        )
+    except Exception as persistence_error:
+        print(f"LLM recovery history persistence unavailable: {persistence_error}")
+
+    _safe_display(
+        "assistantResponse",
+        message,
+        assistant_timestamp,
+    )
+    speak(
+        message,
+        language=response_language or "en",
+    )
 
 
 @eel.expose
@@ -409,11 +507,34 @@ def allCommands(message=1):
             str(query)
         )
 
+    # A previous model failure keeps its original request in ephemeral state.
+    # Only an explicit retry replays that request; a different utterance starts
+    # a new request and clears the stale retry state.
+    retry_state = get_interaction_state()
+    retry_replay = None
+    retry_cancelled = False
+    retry_resolution = resolve_pending_retry(query, retry_state)
+    if retry_resolution is not None:
+        if retry_resolution.action == "retry":
+            retry_replay = {
+                "raw_transcript": retry_resolution.raw_transcript,
+            }
+            query = retry_resolution.pending_request
+            query_language = retry_resolution.language or query_language
+            is_voice_input = retry_resolution.is_voice_input
+        elif retry_resolution.action == "cancel":
+            retry_cancelled = True
+
     # Phase 3/5 conversation loop:
     # If an LLM response is interrupted by saying "Jarvis", the loop
     # listens for the next query and continues without another activation.
     while True:
         raw_transcript = str(query or "").strip()
+        if retry_replay is not None:
+            raw_transcript = str(
+                retry_replay.get("raw_transcript") or raw_transcript
+            ).strip()
+            retry_replay = None
         user_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         if query:
             _safe_display(
@@ -423,6 +544,13 @@ def allCommands(message=1):
             )
 
         try:
+            if retry_cancelled:
+                speak(
+                    "Understood. I won't retry the previous request.",
+                    language=query_language or "en",
+                )
+                break
+
             if query == "":
                 speak(
                     "I didn't catch that. Please try again.",
@@ -484,13 +612,14 @@ def allCommands(message=1):
             memory_context = build_memory_context(query)
             profile_context = build_user_profile_context(query)
             conversation_context = conversation_manager.build_context()
+            application_context = build_application_activity_context()
             reference_context = build_reference_context(
                 conversation_manager.get_messages(),
                 summary=conversation_manager.get_summary(),
             )
-            if reference_context:
+            if reference_context or application_context:
                 conversation_context = "\n\n".join(
-                    part for part in (conversation_context, reference_context) if part
+                    part for part in (conversation_context, reference_context, application_context) if part
                 )
             interaction_context = get_interaction_state().as_context()
 
@@ -504,14 +633,27 @@ def allCommands(message=1):
             )
 
             if should_interpret:
-                interpretation = interpret_query(
-                    raw_transcript,
-                    conversation_context=conversation_context,
-                    interaction_state=interaction_context,
-                    memory_context=memory_context,
-                    profile_context=profile_context,
-                    language=query_language or "en",
-                )
+                try:
+                    interpretation = interpret_query(
+                        raw_transcript,
+                        conversation_context=conversation_context,
+                        interaction_state=interaction_context,
+                        memory_context=memory_context,
+                        profile_context=profile_context,
+                        language=query_language or "en",
+                    )
+                except LLMRequestError as error:
+                    # Do not discard a pending selection/clarification when the
+                    # interpreter cannot reach its model. Keep the original
+                    # request available for an explicit retry.
+                    _handle_llm_failure(
+                        error,
+                        raw_transcript,
+                        raw_transcript,
+                        query_language or "en",
+                        is_voice_input,
+                    )
+                    break
 
                 print(
                     "Context interpretation: "
@@ -627,21 +769,84 @@ def allCommands(message=1):
             )
 
             if automation_action is not None:
-                automation_action = complete_action(
-                    automation_action
-                )
+                try:
+                    automation_action = complete_action(
+                        automation_action
+                    )
 
-                if automation_action is None:
+                    if automation_action is None:
+                        break
+
+                    automation_result = execute_action(
+                        automation_action
+                    )
+                except Exception as automation_error:
+                    # Clear stale dialogue state so the user cannot accidentally
+                    # answer an old selection/confirmation after execution failed.
+                    get_interaction_state().clear()
+                    # Do not claim success or automatically repeat an action
+                    # when an exception leaves its final execution state uncertain.
+                    print(
+                        "Automation execution failure: "
+                        f"{type(automation_error).__name__}"
+                    )
+                    recovery_message = (
+                        "I couldn't verify whether that desktop action completed. "
+                        "Please check the target before asking me to repeat it."
+                    )
+                    assistant_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+                    conversation_manager.add_turn(
+                        query,
+                        recovery_message,
+                    )
+                    try:
+                        from engine.mongo_store import save_chat_turn
+
+                        save_chat_turn(
+                            query,
+                            recovery_message,
+                            meta={
+                                "error_category": "automation_execution_uncertain",
+                                "action_type": getattr(automation_action, "action_type", "unknown"),
+                            },
+                            conversation_id=conversation_manager.conversation_id,
+                            user_timestamp=user_timestamp,
+                            assistant_timestamp=assistant_timestamp,
+                            raw_user_text=raw_transcript,
+                            interpreted_user_text=query,
+                        )
+                    except Exception as persistence_error:
+                        print(f"Automation recovery persistence unavailable: {persistence_error}")
+
+                    _safe_display(
+                        "assistantResponse",
+                        recovery_message,
+                        assistant_timestamp,
+                    )
+                    speak(
+                        recovery_message,
+                        language=query_language or "en",
+                    )
                     break
-
-                automation_result = execute_action(
-                    automation_action
-                )
 
                 if automation_result.get(
                     "success"
                 ):
-                    if (
+                    if automation_action.action_type == "read_application":
+                        # Show the extracted text in the UI, but keep TTS concise.
+                        _safe_display(
+                            "receiverText",
+                            automation_result.get("message", ""),
+                        )
+                        speak(
+                            automation_result.get(
+                                "spoken_message",
+                                "I read the visible application text and displayed it.",
+                            ),
+                            display=False,
+                            language=query_language or "en",
+                        )
+                    elif (
                         automation_action.action_type
                         == "find_file"
                         and automation_result.get(
@@ -674,27 +879,30 @@ def allCommands(message=1):
                 if automation_result.get("success"):
                     action_message = str(
                         automation_result.get(
-                            "message",
+                            "summary" if automation_action.action_type == "read_application" else "message",
                             "Action completed successfully.",
                         )
                     )
                     try:
-                        record_episode(
-                            query,
-                            outcome=action_message,
-                            action_type=automation_action.action_type,
-                            conversation_id=conversation_manager.conversation_id,
-                            metadata={
-                                "action_type": automation_action.action_type,
-                                "raw_transcript": raw_transcript,
-                                "interpreted_query": query,
-                                "interpretation_confidence": (
-                                    interpretation.confidence
-                                    if interpretation is not None
-                                    else None
-                                ),
-                            },
-                        )
+                        # Application text can contain private document content. Keep
+                        # it in the immediate UI response, not durable long-term memory.
+                        if automation_action.action_type != "read_application":
+                            record_episode(
+                                query,
+                                outcome=action_message,
+                                action_type=automation_action.action_type,
+                                conversation_id=conversation_manager.conversation_id,
+                                metadata={
+                                    "action_type": automation_action.action_type,
+                                    "raw_transcript": raw_transcript,
+                                    "interpreted_query": query,
+                                    "interpretation_confidence": (
+                                        interpretation.confidence
+                                        if interpretation is not None
+                                        else None
+                                    ),
+                                },
+                            )
                         # The conversation context uses the understood request;
                         # the original transcript is retained in memory metadata.
                         conversation_manager.add_turn(
@@ -868,9 +1076,20 @@ questions using that context.
                     context_section,
                 )
 
-                response = ask_llm(
-                    enhanced_prompt
-                )
+                try:
+                    response = ask_llm(
+                        enhanced_prompt
+                    )
+                except LLMRequestError as error:
+                    _handle_llm_failure(
+                        error,
+                        query,
+                        raw_transcript,
+                        response_language,
+                        is_voice_input,
+                    )
+                    break
+
                 assistant_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
                 print(

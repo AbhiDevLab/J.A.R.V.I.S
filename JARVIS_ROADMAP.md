@@ -21,7 +21,7 @@ Phase 6 was completed before the Desktop Automation work began.
 
 # Phase 7 — Desktop Automation / Agent Capabilities
 
-This is the phase we are currently developing.
+This phase is complete according to the implementation and owner-reported validation checkpoints below.
 
 This phase is the deliberate move from **“assistant that answers”** to **“assistant that does things.”**
 
@@ -295,26 +295,38 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 
 ### Phase 8.7 — Intelligent Error / Fallback Handling
 
-- [ ] Classify STT, interpretation, LLM, automation, authorization, and TTS failures separately
-- [ ] Replace generic failure responses with context-appropriate recovery
-- [ ] Retry transient LLM/provider failures when safe
-- [ ] Recover gracefully from malformed/empty LLM responses
-- [ ] Preserve conversation context across recoverable failures
-- [ ] Ask the user for clarification when recovery requires missing information
-- [ ] Add failure-recovery regression tests
+Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
+
+- [x] Classify STT, interpretation, LLM, automation, authorization, and TTS failures separately in the user-facing recovery path
+- [x] Replace generic failure responses with context-appropriate recovery for speech input, LLM availability, TTS, and uncertain automation execution
+- [x] Retry transient LLM/provider failures when safe
+- [x] Recover gracefully from malformed/empty LLM responses through bounded retries and controlled fallback
+- [x] Preserve the failed request and pending dialogue state across recoverable LLM failures
+- [x] Ask the user to explicitly retry, cancel, or submit a new request; never infer retry approval from unrelated input
+- [x] Add focused LLM recovery tests in `tests/test_llm_client.py`
+- [x] Add deterministic retry/cancel/new-request state tests in `tests/test_llm_recovery.py`
+- [x] Add TTS/text-preservation and pending-request recovery tests in `tests/test_command_recovery.py`
+- [x] Run the full CI regression suite — **106 passed, 5 warnings** on 2026-11-07
+
+**Validation note:** Automated tests pass. Keep live Windows microphone/STT, TTS-device failure, authorization-denial, and uncertain desktop-action checks open until verified on the owner's Windows system.
 
 ### Phase 8.8 — LLM Provider / Model Fallback Strategy
 
 This is limited to **runtime reliability and fallback behavior**. Full provider/model configuration remains Phase 10.
 
-- [ ] Define a controlled fallback policy around the existing OmniRoute architecture
-- [ ] Detect connection failures, timeouts, provider failures, and invalid responses
-- [ ] Retry requests only when the failure is safely retryable
-- [ ] Support controlled model/provider fallback where the existing runtime configuration permits it
-- [ ] Preserve a consistent JARVIS response contract across fallback providers/models
-- [ ] Log which fallback path was used for diagnostics
-- [ ] Add provider/fallback regression tests
-- [ ] Keep full provider selection/configuration for Phase 10
+Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
+
+- [x] Define a controlled fallback policy around the existing OmniRoute architecture
+- [x] Detect connection failures, timeouts, transient provider errors, HTTP errors, and malformed/empty responses
+- [x] Retry only transient failures with bounded attempts and backoff
+- [x] Support an explicitly configured fallback model through the same OmniRoute endpoint (`OMNIROUTE_FALLBACK_MODEL`)
+- [x] Preserve the non-streaming string response contract across primary/fallback models
+- [x] Log the selected model, retry attempts, and fallback path without logging credentials or raw response bodies
+- [x] Add provider/retry/fallback tests in `tests/test_llm_client.py`
+- [x] Run the full CI regression suite — **106 passed, 5 warnings** on 2026-11-07
+- [x] Keep full provider selection/configuration for Phase 10
+
+**Scope guard:** No direct OpenAI/Gemini/OpenRouter provider selection was added. That remains Phase 10.
 
 ### Phase 8.9 — Intelligence Integration & E2E Validation
 
@@ -332,7 +344,7 @@ This is limited to **runtime reliability and fallback behavior**. Full provider/
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated; Phase 8.4 live rolling-summary recall was confirmed on 2026-10-11. Phase 8.5 deterministic selection, speech-tolerant filename matching, the focused test suite (23/23), the complete suite (84/84), and the live duplicate-file selection scenario are now owner-validated (2026-10-11). Broader cross-turn reference resolution and Phases 8.6–8.9 remain open.
+**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated. Phase 8.5 deterministic selection, filename matching, and new cross-turn reference-index regression coverage are present; broader multi-turn task continuation still needs live Windows validation. Phase 8.6 structured intent detection has focused and full regression evidence (52 focused / 106 full owner-reported on 2026-10-11), but live intent-routing validation remains pending. Phase 8.7 error recovery and Phase 8.8 OmniRoute model fallback were implemented on 2026-11-07; the full CI suite passed **106 tests with 5 warnings** on 2026-11-07. Phase 8.9's automated regression gate passed, but final live voice, memory/context, and desktop automation E2E checks plus the final checkpoint remain open.
 
 ---
 
@@ -460,11 +472,11 @@ PHASE 8
       ├─ 8.2 ✅ Long-Term Memory — implementation and 63-test regression suite passing
       ├─ 8.3 ✅ Structured profile context implemented and validated by owner
       ├─ 8.4 ✅ Rolling summaries; 75-test baseline passed and live continuity confirmed
-      ├─ 8.5 🟡 Pending-selection resolution + speech-tolerant file matching; 23 focused tests, 84 full-suite tests, and live duplicate-file selection validated
-      ├─ 8.6 ⏳ Smarter Intent Detection
-      ├─ 8.7 ⏳ Intelligent Error / Fallback Handling
-      ├─ 8.8 ⏳ LLM Provider / Model Fallback
-      └─ 8.9 ⏳ Intelligence Integration & E2E Validation
+      ├─ 8.5 🟡 Selection/reference index tests present; live cross-turn task validation open
+      ├─ 8.6 🟡 Smarter Intent Detection — tests present; live routing validation open
+      ├─ 8.7 🟡 Error recovery — 106-test full CI suite passed; live Windows validation open
+      ├─ 8.8 ✅ OmniRoute fallback — 106-test full CI suite passed
+      └─ 8.9 🟡 Full automated regression passed; live voice/desktop E2E and final checkpoint open
         ↓
 PHASE 9
   ⏳ Advanced Voice + Vision

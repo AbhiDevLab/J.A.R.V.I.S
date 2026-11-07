@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from typing import Any, Dict
 
@@ -8,6 +9,14 @@ from .actions import (
     requires_confirmation,
 )
 from .applications import resolve_application
+from .application_state import (
+    record_application_opened,
+    record_application_closed,
+)
+from .windows_apps import (
+    close_application_window,
+    read_application_window_text,
+)
 from .filesystem import (
     copy_file,
     create_file,
@@ -22,6 +31,7 @@ from .filesystem import (
     rename_path,
 )
 from .security import request_authorization
+from engine.llm_client import ask_llm
 
 
 def _result(
@@ -138,7 +148,7 @@ def _execute_open_application(
     print(f"Executable: {executable}")
 
     try:
-        if application == {"command prompt", "cmd"}:
+        if application in {"command prompt", "cmd"}:
             subprocess.Popen(
                 [executable, "/K"],
                 shell=False,
@@ -150,6 +160,7 @@ def _execute_open_application(
                 shell=False,
             )
 
+        record_application_opened(application)
         return _result(
             True,
             f"Opening {application}.",
@@ -163,6 +174,96 @@ def _execute_open_application(
             False,
             f"I could not open {application}.",
         )
+
+
+
+def _execute_close_application(action: AutomationAction) -> Dict[str, Any]:
+    application = str(action.parameters.get("application", "")).strip()
+    if not application:
+        return _result(False, "No application was specified.")
+    result = close_application_window(application)
+    if result.get("success") and not result.get("still_open"):
+        record_application_closed(application)
+    return result
+
+
+def _answer_application_question(question: str, content: str, application: str) -> str:
+    """Answer from the live window text only; never consult conversation memory."""
+    question_text = str(question or "").strip()
+    source_text = str(content or "").strip()
+    if not question_text or not source_text:
+        return "I could not find enough readable text to answer that question."
+
+    # High-value named-field questions get deterministic extraction first.
+    if re.search(r"\bproject\s+(?:name|title)\b", question_text, re.IGNORECASE):
+        patterns = (
+            r"^[ \\t]*project(?:[ \\t]+(?:name|title))?[ \\t]*[:=—-][ \\t]*(.+?)(?=[ \\t]+(?:status|date|owner|author|description|meeting|experiment)\\s*[:=—-]|[ \\t]*$)",
+            r"\bproject\s+(?:is|called|named)\s+['\"]?([^.!?\r\n]+)",
+            r"\b(?:my|the)\s+project\s+(?:is\s+)?(?:called|named)\s+['\"]?([^.!?\r\n]+)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, source_text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                value = match.group(1).strip().strip("\"' ")
+                if value:
+                    return f"The project name shown in {application.title()} is {value}."
+        return (
+            f"The visible {application.title()} text does not explicitly state a project name. "
+            "It describes a series of quantum-computing experiments."
+        )
+
+    prompt = f"""
+You are answering a question about text JARVIS has just extracted from a live Windows application.
+Answer using ONLY the source text below. Do not use previous conversation, stored memory, outside knowledge,
+or assumptions. If the answer is not explicitly supported by the source, say that it is not specified.
+Be concise and include a short exact supporting excerpt when one exists.
+
+Application: {application}
+User question: {question_text}
+
+SOURCE TEXT (the only evidence):
+<document>
+{source_text}
+</document>
+"""
+    try:
+        answer = str(ask_llm(prompt) or "").strip()
+    except Exception as exc:
+        print(f"Application document question unavailable: {type(exc).__name__}")
+        return (
+            f"I read the {application.title()} text, but could not answer the question right now. "
+            "The extracted text is available; please try the question again."
+        )
+    if not answer:
+        return f"The visible text in {application.title()} does not provide an answer to that question."
+    return answer
+
+
+def _execute_read_application(action: AutomationAction) -> Dict[str, Any]:
+    application = str(action.parameters.get("application", "")).strip()
+    question = str(action.parameters.get("question", "")).strip()
+    if not application:
+        return _result(False, "No application was specified.")
+    result = read_application_window_text(application)
+    if not result.get("success"):
+        return _result(False, str(result.get("message") or "I could not read that application."))
+
+    if question:
+        answer = _answer_application_question(
+            question,
+            str(result.get("content") or ""),
+            application,
+        )
+        return {
+            "success": True,
+            "content": result.get("content", ""),
+            "answer": answer,
+            "message": f"Based only on the visible text in {application.title()}:\n\n{answer}",
+            "spoken_message": answer,
+            "summary": f"Answered a question using the visible text in {application.title()}.",
+        }
+    return result
+
 
 def _execute_filesystem_action(
     action: AutomationAction,
@@ -340,6 +441,8 @@ def execute_action(
 
     handlers = {
         "open_application": _execute_open_application,
+        "close_application": _execute_close_application,
+        "read_application": _execute_read_application,
         "shell_command": _execute_shell_command,
         "open_file": _execute_filesystem_action,
         "open_folder": _execute_filesystem_action,

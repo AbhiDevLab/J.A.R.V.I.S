@@ -1,0 +1,43 @@
+name: JARVIS regression tests
+
+on:
+  push:
+    branches:
+      - test-jarvis
+      - phase-8-reliability-2026-11-07
+  pull_request:
+    branches:
+      - test-jarvis
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install CPU-only PyTorch runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+
+      - name: Install test and runtime dependencies
+        run: |
+          python -m pip install pytest requests pymongo pyttsx3 numpy pillow scipy eel SpeechRecognition tqdm
+          python -m pip install --no-deps facenet-pytorch==2.6.0
+
+      - name: Run regression suite
+        env:
+          JARVIS_MEMORY_ENABLED: "1"
+          JARVIS_MEMORY_AUTO_EXTRACT: "0"
+        run: python -m pytest -q
