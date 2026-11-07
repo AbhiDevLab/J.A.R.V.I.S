@@ -399,6 +399,13 @@ def _handle_llm_failure(
 ):
     """Preserve the failed request and offer an explicit, safe retry."""
     state = get_interaction_state()
+    previous_interaction = {
+        "state_type": state.state_type,
+        "prompt": state.prompt,
+        "action_type": state.action_type,
+        "candidates": list(state.candidates),
+        "data": dict(state.data),
+    } if state.has_state() else {}
     message = (
         "The AI service is not configured correctly. "
         "Your request is preserved; fix the configuration and say 'retry'."
@@ -418,6 +425,7 @@ def _handle_llm_failure(
         language=response_language or "en",
         is_voice_input=bool(is_voice_input),
         error_category=error.category,
+        previous_interaction_state=previous_interaction,
     )
 
     assistant_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
@@ -495,7 +503,16 @@ def allCommands(message=1):
             query = str(retry_replay.get("pending_request") or "")
             query_language = retry_replay.get("language") or query_language
             is_voice_input = bool(retry_replay.get("is_voice_input", is_voice_input))
+            previous_interaction = retry_replay.get("previous_interaction_state") or {}
             retry_state.clear()
+            if previous_interaction.get("state_type"):
+                retry_state.set(
+                    previous_interaction.get("state_type", ""),
+                    prompt=previous_interaction.get("prompt", ""),
+                    action_type=previous_interaction.get("action_type", ""),
+                    candidates=previous_interaction.get("candidates", []),
+                    **(previous_interaction.get("data") or {}),
+                )
         elif retry_reply in {"cancel", "stop", "no", "never mind", "nevermind"}:
             retry_state.clear()
             retry_cancelled = True
