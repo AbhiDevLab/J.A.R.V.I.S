@@ -778,6 +778,9 @@ def allCommands(message=1):
                         automation_action
                     )
                 except Exception as automation_error:
+                    # Clear stale dialogue state so the user cannot accidentally
+                    # answer an old selection/confirmation after execution failed.
+                    get_interaction_state().clear()
                     # Do not claim success or automatically repeat an action
                     # when an exception leaves its final execution state uncertain.
                     print(
