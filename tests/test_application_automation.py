@@ -244,3 +244,29 @@ def test_general_application_description_question_stays_conversational():
     )
     assert result.intent is SemanticIntent.INFORMATION_REQUEST
     assert result.should_route_automation is False
+
+def test_project_name_extraction_stops_at_following_fields_in_flattened_and_multiline_text(monkeypatch):
+    documents = (
+        "Project Name: Orion\nStatus: Phase 8 validation\nDeveloper: Abhi",
+        "Project Name: Orion Status: Phase 8 validation Developer: Abhi",
+        "Project Name: Orion Developer: Abhi Status: Phase 8 validation",
+    )
+    for document in documents:
+        monkeypatch.setattr(
+            executor,
+            "read_application_window_text",
+            lambda app, text=document: {"success": True, "content": text},
+        )
+        result = executor.execute_action(
+            AutomationAction(
+                action_type="read_application",
+                parameters={
+                    "application": "notepad",
+                    "question": "What is my project name in Notepad?",
+                },
+                risk=RiskLevel.LOW,
+            )
+        )
+        assert result["success"] is True
+        assert result["answer"] == "The project name shown in Notepad is Orion."
+
