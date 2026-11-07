@@ -1,4 +1,6 @@
 import os
+import re
+import threading
 from datetime import datetime, timezone
 import speech_recognition as sr
 import eel
@@ -45,6 +47,206 @@ from engine.automation import (
 
 conversation_manager = get_conversation_manager()
 
+# The continuous mode owns one microphone capture cycle at a time. Its event is
+# shared with the Porcupine process so the two listeners never open the device
+# concurrently.
+_continuous_listening_event = threading.Event()
+_continuous_thread = None
+_continuous_thread_lock = threading.Lock()
+_assistant_ready = False
+
+
+def _is_stop_listening_request(text):
+    value = " ".join(
+        re.sub(r"[^a-z0-9 ]+", " ", str(text or "").casefold()).split()
+    )
+    return value in {
+        "stop listening",
+        "pause listening",
+        "stop continuous listening",
+        "pause continuous listening",
+        "jarvis stop listening",
+        "jarvis pause listening",
+    }
+
+
+def _continuous_listening_loop(stop_event):
+    global _continuous_thread
+
+    recognizer = sr.Recognizer()
+    try:
+        pause_threshold = float(
+            os.getenv("JARVIS_CONTINUOUS_PAUSE_THRESHOLD", "0.8")
+        )
+    except (TypeError, ValueError):
+        pause_threshold = 0.8
+    recognizer.pause_threshold = max(0.35, min(pause_threshold, 2.0))
+
+    try:
+        phrase_limit = float(
+            os.getenv("JARVIS_CONTINUOUS_PHRASE_LIMIT", "8")
+        )
+    except (TypeError, ValueError):
+        phrase_limit = 8.0
+    phrase_limit = max(2.0, min(phrase_limit, 20.0))
+
+    calibrate = True
+    _safe_display("setContinuousListeningStatus", True, "Listening")
+
+    try:
+        while (
+            not stop_event.is_set()
+            and _continuous_listening_event.is_set()
+        ):
+            query, language = takecommand(
+                return_language=True,
+                recognizer=recognizer,
+                listen_timeout=1.0,
+                phrase_time_limit=phrase_limit,
+                calibrate=calibrate,
+            )
+            calibrate = False
+
+            if stop_event.is_set() or not _continuous_listening_event.is_set():
+                break
+
+            if not query:
+                continue
+
+            if _is_stop_listening_request(query):
+                update_settings({"continuous_listening": False})
+                _continuous_listening_event.clear()
+                stop_event.set()
+                speak(
+                    "Continuous listening is paused.",
+                    language=language or "en",
+                )
+                break
+
+            _safe_display(
+                "setContinuousListeningStatus",
+                True,
+                "Processing your request",
+            )
+            allCommands(
+                query,
+                voice_input=True,
+                detected_language=language,
+            )
+
+            if (
+                not stop_event.is_set()
+                and _continuous_listening_event.is_set()
+            ):
+                _safe_display(
+                    "setContinuousListeningStatus",
+                    True,
+                    "Listening",
+                )
+
+    except Exception as exc:
+        print(
+            "Continuous listening stopped after an error: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        _safe_display(
+            "setContinuousListeningStatus",
+            False,
+            "Microphone unavailable",
+        )
+
+    finally:
+        with _continuous_thread_lock:
+            if _continuous_thread is threading.current_thread():
+                _continuous_thread = None
+                _continuous_listening_event.clear()
+        _safe_display(
+            "setContinuousListeningStatus",
+            False,
+            "Paused",
+        )
+
+
+def set_assistant_ready(ready=True):
+    """Enable automatic listening only after the authentication flow succeeds."""
+    global _assistant_ready
+    _assistant_ready = bool(ready)
+
+    if not _assistant_ready:
+        setContinuousListening(False)
+        return {"success": True, "enabled": False}
+
+    if load_settings().get("continuous_listening", False):
+        return setContinuousListening(True)
+
+    return {"success": True, "enabled": False}
+
+
+@eel.expose
+def setContinuousListening(enabled):
+    """Start or stop the optional hands-free voice capture loop."""
+    global _continuous_thread
+
+    enabled = bool(enabled)
+
+    if enabled:
+        if not _assistant_ready:
+            return {
+                "success": False,
+                "enabled": False,
+                "message": "Complete authentication before enabling continuous listening.",
+            }
+
+        with _continuous_thread_lock:
+            if _continuous_thread is not None and _continuous_thread.is_alive():
+                if _continuous_listening_event.is_set():
+                    return {
+                        "success": True,
+                        "enabled": True,
+                        "message": "Continuous listening is already active.",
+                    }
+                return {
+                    "success": False,
+                    "enabled": False,
+                    "message": "The previous microphone session is still stopping. Try again shortly.",
+                }
+
+            stop_event = threading.Event()
+            _continuous_listening_event.set()
+            _continuous_thread = threading.Thread(
+                target=_continuous_listening_loop,
+                args=(stop_event,),
+                name="jarvis-continuous-listener",
+                daemon=True,
+            )
+            _continuous_thread.start()
+
+        return {
+            "success": True,
+            "enabled": True,
+            "message": "Continuous listening enabled.",
+        }
+
+    _continuous_listening_event.clear()
+    with _continuous_thread_lock:
+        worker = _continuous_thread
+        if worker is not None and worker.is_alive():
+            # The worker checks this event between bounded microphone captures.
+            worker_stop = getattr(worker, "_jarvis_stop_event", None)
+            if worker_stop is not None:
+                worker_stop.set()
+
+    _safe_display(
+        "setContinuousListeningStatus",
+        False,
+        "Paused",
+    )
+    return {
+        "success": True,
+        "enabled": False,
+        "message": "Continuous listening paused.",
+    }
+
 
 @eel.expose
 def getSettings():
@@ -60,6 +262,7 @@ def getSettings():
         return {
             "voice_enabled": True,
             "response_language": "auto",
+            "continuous_listening": False,
         }
 
 
@@ -75,9 +278,16 @@ def saveSettings(settings):
 
         saved = update_settings(settings)
 
+        runtime_state = None
+        if "continuous_listening" in settings and _assistant_ready:
+            runtime_state = setContinuousListening(
+                saved.get("continuous_listening", False)
+            )
+
         return {
             "success": True,
             "settings": saved,
+            "continuous_listening_state": runtime_state,
         }
 
     except Exception as exc:
@@ -232,15 +442,19 @@ def configure_audio_control(
     interrupt_event=None,
     speaking_event=None,
     mic_busy_event=None,
+    continuous_listening_event=None,
 ):
     """Configure shared audio-control events supplied by run.py."""
     global _interrupt_event
     global _speaking_event
     global _mic_busy_event
+    global _continuous_listening_event
 
     _interrupt_event = interrupt_event
     _speaking_event = speaking_event
     _mic_busy_event = mic_busy_event
+    if continuous_listening_event is not None:
+        _continuous_listening_event = continuous_listening_event
 
 
 def _safe_display(fn, *args, **kwargs):
@@ -295,14 +509,21 @@ def speak(
         return False
 
 
-def takecommand(return_language=False):
+def takecommand(
+    return_language=False,
+    *,
+    recognizer=None,
+    listen_timeout=10,
+    phrase_time_limit=6,
+    calibrate=True,
+):
     """Capture one utterance and automatically detect English/Hindi.
 
     Existing callers can keep using takecommand() -> string.
     The conversation flow can use takecommand(return_language=True) ->
     (query, detected_language).
     """
-    r = sr.Recognizer()
+    r = recognizer or sr.Recognizer()
 
     if _mic_busy_event is not None:
         _mic_busy_event.set()
@@ -315,12 +536,13 @@ def takecommand(return_language=False):
                 "Listening ....",
             )
 
-            r.pause_threshold = 1
-            r.adjust_for_ambient_noise(source)
+            if calibrate:
+                r.adjust_for_ambient_noise(source)
+
             audio = r.listen(
                 source,
-                10,
-                6,
+                timeout=listen_timeout,
+                phrase_time_limit=phrase_time_limit,
             )
 
         print("Recognizing ....")
@@ -376,6 +598,11 @@ def takecommand(return_language=False):
             return query.lower(), language
 
         return query.lower()
+
+    except sr.WaitTimeoutError:
+        if return_language:
+            return "", ""
+        return ""
 
     except Exception as e:
         print(
@@ -486,10 +713,13 @@ def _handle_llm_failure(
 
 
 @eel.expose
-def allCommands(message=1):
-    # Initial query comes either from the microphone or the text box.
-    is_voice_input = message == 1
-    if message == 1:
+def allCommands(message=1, *, voice_input=None, detected_language=None):
+    # Initial query comes either from the microphone or the text box. The
+    # continuous-listener worker supplies an already captured voice transcript.
+    is_voice_input = (
+        message == 1 if voice_input is None else bool(voice_input)
+    )
+    if message == 1 and voice_input is not True:
         query, query_language = takecommand(
             return_language=True
         )
@@ -500,8 +730,9 @@ def allCommands(message=1):
 
     else:
         query = message
-        query_language = detect_text_language(
-            str(query)
+        query_language = (
+            detected_language
+            or detect_text_language(str(query))
         )
 
     # A previous model failure keeps its original request in ephemeral state.
