@@ -890,12 +890,26 @@ $(document).ready(function () {
       return;
     }
 
-    indicator.hidden = !Boolean(active);
-    indicator.classList.toggle("is-active", Boolean(active));
+    const listening = Boolean(active);
+    indicator.hidden = !listening;
+    indicator.classList.toggle("is-active", listening);
+
+    document.querySelectorAll("#MicBtn, #ConversationMicBtn").forEach(
+      (button) => {
+        button.disabled = listening;
+        button.title = listening
+          ? "Microphone is managed by continuous listening"
+          : "Start voice input";
+      }
+    );
+
+    if (!listening && message === "Paused") {
+      $("#SettingsContinuousListening").prop("checked", false);
+    }
 
     if (text) {
       text.textContent = message || (
-        active ? "Listening continuously" : "Paused"
+        listening ? "Listening continuously" : "Paused"
       );
     }
   }
