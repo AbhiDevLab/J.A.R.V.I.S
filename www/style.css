@@ -3418,3 +3418,11 @@ body.history-open #ChatBtn {
         font-size: 9px;
     }
 }
+
+
+#MicBtn:disabled,
+#ConversationMicBtn:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+    filter: grayscale(0.75);
+}
