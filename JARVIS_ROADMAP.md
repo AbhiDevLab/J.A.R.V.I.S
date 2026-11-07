@@ -303,9 +303,12 @@ Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
 - [x] Recover gracefully from malformed/empty LLM responses through bounded retries and controlled fallback
 - [x] Preserve the failed request and pending dialogue state across recoverable LLM failures
 - [x] Ask the user to explicitly retry, cancel, or submit a new request; never infer retry approval from unrelated input
-- [ ] Run the new failure-recovery regression tests in CI and record the passing result
+- [x] Add focused LLM recovery tests in `tests/test_llm_client.py`
+- [x] Add deterministic retry/cancel/new-request state tests in `tests/test_llm_recovery.py`
+- [x] Add TTS/text-preservation and pending-request recovery tests in `tests/test_command_recovery.py`
+- [x] Run the full CI regression suite — **106 passed, 5 warnings** on 2026-11-07
 
-**Validation note:** Code and regression tests are present. Do not close this sub-phase until CI passes and live Windows checks confirm microphone/STT, TTS fallback, and automation-failure behavior.
+**Validation note:** Automated tests pass. Keep live Windows microphone/STT, TTS-device failure, authorization-denial, and uncertain desktop-action checks open until verified on the owner's Windows system.
 
 ### Phase 8.8 — LLM Provider / Model Fallback Strategy
 
@@ -319,7 +322,8 @@ Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
 - [x] Support an explicitly configured fallback model through the same OmniRoute endpoint (`OMNIROUTE_FALLBACK_MODEL`)
 - [x] Preserve the non-streaming string response contract across primary/fallback models
 - [x] Log the selected model, retry attempts, and fallback path without logging credentials or raw response bodies
-- [ ] Run the new provider/fallback regression tests in CI and record the passing result
+- [x] Add provider/retry/fallback tests in `tests/test_llm_client.py`
+- [x] Run the full CI regression suite — **106 passed, 5 warnings** on 2026-11-07
 - [x] Keep full provider selection/configuration for Phase 10
 
 **Scope guard:** No direct OpenAI/Gemini/OpenRouter provider selection was added. That remains Phase 10.
@@ -340,7 +344,7 @@ Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated. Phase 8.5's selection and filename-matching work has focused/full test and live scenario evidence, but broader cross-turn reference resolution remains open. Phase 8.6 implementation and unit tests exist, but live intent-routing validation remains pending. Phase 8.7 and 8.8 reliability implementations and new tests were added on 2026-11-07; the CI run and live Windows checks are still pending. Phase 8.9 final integration, end-to-end regression, and live voice validation remain open.
+**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated. Phase 8.5 deterministic selection, filename matching, and new cross-turn reference-index regression coverage are present; broader multi-turn task continuation still needs live Windows validation. Phase 8.6 structured intent detection has focused and full regression evidence (52 focused / 106 full owner-reported on 2026-10-11), but live intent-routing validation remains pending. Phase 8.7 error recovery and Phase 8.8 OmniRoute model fallback were implemented on 2026-11-07; the full CI suite passed **106 tests with 5 warnings** on 2026-11-07. Phase 8.9's automated regression gate passed, but final live voice, memory/context, and desktop automation E2E checks plus the final checkpoint remain open.
 
 ---
 
@@ -468,11 +472,11 @@ PHASE 8
       ├─ 8.2 ✅ Long-Term Memory — implementation and 63-test regression suite passing
       ├─ 8.3 ✅ Structured profile context implemented and validated by owner
       ├─ 8.4 ✅ Rolling summaries; 75-test baseline passed and live continuity confirmed
-      ├─ 8.5 🟡 Pending-selection resolution + speech-tolerant file matching; broader cross-turn reference validation open
-      ├─ 8.6 🟡 Smarter Intent Detection — implementation present; live routing validation open
-      ├─ 8.7 🟡 Error recovery — implementation and tests added; CI/live validation pending
-      ├─ 8.8 🟡 OmniRoute model fallback — implementation and tests added; CI validation pending
-      └─ 8.9 ⏳ Intelligence Integration & E2E Validation
+      ├─ 8.5 🟡 Selection/reference index tests present; live cross-turn task validation open
+      ├─ 8.6 🟡 Smarter Intent Detection — tests present; live routing validation open
+      ├─ 8.7 🟡 Error recovery — 106-test full CI suite passed; live Windows validation open
+      ├─ 8.8 ✅ OmniRoute fallback — 106-test full CI suite passed
+      └─ 8.9 🟡 Full automated regression passed; live voice/desktop E2E and final checkpoint open
         ↓
 PHASE 9
   ⏳ Advanced Voice + Vision
