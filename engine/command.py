@@ -157,6 +157,7 @@ def _continuous_listening_loop(stop_event):
             "Continuous listening stopped after an error: "
             f"{type(exc).__name__}: {exc}"
         )
+        update_settings({"continuous_listening": False})
         _safe_display(
             "setContinuousListeningStatus",
             False,
