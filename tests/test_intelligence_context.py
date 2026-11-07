@@ -99,3 +99,83 @@ def test_empty_sources_produce_empty_prompt_contexts():
 
     assert context.interpreter_conversation_context == ""
     assert context.response_context == ""
+
+def test_command_pipeline_uses_shared_snapshot_for_interpretation_and_response(monkeypatch):
+    from engine import command, mongo_store
+
+    command.get_interaction_state().clear()
+    context = SimpleNamespace(
+        memory_context="Relevant stored memory: prefers concise answers.",
+        profile_context="Relevant profile: English responses.",
+        interpreter_conversation_context="Conversation plus references and app state.",
+        interaction_context="Pending interaction: none.",
+        response_context="Conversation, memory, profile, and reference context.",
+    )
+    observed = {}
+    conversation_manager = command.conversation_manager
+
+    monkeypatch.setattr(command, "detect_text_language", lambda _text: "en")
+    monkeypatch.setattr(
+        command,
+        "build_turn_intelligence_context",
+        lambda query, manager: (observed.update(context_query=query, manager=manager) or context),
+    )
+    monkeypatch.setattr(
+        command,
+        "should_interpret_query",
+        lambda query, **kwargs: observed.update(should_interpret=kwargs) or True,
+    )
+
+    def fake_interpret(raw, **kwargs):
+        observed["interpret"] = kwargs
+        return SimpleNamespace(
+            query=raw,
+            interpreted_query=raw,
+            intent="conversation",
+            confidence=0.93,
+            needs_clarification=False,
+            clarification_question="",
+            used_context=True,
+        )
+
+    monkeypatch.setattr(command, "interpret_query", fake_interpret)
+    monkeypatch.setattr(
+        command,
+        "classify_intent",
+        lambda *args, **kwargs: SimpleNamespace(
+            intent=SimpleNamespace(value="conversation"),
+            confidence=0.93,
+            source="integration-test",
+            normalized_query="summarize it",
+            should_route_automation=False,
+        ),
+    )
+    monkeypatch.setattr(command, "load_settings", lambda: {"response_language": "auto"})
+    monkeypatch.setattr(command, "_language_name", lambda _language: "English")
+
+    def fake_prompt(query, language, context_section):
+        observed["response_context"] = context_section
+        return "mock prompt"
+
+    monkeypatch.setattr(command, "build_jarvis_prompt", fake_prompt)
+    monkeypatch.setattr(command, "ask_llm", lambda _prompt: "The report summary is ready.")
+    monkeypatch.setattr(mongo_store, "save_chat_turn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(conversation_manager, "add_turn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(command, "extract_memories_from_turn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(command, "_safe_display", lambda *args, **kwargs: None)
+    monkeypatch.setattr(command, "speak", lambda *args, **kwargs: False)
+
+    command.allCommands("summarize it")
+
+    assert observed["context_query"] == "summarize it"
+    assert observed["manager"] is conversation_manager
+    assert observed["should_interpret"]["conversation_context"] == context.interpreter_conversation_context
+    assert observed["should_interpret"]["memory_context"] == context.memory_context
+    assert observed["should_interpret"]["profile_context"] == context.profile_context
+    assert observed["should_interpret"]["interaction_state"] == context.interaction_context
+    assert observed["interpret"]["conversation_context"] == context.interpreter_conversation_context
+    assert observed["interpret"]["memory_context"] == context.memory_context
+    assert observed["interpret"]["profile_context"] == context.profile_context
+    assert observed["interpret"]["interaction_state"] == context.interaction_context
+    assert observed["response_context"] == context.response_context
+
