@@ -57,14 +57,22 @@ def test_reference_index_includes_recent_tasks_and_answers_but_skips_acknowledge
 def test_reference_index_is_bounded():
     messages = []
     for index in range(100):
+        filename = (
+            "quarterly-comprehensive-research-document-with-extensive-"
+            f"section-notes-and-decisions-unique-{index}.pdf"
+        )
         messages.append({
             "role": "user",
-            "content": f"Please inspect C:/Archive/document-{index}.pdf and remember task {index}.",
+            "content": (
+                f"Please inspect C:/Archive/{filename} and preserve the detailed "
+                f"project context, the previous comparison, the decision record, "
+                f"and the reason for the change made during task {index}."
+            ),
         })
 
-    context = build_reference_context(messages, max_chars=700)
+    context = build_reference_context(messages, max_chars=600)
 
-    assert len(context) <= 700
+    assert len(context) <= 600
     assert context.endswith("[Reference index truncated.]")
 
 
