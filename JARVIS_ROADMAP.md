@@ -330,7 +330,12 @@ Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
 
 ### Phase 8.9 — Intelligence Integration & E2E Validation
 
-- [ ] Integrate contextual interpretation into the existing STT → command/automation → LLM pipeline
+- [x] Consolidate per-turn conversation, memory, profile, reference, application-activity, and pending-interaction context into `engine/intelligence_context.py`
+- [x] Integrate the shared context snapshot into the typed/voice command path used by contextual interpretation and LLM response generation
+- [x] Keep verified application activity available to interpretation while excluding it from the general response context
+- [x] Keep extracted document contents out of the shared context snapshot and long-term memory
+- [x] Add regression tests for source composition, prompt-context separation, and empty-context behavior in `tests/test_intelligence_context.py`
+- [ ] Integrate contextual interpretation into the existing STT → command/automation → LLM pipeline end-to-end
 - [ ] Verify imperfect-transcript recovery using realistic speech-recognition errors
 - [ ] Verify context-aware file/application references
 - [ ] Verify multi-turn follow-up conversations
@@ -344,7 +349,7 @@ Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated. Phase 8.5 deterministic selection, filename matching, and new cross-turn reference-index regression coverage are present; broader multi-turn task continuation still needs live Windows validation. Phase 8.6 structured intent detection has focused and full regression evidence (52 focused / 106 full owner-reported on 2026-10-11), but live intent-routing validation remains pending. Phase 8.7 error recovery and Phase 8.8 OmniRoute model fallback were implemented on 2026-11-07; the full CI suite passed **106 tests with 5 warnings** on 2026-11-07. Phase 8.9's automated regression gate passed, but final live voice, memory/context, and desktop automation E2E checks plus the final checkpoint remain open.
+**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 have implementation and owner-reported validation checkpoints. Phase 8.5 selection/reference-index implementation and regression coverage are present; broader cross-turn task continuity still needs live validation. Phase 8.6 structured intent classification is implemented and regression-tested; live routing validation remains open. Phase 8.7 recovery and Phase 8.8 OmniRoute fallback are implemented with automated coverage; live Windows device/failure validation remains open. Phase 8.9 now has a shared per-turn context snapshot wired into the command pipeline, with tests that keep interpreter context and general response context separated. Full STT → interpretation → intent → router → authorization/execution → response end-to-end validation, broader live voice/memory/security checks, and the final Phase 8 checkpoint remain open. The owner-reported local test-jarvis baseline before this Phase 8.9 change was **149 passed, 6 warnings** on 2026-11-07; the current branch adds three tests and must be evaluated using its CI result.
 
 ---
 
@@ -467,16 +472,16 @@ PHASE 7
       └─ 7.3 ✅ Filesystem Automation — local E2E validation reported complete
         ↓
 PHASE 8
-  🟡 Contextual foundation present; overall phase incomplete
-      ├─ 8.1 ✅ Context interpreter + explicit file-open path validated locally
-      ├─ 8.2 ✅ Long-Term Memory — implementation and 63-test regression suite passing
-      ├─ 8.3 ✅ Structured profile context implemented and validated by owner
-      ├─ 8.4 ✅ Rolling summaries; 75-test baseline passed and live continuity confirmed
-      ├─ 8.5 🟡 Selection/reference index tests present; live cross-turn task validation open
-      ├─ 8.6 🟡 Smarter Intent Detection — tests present; live routing validation open
-      ├─ 8.7 🟡 Error recovery — 106-test full CI suite passed; live Windows validation open
-      ├─ 8.8 ✅ OmniRoute fallback — 106-test full CI suite passed
-      └─ 8.9 🟡 Full automated regression passed; live voice/desktop E2E and final checkpoint open
+  🟡 Intelligence / Context — final integration and live E2E still open
+      ├─ 8.1 ✅ Contextual interpretation foundation
+      ├─ 8.2 ✅ SQLite semantic + episodic memory
+      ├─ 8.3 ✅ Structured profile/preferences context
+      ├─ 8.4 ✅ Rolling conversation summaries
+      ├─ 8.5 🟡 Selection/reference index implemented; cross-turn task validation open
+      ├─ 8.6 🟡 Structured intent detection implemented; live routing validation open
+      ├─ 8.7 🟡 Error recovery implemented; live device/failure validation open
+      ├─ 8.8 ✅ OmniRoute bounded retry/fallback implementation
+      └─ 8.9 🟡 Shared per-turn context snapshot integrated; end-to-end validation open
         ↓
 PHASE 9
   ⏳ Advanced Voice + Vision
