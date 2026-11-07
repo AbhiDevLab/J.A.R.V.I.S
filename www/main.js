@@ -450,6 +450,11 @@ $(document).ready(function () {
                 "auto"
             );
 
+            $("#SettingsContinuousListening").prop(
+                "checked",
+                settings.continuous_listening === true
+            );
+
         } catch (error) {
             console.error(
                 "Settings loading failed:",
@@ -469,6 +474,10 @@ $(document).ready(function () {
                 response_language:
                     $("#SettingsResponseLanguage")
                         .val(),
+
+                continuous_listening:
+                    $("#SettingsContinuousListening")
+                        .prop("checked"),
             };
 
             const result =
@@ -628,6 +637,13 @@ $(document).ready(function () {
 
 
     $("#SettingsResponseLanguage").on(
+        "change",
+        function () {
+            saveSettings();
+        }
+    );
+
+    $("#SettingsContinuousListening").on(
         "change",
         function () {
             saveSettings();
