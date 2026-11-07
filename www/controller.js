@@ -903,7 +903,7 @@ $(document).ready(function () {
       }
     );
 
-    if (!listening && message === "Paused") {
+    if (!listening) {
       $("#SettingsContinuousListening").prop("checked", false);
     }
 
