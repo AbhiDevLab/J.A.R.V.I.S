@@ -876,6 +876,31 @@ $(document).ready(function () {
 
   window.hideConversationVoiceStatus =
     hideConversationVoiceStatus;
+
+
+  function setContinuousListeningStatus(active, message) {
+    const indicator = document.getElementById(
+      "ContinuousListeningIndicator"
+    );
+    const text = document.getElementById(
+      "ContinuousListeningStatusText"
+    );
+
+    if (!indicator) {
+      return;
+    }
+
+    indicator.hidden = !Boolean(active);
+    indicator.classList.toggle("is-active", Boolean(active));
+
+    if (text) {
+      text.textContent = message || (
+        active ? "Listening continuously" : "Paused"
+      );
+    }
+  }
+
+  eel.expose(setContinuousListeningStatus);
   // Define handlers first, then expose them to Python via eel.expose.
   // This ensures the visual hood updates (big-screen) as well as chat (offcanvas).
 
