@@ -183,6 +183,7 @@ def listenHotword(
     speaking_event,
     mic_busy_event,
     continuous_listening_event,
+    hotword_paused_event,
 ):
     print("Process 2 is running...")
 
@@ -193,6 +194,7 @@ def listenHotword(
         speaking_event=speaking_event,
         mic_busy_event=mic_busy_event,
         continuous_listening_event=continuous_listening_event,
+        hotword_paused_event=hotword_paused_event,
     )
 
 # Start all processes
