@@ -38,7 +38,7 @@ from engine.settings_store import (
     update_settings,
 )
 
-from engine.automation.application_state import build_application_activity_context
+from engine.intelligence_context import build_turn_intelligence_context
 
 from engine.automation import (
     route_command,
@@ -609,19 +609,14 @@ def allCommands(message=1):
             # makes interpretation useful. Clear known application launches
             # stay on the deterministic fast path.
             interpretation = None
-            memory_context = build_memory_context(query)
-            profile_context = build_user_profile_context(query)
-            conversation_context = conversation_manager.build_context()
-            application_context = build_application_activity_context()
-            reference_context = build_reference_context(
-                conversation_manager.get_messages(),
-                summary=conversation_manager.get_summary(),
+            turn_context = build_turn_intelligence_context(
+                query,
+                conversation_manager,
             )
-            if reference_context or application_context:
-                conversation_context = "\n\n".join(
-                    part for part in (conversation_context, reference_context, application_context) if part
-                )
-            interaction_context = get_interaction_state().as_context()
+            memory_context = turn_context.memory_context
+            profile_context = turn_context.profile_context
+            conversation_context = turn_context.interpreter_conversation_context
+            interaction_context = turn_context.interaction_context
 
             should_interpret = should_interpret_query(
                 query,
@@ -1049,26 +1044,7 @@ def allCommands(message=1):
                     response_language
                 )
 
-                previous_context = (
-                    conversation_manager.build_context()
-                )
-
-                context_parts = []
-                if previous_context:
-                    context_parts.append(f"""
-{previous_context}
-
-Use the previous conversation only when it is relevant to the current query.
-Resolve references such as "it", "that", "this", "the previous one", and follow-up
-questions using that context.
-""".strip())
-                if memory_context:
-                    context_parts.append(memory_context)
-                if profile_context:
-                    context_parts.append(profile_context)
-                if reference_context:
-                    context_parts.append(reference_context)
-                context_section = "\n\n".join(context_parts)
+                context_section = turn_context.response_context
 
                 enhanced_prompt = build_jarvis_prompt(
                     query,
