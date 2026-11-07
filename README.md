@@ -596,7 +596,7 @@ The frontend is intentionally kept separate from the Python engine so presentati
 
 # 📂 Project Structure
 
-~~~text
+```text
 J.A.R.V.I.S/
 │
 ├── engine/
@@ -608,35 +608,55 @@ J.A.R.V.I.S/
 │   │
 │   ├── automation/
 │   │   ├── actions.py
+│   │   ├── application_state.py
 │   │   ├── applications.py
 │   │   ├── dialogue.py
 │   │   ├── executor.py
 │   │   ├── filesystem.py
 │   │   ├── router.py
-│   │   └── security.py
+│   │   ├── security.py
+│   │   └── windows_apps.py
 │   │
 │   ├── command.py
 │   ├── context_interpreter.py
 │   ├── conversation.py
 │   ├── conversation_summary.py
+│   ├── intelligence_context.py
+│   ├── intent_classifier.py
 │   ├── interaction_state.py
-│   ├── memory.py
-│   ├── user_context.py
+│   ├── legacy_routing.py
 │   ├── llm_client.py
+│   ├── llm_recovery.py
+│   ├── memory.py
+│   ├── mongo_store.py
 │   ├── persona.py
+│   ├── reference_resolver.py
+│   ├── settings_store.py
 │   ├── stt.py
-│   └── tts.py
+│   ├── tts.py
+│   └── user_context.py
 │
 ├── tests/
+│   ├── test_application_automation.py
 │   ├── test_chat_timestamps.py
+│   ├── test_command_recovery.py
 │   ├── test_context_interpreter.py
+│   ├── test_contextual_followups.py
 │   ├── test_conversation_summarization.py
+│   ├── test_conversation_ui_regression.py
 │   ├── test_dialogue_selection.py
 │   ├── test_filesystem_matching.py
+│   ├── test_intelligence_context.py
+│   ├── test_intent_classifier.py
+│   ├── test_legacy_routing.py
+│   ├── test_llm_client.py
+│   ├── test_llm_recovery.py
 │   ├── test_memory.py
 │   ├── test_open_file_routing.py
 │   ├── test_persona_tts.py
+│   ├── test_reference_resolver.py
 │   ├── test_security_authorization.py
+│   ├── test_speech_filename_matching.py
 │   └── test_user_context.py
 │
 ├── www/
@@ -650,8 +670,7 @@ J.A.R.V.I.S/
 ├── requirements.txt
 ├── .env.example
 └── JARVIS_ROADMAP.md
-~~~
-
+```
 ---
 
 # ⚙️ Installation
