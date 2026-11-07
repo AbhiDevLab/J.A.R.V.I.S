@@ -130,6 +130,7 @@ def _continuous_listening_loop(stop_event):
                     listen_timeout=1.0,
                     phrase_time_limit=phrase_limit,
                     calibrate=calibrate,
+                    raise_on_capture_error=True,
                 )
                 calibrate = False
                 is_voice_input = True
@@ -240,6 +241,8 @@ def setContinuousListening(enabled):
                 }
 
             stop_event = threading.Event()
+            if _hotword_paused_event is not None:
+                _hotword_paused_event.clear()
             _continuous_listening_event.set()
             _continuous_thread = threading.Thread(
                 target=_continuous_listening_loop,
@@ -553,6 +556,7 @@ def takecommand(
     listen_timeout=10,
     phrase_time_limit=6,
     calibrate=True,
+    raise_on_capture_error=False,
 ):
     """Capture one utterance and automatically detect English/Hindi.
 
@@ -644,6 +648,9 @@ def takecommand(
         return ""
 
     except Exception as e:
+        if raise_on_capture_error:
+            raise
+
         print(
             "Speech recognition failure: "
             f"{type(e).__name__}: {e}"
