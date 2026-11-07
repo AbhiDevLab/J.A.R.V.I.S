@@ -225,7 +225,7 @@ def test_project_name_question_extracts_explicit_document_value(monkeypatch):
         )
     )
     assert result["success"] is True
-    assert "Orion" in result["answer"]
+    assert result["answer"] == "The project name shown in Notepad is Orion."
 
 
 def test_specific_application_question_classifier_routes_despite_question_shape():

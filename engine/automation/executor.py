@@ -197,12 +197,12 @@ def _answer_application_question(question: str, content: str, application: str) 
     # High-value named-field questions get deterministic extraction first.
     if re.search(r"\bproject\s+(?:name|title)\b", question_text, re.IGNORECASE):
         patterns = (
-            r"(?im)^\s*project(?:\s+(?:name|title))?\s*[:=—-]\s*(.+?)\s*$",
+            r"^[ \\t]*project(?:[ \\t]+(?:name|title))?[ \\t]*[:=—-][ \\t]*(.+?)(?=[ \\t]+(?:status|date|owner|author|description|meeting|experiment)\\s*[:=—-]|[ \\t]*$)",
             r"\bproject\s+(?:is|called|named)\s+['\"]?([^.!?\r\n]+)",
             r"\b(?:my|the)\s+project\s+(?:is\s+)?(?:called|named)\s+['\"]?([^.!?\r\n]+)",
         )
         for pattern in patterns:
-            match = re.search(pattern, source_text, re.IGNORECASE)
+            match = re.search(pattern, source_text, re.IGNORECASE | re.MULTILINE)
             if match:
                 value = match.group(1).strip().strip("\"' ")
                 if value:
