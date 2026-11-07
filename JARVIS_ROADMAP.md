@@ -397,7 +397,7 @@ Recent local Kokoro TTS work belongs to the broader voice capability work, but i
 - [x] Ignore wake-word hits outside the TTS window in continuous mode to prevent duplicate activation flows
 - [x] Add bounded adaptive-energy VAD and phrase-endpoint configuration
 - [x] Add focused regression tests for microphone gating, interruption routing, and VAD configuration
-- [ ] Run the focused and complete pytest suites and inspect CI results
+- [x] Run the complete pytest suite and inspect CI — GitHub Actions run #43: **149 passed, 5 warnings** (2026-11-08)
 - [ ] Validate barge-in timing and microphone handoff on Windows hardware
 - [ ] Implement wake-word-free speech barge-in after reliable AEC is available
 - [ ] Evaluate and integrate a Windows-compatible acoustic echo cancellation path
