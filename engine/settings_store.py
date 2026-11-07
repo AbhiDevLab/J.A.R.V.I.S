@@ -13,7 +13,22 @@ _SETTINGS_LOCK = Lock()
 _DEFAULT_SETTINGS: dict[str, Any] = {
     "voice_enabled": True,
     "response_language": "auto",
+    "continuous_listening": False,
 }
+
+
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off", ""}:
+            return False
+    return default
 
 _SETTINGS_PATH = (
     Path(__file__).resolve().parent.parent
@@ -61,6 +76,13 @@ def _normalise_settings(
             )
             .strip()
             .lower()
+        ),
+        "continuous_listening": _as_bool(
+            settings.get(
+                "continuous_listening",
+                _DEFAULT_SETTINGS["continuous_listening"],
+            ),
+            _DEFAULT_SETTINGS["continuous_listening"],
         ),
     }
 
