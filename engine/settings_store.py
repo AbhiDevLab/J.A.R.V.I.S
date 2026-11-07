@@ -191,4 +191,10 @@ def update_settings(
             .lower()
         )
 
+    if "continuous_listening" in updates:
+        current["continuous_listening"] = _as_bool(
+            updates["continuous_listening"],
+            current["continuous_listening"],
+        )
+
     return save_settings(current)
