@@ -650,6 +650,19 @@ $(document).ready(function () {
         }
     );
 
+    $("#ContinuousListeningPauseBtn").on(
+        "click",
+        async function () {
+            const result = await eel.saveSettings({
+                continuous_listening: false
+            })();
+
+            if (!result || !result.success) {
+                console.error("Could not pause continuous listening.");
+            }
+        }
+    );
+
 
     loadSettings();
 
