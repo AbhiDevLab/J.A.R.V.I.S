@@ -166,3 +166,81 @@ def test_classifier_preserves_original_app_content_request_for_router():
     assert result.intent is SemanticIntent.AUTOMATION
     assert result.normalized_query == "What is in Notepad?"
     assert result.should_route_automation is True
+
+
+def test_project_name_question_routes_to_application_reader():
+    action = route_command("What is my project name in Notepad?")
+    assert action is not None
+    assert action.action_type == "read_application"
+    assert action.parameters["application"] == "notepad"
+    assert action.parameters["question"] == "What is my project name in Notepad?"
+
+
+def test_project_name_question_without_document_evidence_does_not_guess_memory(monkeypatch):
+    monkeypatch.setattr(
+        executor,
+        "read_application_window_text",
+        lambda app: {
+            "success": True,
+            "content": (
+                "Experiment 1 — Introduction & Classical vs Quantum.\n"
+                "Experiment 2 — Core Concept: Superposition and Interference."
+            ),
+            "message": "read",
+        },
+    )
+    monkeypatch.setattr(
+        executor,
+        "ask_llm",
+        lambda prompt: (_ for _ in ()).throw(AssertionError("Project name must use deterministic evidence check.")),
+    )
+    result = executor.execute_action(
+        AutomationAction(
+            action_type="read_application",
+            parameters={
+                "application": "notepad",
+                "question": "What is my project name in Notepad?",
+            },
+            risk=RiskLevel.LOW,
+        )
+    )
+    assert result["success"] is True
+    assert "does not explicitly state a project name" in result["answer"]
+
+
+def test_project_name_question_extracts_explicit_document_value(monkeypatch):
+    monkeypatch.setattr(
+        executor,
+        "read_application_window_text",
+        lambda app: {"success": True, "content": "Project Name: Orion\nStatus: Active"},
+    )
+    result = executor.execute_action(
+        AutomationAction(
+            action_type="read_application",
+            parameters={
+                "application": "notepad",
+                "question": "What is my project name in Notepad?",
+            },
+            risk=RiskLevel.LOW,
+        )
+    )
+    assert result["success"] is True
+    assert "Orion" in result["answer"]
+
+
+def test_specific_application_question_classifier_routes_despite_question_shape():
+    result = classify_intent(
+        "What is my project name in Notepad?",
+        raw_text="What is my project name in Notepad?",
+    )
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.should_route_automation is True
+
+
+def test_general_application_description_question_stays_conversational():
+    result = classify_intent(
+        "What can you tell me about Notepad?",
+        raw_text="What can you tell me about Notepad?",
+    )
+    assert result.intent is SemanticIntent.INFORMATION_REQUEST
+    assert result.should_route_automation is False

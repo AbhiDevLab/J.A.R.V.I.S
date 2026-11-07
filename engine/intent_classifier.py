@@ -111,7 +111,9 @@ _AFFIRMATIVE = re.compile(
 
 
 _APPLICATION_CONTENT_MARKER = re.compile(
-    r"\b(?:read|content|contents|text|written|inside)\b|"
+    r"\b(?:read|content|contents|text|written|inside|project\s+(?:name|title)|"
+    r"document\s+title|file\s+name|author|meeting\s+time|summary|"
+    r"summarize|summarise|extract|how\s+many|contains?)\b|"
     r"\bwhat(?:'s| is|s)?\s+(?:currently\s+)?in\b",
     re.IGNORECASE,
 )

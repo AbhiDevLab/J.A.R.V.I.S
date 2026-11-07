@@ -766,8 +766,17 @@ def _route_find_and_operate(
 
 
 _APPLICATION_CONTENT_REQUEST = re.compile(
-    r"\b(?:read|content|contents|text|written|inside)\b|"
+    r"\b(?:read|content|contents|text|written|inside|project\s+(?:name|title)|"
+    r"document\s+title|file\s+name|author|meeting\s+time|summary|"
+    r"summarize|summarise|extract|how\s+many|contains?)\b|"
     r"\bwhat(?:'s| is|s)?\s+(?:currently\s+)?in\b",
+    re.IGNORECASE,
+)
+
+_APPLICATION_SPECIFIC_QUESTION = re.compile(
+    r"\b(?:project\s+(?:name|title)|document\s+title|file\s+name|"
+    r"author|meeting\s+time|summary|summarize|summarise|extract|"
+    r"how\s+many|contains?)\b",
     re.IGNORECASE,
 )
 
@@ -798,9 +807,12 @@ def _route_read_application(text: str) -> Optional[AutomationAction]:
     application = find_application_reference(value)
     if not application:
         return None
+    parameters = {"application": application}
+    if _APPLICATION_SPECIFIC_QUESTION.search(value):
+        parameters["question"] = value
     return AutomationAction(
         action_type="read_application",
-        parameters={"application": application},
+        parameters=parameters,
         risk=RiskLevel.LOW,
     )
 
