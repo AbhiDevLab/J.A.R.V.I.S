@@ -219,6 +219,7 @@ def setContinuousListening(enabled):
                 name="jarvis-continuous-listener",
                 daemon=True,
             )
+            _continuous_thread._jarvis_stop_event = stop_event
             _continuous_thread.start()
 
         return {
