@@ -21,7 +21,7 @@ Phase 6 was completed before the Desktop Automation work began.
 
 # Phase 7 — Desktop Automation / Agent Capabilities
 
-This is the phase we are currently developing.
+This phase is complete according to the implementation and owner-reported validation checkpoints below.
 
 This phase is the deliberate move from **“assistant that answers”** to **“assistant that does things.”**
 
@@ -295,26 +295,34 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 
 ### Phase 8.7 — Intelligent Error / Fallback Handling
 
-- [ ] Classify STT, interpretation, LLM, automation, authorization, and TTS failures separately
-- [ ] Replace generic failure responses with context-appropriate recovery
-- [ ] Retry transient LLM/provider failures when safe
-- [ ] Recover gracefully from malformed/empty LLM responses
-- [ ] Preserve conversation context across recoverable failures
-- [ ] Ask the user for clarification when recovery requires missing information
-- [ ] Add failure-recovery regression tests
+Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
+
+- [x] Classify STT, interpretation, LLM, automation, authorization, and TTS failures separately in the user-facing recovery path
+- [x] Replace generic failure responses with context-appropriate recovery for speech input, LLM availability, TTS, and uncertain automation execution
+- [x] Retry transient LLM/provider failures when safe
+- [x] Recover gracefully from malformed/empty LLM responses through bounded retries and controlled fallback
+- [x] Preserve the failed request and pending dialogue state across recoverable LLM failures
+- [x] Ask the user to explicitly retry, cancel, or submit a new request; never infer retry approval from unrelated input
+- [ ] Run the new failure-recovery regression tests in CI and record the passing result
+
+**Validation note:** Code and regression tests are present. Do not close this sub-phase until CI passes and live Windows checks confirm microphone/STT, TTS fallback, and automation-failure behavior.
 
 ### Phase 8.8 — LLM Provider / Model Fallback Strategy
 
 This is limited to **runtime reliability and fallback behavior**. Full provider/model configuration remains Phase 10.
 
-- [ ] Define a controlled fallback policy around the existing OmniRoute architecture
-- [ ] Detect connection failures, timeouts, provider failures, and invalid responses
-- [ ] Retry requests only when the failure is safely retryable
-- [ ] Support controlled model/provider fallback where the existing runtime configuration permits it
-- [ ] Preserve a consistent JARVIS response contract across fallback providers/models
-- [ ] Log which fallback path was used for diagnostics
-- [ ] Add provider/fallback regression tests
-- [ ] Keep full provider selection/configuration for Phase 10
+Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
+
+- [x] Define a controlled fallback policy around the existing OmniRoute architecture
+- [x] Detect connection failures, timeouts, transient provider errors, HTTP errors, and malformed/empty responses
+- [x] Retry only transient failures with bounded attempts and backoff
+- [x] Support an explicitly configured fallback model through the same OmniRoute endpoint (`OMNIROUTE_FALLBACK_MODEL`)
+- [x] Preserve the non-streaming string response contract across primary/fallback models
+- [x] Log the selected model, retry attempts, and fallback path without logging credentials or raw response bodies
+- [ ] Run the new provider/fallback regression tests in CI and record the passing result
+- [x] Keep full provider selection/configuration for Phase 10
+
+**Scope guard:** No direct OpenAI/Gemini/OpenRouter provider selection was added. That remains Phase 10.
 
 ### Phase 8.9 — Intelligence Integration & E2E Validation
 
@@ -332,7 +340,7 @@ This is limited to **runtime reliability and fallback behavior**. Full provider/
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated; Phase 8.4 live rolling-summary recall was confirmed on 2026-10-11. Phase 8.5 deterministic selection, speech-tolerant filename matching, the focused test suite (23/23), the complete suite (84/84), and the live duplicate-file selection scenario are now owner-validated (2026-10-11). Broader cross-turn reference resolution and Phases 8.6–8.9 remain open.
+**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 are implemented and owner-validated. Phase 8.5's selection and filename-matching work has focused/full test and live scenario evidence, but broader cross-turn reference resolution remains open. Phase 8.6 implementation and unit tests exist, but live intent-routing validation remains pending. Phase 8.7 and 8.8 reliability implementations and new tests were added on 2026-11-07; the CI run and live Windows checks are still pending. Phase 8.9 final integration, end-to-end regression, and live voice validation remain open.
 
 ---
 
@@ -460,10 +468,10 @@ PHASE 8
       ├─ 8.2 ✅ Long-Term Memory — implementation and 63-test regression suite passing
       ├─ 8.3 ✅ Structured profile context implemented and validated by owner
       ├─ 8.4 ✅ Rolling summaries; 75-test baseline passed and live continuity confirmed
-      ├─ 8.5 🟡 Pending-selection resolution + speech-tolerant file matching; 23 focused tests, 84 full-suite tests, and live duplicate-file selection validated
-      ├─ 8.6 ⏳ Smarter Intent Detection
-      ├─ 8.7 ⏳ Intelligent Error / Fallback Handling
-      ├─ 8.8 ⏳ LLM Provider / Model Fallback
+      ├─ 8.5 🟡 Pending-selection resolution + speech-tolerant file matching; broader cross-turn reference validation open
+      ├─ 8.6 🟡 Smarter Intent Detection — implementation present; live routing validation open
+      ├─ 8.7 🟡 Error recovery — implementation and tests added; CI/live validation pending
+      ├─ 8.8 🟡 OmniRoute model fallback — implementation and tests added; CI validation pending
       └─ 8.9 ⏳ Intelligence Integration & E2E Validation
         ↓
 PHASE 9
