@@ -149,14 +149,32 @@ def _execute_open_application(
     if not executable:
         return _result(
             False,
-            f"I could not find {application}.",
+            (
+                f"I could not locate {application}. I checked its configured executable "
+                "locations, Windows App Paths, Start Menu shortcuts and packaged-app "
+                "registrations. If this is a portable installation, add a Start Menu "
+                "shortcut or configure its executable path."
+            ),
+            error_code="application_not_found",
         )
 
     print(f"🖥️ Opening application: {application}")
     print(f"Executable: {executable}")
 
     try:
-        if str(executable).casefold().endswith(".lnk"):
+        if str(executable).casefold().startswith("apps-folder:"):
+            if os.name != "nt":
+                return _result(False, "Microsoft Store applications can only be activated through the Windows AppsFolder.")
+            app_id = str(executable).split(":", 1)[1].strip()
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+![A-Za-z0-9_.-]+", app_id):
+                return _result(False, "Windows returned an invalid application identifier. I did not launch it.")
+            system_root = os.environ.get("SystemRoot") or os.environ.get("WINDIR") or r"C:\Windows"
+            explorer = os.path.join(system_root, "explorer.exe")
+            subprocess.Popen(
+                [explorer, f"shell:AppsFolder\\{app_id}"],
+                shell=False,
+            )
+        elif str(executable).casefold().endswith(".lnk"):
             if os.name != "nt" or not hasattr(os, "startfile"):
                 return _result(False, "Windows Start Menu shortcuts can only be launched on Windows.")
             os.startfile(executable)
