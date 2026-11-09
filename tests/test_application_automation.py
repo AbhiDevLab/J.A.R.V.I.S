@@ -632,17 +632,16 @@ def test_telegram_is_a_supported_desktop_application_and_routes_for_open_close()
 
 
 def test_find_application_reference_discovers_start_menu_app_shortcuts(monkeypatch):
-    from engine import automation
     from engine.automation import applications
 
     monkeypatch.setattr(
         applications,
         "discover_application_shortcuts",
         lambda: [
-            ("telegram desktop", r"C:\Users\Test\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Telegram Desktop.lnk"),
+            ("mychat", r"C:\Users\Test\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\MyChat.lnk"),
         ],
     )
-    assert applications.find_application_reference("close Telegram Desktop") == "telegram"
+    assert applications.find_application_reference("close MyChat") == "mychat"
 
 
 def test_dynamic_shortcut_resolution_requires_a_unique_exact_display_name(monkeypatch, tmp_path):
@@ -717,6 +716,8 @@ def test_close_application_does_not_report_success_while_target_window_remains(m
     monkeypatch.setattr(windows_apps, "_load_winapi", lambda: (FakeUser32(), object()))
     monkeypatch.setattr(windows_apps, "get_application_windows", lambda app: [window])
     monkeypatch.setattr(windows_apps.time, "sleep", lambda seconds: None)
+    ticks = iter((0.0, 3.0))
+    monkeypatch.setattr(windows_apps.time, "monotonic", lambda: next(ticks, 3.0))
 
     result = windows_apps.close_application_window("telegram")
     assert result["success"] is False
@@ -828,3 +829,33 @@ def test_close_application_window_does_not_report_success_if_hwnd_remains_visibl
     result = windows_apps.close_application_window("telegram")
     assert result["success"] is False
     assert result["still_open"] is True
+
+
+def test_dynamic_start_menu_shortcut_can_resolve_an_installed_app(monkeypatch, tmp_path):
+    from engine.automation import applications
+
+    shortcut = tmp_path / "MyChat.lnk"
+    shortcut.touch()
+    monkeypatch.setattr(
+        applications,
+        "discover_application_shortcuts",
+        lambda: [("mychat", str(shortcut))],
+    )
+    monkeypatch.setattr(applications, "_resolve_app_path_registry", lambda name: None)
+
+    assert applications.resolve_application("MyChat") == str(shortcut)
+
+
+def test_telegram_executable_identity_is_included_for_live_window_matching():
+    from engine.automation.applications import application_executable_names
+
+    names = application_executable_names("Telegram")
+    assert "telegram.exe" in names
+
+
+def test_dynamic_app_window_title_variants_are_exact_not_substring_matches():
+    from engine.automation.applications import application_name_variants, normalize_application_name
+
+    variants = application_name_variants("MyChat")
+    assert normalize_application_name("MyChat") in variants
+    assert normalize_application_name("MyChat - Settings") not in variants
