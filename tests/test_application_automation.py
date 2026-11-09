@@ -872,3 +872,57 @@ def test_find_application_reference_discovers_registered_app_paths(monkeypatch):
     )
 
     assert applications.find_application_reference("close Sample Editor") == "sample editor"
+
+
+def test_known_application_open_takes_precedence_over_same_named_folder(monkeypatch):
+    from engine.automation import router as router_module
+
+    monkeypatch.setattr(
+        router_module,
+        "resolve_application",
+        lambda name: None,
+    )
+    monkeypatch.setattr(
+        router_module,
+        "search_paths",
+        lambda *args, **kwargs: [{"path": "Telegram", "type": "folder"}],
+    )
+
+    action = route_command("Open Telegram")
+
+    assert action is not None
+    assert action.action_type == "open_application"
+    assert action.parameters == {
+        "application": "telegram",
+        "executable": "",
+    }
+
+
+def test_unknown_open_target_still_routes_to_existing_folder(monkeypatch):
+    from engine.automation import router as router_module
+
+    monkeypatch.setattr(
+        router_module,
+        "resolve_application",
+        lambda name: None,
+    )
+    monkeypatch.setattr(
+        router_module,
+        "canonical_application_name",
+        lambda name: None,
+    )
+    monkeypatch.setattr(
+        router_module,
+        "search_paths",
+        lambda target, expected_type, max_results=1: (
+            [{"path": target, "type": "folder"}]
+            if expected_type == "folder"
+            else []
+        ),
+    )
+
+    action = route_command("Open My Project Folder")
+
+    assert action is not None
+    assert action.action_type == "open_folder"
+    assert action.parameters["path"] == "My Project Folder"

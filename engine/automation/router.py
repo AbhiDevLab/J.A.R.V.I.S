@@ -546,12 +546,17 @@ def _route_open(
         normalized
     )
 
-    if executable:
+    # A recognized application name wins over a same-named filesystem
+    # folder/file even when its executable cannot be resolved on this host.
+    # This is important for installed apps whose location is discovered
+    # dynamically (Start Menu / App Paths), and for deterministic routing
+    # tests that run on non-Windows CI.
+    if executable or canonical_application_name(normalized):
         return AutomationAction(
             action_type="open_application",
             parameters={
-                "application": normalized,
-                "executable": executable,
+                "application": canonical_application_name(normalized) or normalized,
+                "executable": executable or "",
             },
             risk=RiskLevel.LOW,
         )
