@@ -189,12 +189,47 @@ def _explicit_automation(text: str) -> bool:
     )
 
 
+def _command_family(text: str) -> str:
+    """Return a normalized action family for conservative spoken correction."""
+    match = re.match(
+        r"^\s*(?:please\s+)?(?P<verb>open|launch|start|run|close|quit|exit|"
+        r"read|delete|remove|rename|move|copy|create|make|install|uninstall|"
+        r"kill|terminate|play)\b",
+        str(text or ""),
+        re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    verb = match.group("verb").casefold()
+    if verb in {"open", "launch", "start", "run"}:
+        return "launch"
+    if verb in {"close", "quit", "exit"}:
+        return "close"
+    if verb in {"delete", "remove"}:
+        return "delete"
+    if verb in {"kill", "terminate"}:
+        return "terminate"
+    if verb in {"create", "make"}:
+        return "create"
+    return verb
+
+
+def _voice_correction_threshold(default: float = 0.85) -> float:
+    """Use a higher confidence floor before correcting a spoken target."""
+    try:
+        configured = float(os.getenv("JARVIS_VOICE_CORRECTION_MIN_CONFIDENCE", str(default)))
+    except (TypeError, ValueError):
+        configured = default
+    return max(_minimum_confidence(), min(1.0, max(0.0, configured)))
+
+
 def classify_intent(
     query: str,
     *,
     raw_text: str | None = None,
     interpretation: Any = None,
     interaction_state: Any = None,
+    voice_input: bool = False,
 ) -> IntentClassification:
     """Classify an utterance conservatively without executing it.
 
@@ -270,6 +305,60 @@ def classify_intent(
     # sufficient confidence; otherwise it must not fall through to a guessed
     # application/executable route.
     if _DIRECT_COMMAND.match(raw) and _explicit_automation(raw):
+        if voice_input:
+            try:
+                contextual_confidence = float(
+                    getattr(interpretation, "confidence", 0.0) or 0.0
+                )
+            except (TypeError, ValueError):
+                contextual_confidence = 0.0
+            contextual_intent = str(
+                getattr(interpretation, "intent", "unknown") or "unknown"
+            ).strip().lower()
+            contextual_query = str(
+                getattr(interpretation, "query", "") or normalized
+            ).strip()
+            needs_clarification = bool(
+                getattr(interpretation, "needs_clarification", False)
+            )
+            confidence_floor = _voice_correction_threshold()
+
+            # If the raw target already names a known app, require near-certain
+            # evidence before changing it to a different application.
+            raw_known_app = find_application_reference(raw)
+            target_changed = contextual_query.casefold() != raw.casefold()
+            if target_changed and raw_known_app:
+                confidence_floor = max(confidence_floor, 0.97)
+
+            same_operation = (
+                _command_family(raw)
+                and _command_family(raw) == _command_family(contextual_query)
+            )
+            if (
+                not needs_clarification
+                and contextual_confidence >= confidence_floor
+                and contextual_intent == "automation"
+                and contextual_query
+                and _explicit_automation(contextual_query)
+                and same_operation
+            ):
+                return _result(
+                    SemanticIntent.AUTOMATION,
+                    contextual_query,
+                    contextual_confidence,
+                    "context_interpreter",
+                    "high-confidence voice interpretation preserved the spoken action and corrected its target",
+                )
+
+            return _result(
+                SemanticIntent.CLARIFICATION,
+                raw,
+                contextual_confidence,
+                "voice_interpretation_unresolved",
+                "spoken command was not sufficiently clear to execute safely",
+                needs_clarification=True,
+            )
+
         if _CONTEXTUAL_TARGET_REFERENCE.search(raw):
             try:
                 contextual_confidence = float(

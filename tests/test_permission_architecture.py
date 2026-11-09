@@ -276,7 +276,7 @@ def test_sensitive_voice_approval_does_not_start_face_authentication(monkeypatch
 
     assert approved is True
     assert face_calls == []
-    assert any("close application: telegram" in message for message in spoken)
+    assert spoken == ["Say confirm or cancel to execute.", "Confirmed."]
 
 
 def test_critical_voice_approval_requires_successful_face_authentication(monkeypatch):
@@ -370,3 +370,45 @@ def test_executor_honors_ordinary_confirm_override(monkeypatch, tmp_path):
     result = executor.execute_action(make_action("open_application", {"application": "notepad"}))
     assert result["success"] is True
     assert approvals == [False]
+
+
+
+def test_close_application_authorization_cancel_uses_short_prompt_and_acknowledgement(monkeypatch):
+    import sys
+    from types import ModuleType
+    from engine.automation import security
+
+    spoken = []
+    fake_command = ModuleType("engine.command")
+    fake_command.speak = lambda message: spoken.append(message)
+    fake_command.takecommand = lambda: "cancel"
+    monkeypatch.setitem(sys.modules, "engine.command", fake_command)
+
+    approved = security.request_authorization(
+        make_action("close_application", {"application": "telegram"}),
+        require_face=False,
+    )
+
+    assert approved is False
+    assert spoken == ["Say confirm or cancel to execute.", "Cancelled."]
+
+
+def test_non_close_sensitive_authorization_keeps_operation_description(monkeypatch):
+    import sys
+    from types import ModuleType
+    from engine.automation import security
+
+    spoken = []
+    fake_command = ModuleType("engine.command")
+    fake_command.speak = lambda message: spoken.append(message)
+    fake_command.takecommand = lambda: "confirm"
+    monkeypatch.setitem(sys.modules, "engine.command", fake_command)
+
+    approved = security.request_authorization(
+        make_action("type_text", {"application": "notepad", "text": "hello"}),
+        require_face=False,
+    )
+
+    assert approved is True
+    assert any("type text into an application: notepad" in message for message in spoken)
+    assert any("say 'confirm'" in message.lower() for message in spoken)

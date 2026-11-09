@@ -56,21 +56,29 @@ def request_authorization(action, *, require_face: bool = True) -> bool:
     )
 
     try:
-        speak(
-            f"Permission required. I am about to {description}. "
-            "Say 'confirm' to approve this operation, or 'cancel' to reject it."
-        )
+        is_close_application = action.action_type == "close_application"
+        if is_close_application:
+            speak("Say confirm or cancel to execute.")
+        else:
+            speak(
+                f"Permission required. I am about to {description}. "
+                "Say 'confirm' to approve this operation, or 'cancel' to reject it."
+            )
         response = takecommand()
         if isinstance(response, (tuple, list)):
             response = response[0] if response else ""
         normalized = _normalize(response)
 
         if _is_cancelled(normalized):
-            speak("Action cancelled. No changes were made.")
+            speak("Cancelled." if is_close_application else "Action cancelled. No changes were made.")
             return False
 
         if normalized not in FIRST_CONFIRMATION:
-            speak("Confirmation was not recognized. The action has been cancelled.")
+            speak(
+                "Not confirmed. Cancelled."
+                if is_close_application
+                else "Confirmation was not recognized. The action has been cancelled."
+            )
             return False
 
         # Detect accidental in-memory mutation during the approval interaction.
@@ -79,7 +87,7 @@ def request_authorization(action, *, require_face: bool = True) -> bool:
             return False
 
         if not require_face:
-            speak("Voice confirmation accepted. Proceeding with the approved operation.")
+            speak("Confirmed." if is_close_application else "Voice confirmation accepted. Proceeding with the approved operation.")
             return True
 
         speak("Voice confirmation accepted. Starting face authentication.")

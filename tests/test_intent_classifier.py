@@ -227,3 +227,93 @@ def test_compound_open_then_type_request_is_classified_as_automation():
     assert result.intent is SemanticIntent.AUTOMATION
     assert result.should_route_automation is True
     assert result.normalized_query == query
+
+
+
+def test_voice_command_uses_high_confidence_contextual_stt_correction():
+    interpretation = SimpleNamespace(
+        query="open notepad",
+        intent="automation",
+        confidence=0.95,
+        needs_clarification=False,
+    )
+    result = classify_intent(
+        "open load pad",
+        raw_text="open load pad",
+        interpretation=interpretation,
+        voice_input=True,
+    )
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.normalized_query == "open notepad"
+    assert result.source == "context_interpreter"
+    assert result.should_route_automation is True
+
+
+def test_uncertain_voice_command_is_held_for_clarification_not_routed():
+    interpretation = SimpleNamespace(
+        query="open load pad",
+        intent="automation",
+        confidence=0.61,
+        needs_clarification=False,
+    )
+    result = classify_intent(
+        "open load pad",
+        raw_text="open load pad",
+        interpretation=interpretation,
+        voice_input=True,
+    )
+    assert result.intent is SemanticIntent.CLARIFICATION
+    assert result.needs_clarification is True
+    assert result.should_route_automation is False
+
+
+def test_voice_interpretation_cannot_change_requested_operation_family():
+    interpretation = SimpleNamespace(
+        query="delete notepad",
+        intent="automation",
+        confidence=0.99,
+        needs_clarification=False,
+    )
+    result = classify_intent(
+        "open load pad",
+        raw_text="open load pad",
+        interpretation=interpretation,
+        voice_input=True,
+    )
+    assert result.intent is SemanticIntent.CLARIFICATION
+    assert result.should_route_automation is False
+
+
+def test_voice_interpretation_does_not_replace_a_valid_known_application_without_near_certainty():
+    interpretation = SimpleNamespace(
+        query="open telegram",
+        intent="automation",
+        confidence=0.95,
+        needs_clarification=False,
+    )
+    result = classify_intent(
+        "open notepad",
+        raw_text="open notepad",
+        interpretation=interpretation,
+        voice_input=True,
+    )
+    assert result.intent is SemanticIntent.CLARIFICATION
+    assert result.should_route_automation is False
+
+
+def test_typed_explicit_command_keeps_deterministic_fast_path():
+    interpretation = SimpleNamespace(
+        query="open notepad",
+        intent="automation",
+        confidence=0.2,
+        needs_clarification=False,
+    )
+    result = classify_intent(
+        "open notepad",
+        raw_text="open notepad",
+        interpretation=interpretation,
+        voice_input=False,
+    )
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.normalized_query == "open notepad"
+    assert result.source == "deterministic_raw_command"

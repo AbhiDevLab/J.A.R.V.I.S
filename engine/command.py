@@ -1086,6 +1086,7 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                 raw_text=raw_transcript,
                 interpretation=interpretation,
                 interaction_state=get_interaction_state(),
+                voice_input=is_voice_input,
             )
             print(
                 "Semantic intent: "
@@ -1100,6 +1101,26 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
             # Classification selects the pathway only. The deterministic
             # router still constructs AutomationAction objects, and the
             # existing executor remains responsible for authorization.
+            if intent_result.needs_clarification:
+                clarification = (
+                    interpretation.clarification_question
+                    if interpretation is not None
+                    else ""
+                ) or "I couldn't confidently identify that command. Please repeat it."
+                get_interaction_state().set(
+                    "clarification",
+                    prompt=clarification,
+                    raw_transcript=raw_transcript,
+                    candidate_query=(
+                        interpretation.query if interpretation is not None else ""
+                    ),
+                )
+                speak(
+                    clarification,
+                    language=query_language or "en",
+                )
+                break
+
             automation_action = (
                 route_command(intent_result.normalized_query or query)
                 if intent_result.should_route_automation
