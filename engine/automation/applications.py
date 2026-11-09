@@ -307,12 +307,10 @@ def resolve_application(
 
     candidates = APPLICATIONS.get(
         canonical,
+        (),
     )
 
-    if not candidates:
-        return None
-
-    for candidate in candidates or ():
+    for candidate in candidates:
         if not candidate:
             continue
 
