@@ -859,3 +859,16 @@ def test_dynamic_app_window_title_variants_are_exact_not_substring_matches():
     variants = application_name_variants("MyChat")
     assert normalize_application_name("MyChat") in variants
     assert normalize_application_name("MyChat - Settings") not in variants
+
+
+def test_find_application_reference_discovers_registered_app_paths(monkeypatch):
+    from engine.automation import applications
+
+    monkeypatch.setattr(applications, "discover_application_shortcuts", lambda: [])
+    monkeypatch.setattr(
+        applications,
+        "discover_application_registry_names",
+        lambda: {"sample editor"},
+    )
+
+    assert applications.find_application_reference("close Sample Editor") == "sample editor"

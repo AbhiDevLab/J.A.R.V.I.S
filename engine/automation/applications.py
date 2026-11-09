@@ -219,6 +219,36 @@ def _resolve_app_path_registry(name: str) -> Optional[str]:
     return None
 
 
+def discover_application_registry_names() -> set[str]:
+    """Enumerate exact executable names registered under Windows App Paths."""
+    if os.name != "nt":
+        return set()
+    try:
+        import winreg
+    except Exception:
+        return set()
+
+    names: set[str] = set()
+    base = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            with winreg.OpenKey(hive, base) as key:
+                index = 0
+                while True:
+                    try:
+                        entry = winreg.EnumKey(key, index)
+                    except OSError:
+                        break
+                    index += 1
+                    if str(entry).casefold().endswith(".exe"):
+                        name = normalize_application_name(Path(entry).stem)
+                        if name:
+                            names.add(name)
+        except OSError:
+            continue
+    return names
+
+
 def resolve_shortcut_target(shortcut_path: str) -> Optional[str]:
     """Read a Windows .lnk target using the COM ShellLink automation object."""
     if os.name != "nt":
@@ -370,6 +400,7 @@ def find_application_reference(text: str) -> Optional[str]:
         display_name for display_name, _path in discover_application_shortcuts()
         if display_name
     )
+    candidates.update(discover_application_registry_names())
     matches = []
     for candidate in sorted(candidates, key=len, reverse=True):
         if re.search(
