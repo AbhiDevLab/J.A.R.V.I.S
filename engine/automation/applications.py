@@ -402,6 +402,84 @@ def application_executable_names(name: str) -> set[str]:
     return executable_names
 
 
+def _resolve_uninstall_registry_path(name: str) -> Optional[str]:
+    """Find an exact-name classic Win32 install path from uninstall metadata."""
+    if os.name != "nt":
+        return None
+    try:
+        import winreg
+    except Exception:
+        return None
+
+    canonical = ALIASES.get(normalize_application_name(name), normalize_application_name(name))
+    display_candidates = _application_name_candidates(name)
+    executable_names = {
+        os.path.basename(os.path.expandvars(item)).casefold()
+        for item in APPLICATIONS.get(canonical, ())
+        if str(item).lower().endswith(".exe")
+    }
+    if not executable_names:
+        executable_names.add((canonical.replace(" ", "") + ".exe").casefold())
+
+    uninstall_roots = (
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+    )
+    matches: set[str] = set()
+
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for root in uninstall_roots:
+            try:
+                with winreg.OpenKey(hive, root) as uninstall_key:
+                    subkey_count = winreg.QueryInfoKey(uninstall_key)[0]
+                    for index in range(min(subkey_count, 10000)):
+                        try:
+                            subkey_name = winreg.EnumKey(uninstall_key, index)
+                            with winreg.OpenKey(uninstall_key, subkey_name) as app_key:
+                                display_name = normalize_application_name(
+                                    winreg.QueryValueEx(app_key, "DisplayName")[0]
+                                )
+                                if display_name not in display_candidates:
+                                    continue
+                                install_location = str(
+                                    winreg.QueryValueEx(app_key, "InstallLocation")[0]
+                                ).strip()
+                                display_icon = str(
+                                    winreg.QueryValueEx(app_key, "DisplayIcon")[0]
+                                ).strip()
+                        except OSError:
+                            continue
+
+                        icon_path = ""
+                        if display_icon:
+                            if display_icon.startswith('"'):
+                                match = re.match(r'^"([^"]+\.exe)"', display_icon, re.IGNORECASE)
+                                if match:
+                                    icon_path = match.group(1)
+                            else:
+                                candidate = display_icon.split(",", 1)[0].strip().strip('"')
+                                if candidate.lower().endswith(".exe"):
+                                    icon_path = candidate
+
+                        candidates = []
+                        if icon_path:
+                            candidates.append(Path(os.path.expandvars(icon_path)))
+                        if install_location:
+                            root_path = Path(os.path.expandvars(install_location.strip('"')))
+                            candidates.extend(root_path / exe for exe in executable_names)
+
+                        for candidate in candidates:
+                            try:
+                                if candidate.is_file() and candidate.suffix.casefold() == ".exe":
+                                    matches.add(str(candidate))
+                            except OSError:
+                                continue
+            except OSError:
+                continue
+
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
 def resolve_application(
     name: str,
 ) -> Optional[str]:
@@ -445,6 +523,10 @@ def resolve_application(
     if registered:
         return registered
 
+    installed_path = _resolve_uninstall_registry_path(canonical)
+    if installed_path:
+        return installed_path
+
     # Finally, allow a unique exact-name Start Menu shortcut. The executor
     # launches the .lnk through Windows ShellExecute rather than CreateProcess.
     display_candidates = _application_name_candidates(name)
@@ -479,8 +561,12 @@ def canonical_application_name(name: str) -> Optional[str]:
         return canonical
     if _resolve_app_path_registry(canonical):
         return canonical
+    if _resolve_uninstall_registry_path(canonical):
+        return canonical
     candidates = _application_name_candidates(name)
     if any(display_name in candidates for display_name, _path in discover_application_shortcuts()):
+        return canonical
+    if any(display_name in candidates for display_name, _app_id in discover_start_menu_app_ids()):
         return canonical
     return None
 
@@ -494,6 +580,10 @@ def find_application_reference(text: str) -> Optional[str]:
         if display_name
     )
     candidates.update(discover_application_registry_names())
+    candidates.update(
+        display_name for display_name, _app_id in discover_start_menu_app_ids()
+        if display_name
+    )
     matches = []
     for candidate in sorted(candidates, key=len, reverse=True):
         if re.search(
