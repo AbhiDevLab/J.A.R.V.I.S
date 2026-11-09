@@ -1085,3 +1085,36 @@ def test_canonical_application_name_recognizes_store_registered_app(monkeypatch)
 
     assert applications.canonical_application_name("Sample Messenger") == "sample messenger"
     assert applications.find_application_reference("open Sample Messenger") == "sample messenger"
+
+
+def test_android_studio_is_discovered_as_its_own_application():
+    from engine.automation.applications import (
+        canonical_application_name,
+        find_application_reference,
+    )
+
+    assert canonical_application_name("Android Studio") == "android studio"
+    assert find_application_reference("Open Android Studio") == "android studio"
+    # The existing Visual Studio alias must continue to resolve to VS Code.
+    assert canonical_application_name("Visual Studio") == "vscode"
+
+
+def test_android_studio_catalogue_includes_windows_launcher_executables():
+    from engine.automation.applications import application_executable_names
+
+    names = application_executable_names("Android Studio")
+    assert "studio64.exe" in names
+    assert "studio.exe" in names
+
+
+def test_android_studio_can_resolve_from_classic_install_registry(monkeypatch):
+    from engine.automation import applications
+
+    expected = r"C:\Program Files\Android\Android Studio\bin\studio64.exe"
+    monkeypatch.setattr(applications.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(applications, "_resolve_app_path_registry", lambda _name: None)
+    monkeypatch.setattr(applications, "_resolve_uninstall_registry_path", lambda _name: expected)
+    monkeypatch.setattr(applications, "discover_application_shortcuts", lambda: [])
+    monkeypatch.setattr(applications, "discover_start_menu_app_ids", lambda: [])
+
+    assert applications.resolve_application("Android Studio") == expected

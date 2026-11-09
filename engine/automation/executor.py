@@ -168,7 +168,8 @@ def _execute_open_application(
             app_id = str(executable).split(":", 1)[1].strip()
             if not re.fullmatch(r"[A-Za-z0-9_.-]+![A-Za-z0-9_.-]+", app_id):
                 return _result(False, "Windows returned an invalid application identifier. I did not launch it.")
-            explorer = os.path.join(os.environ.get("SystemRoot", r"C:\Windows), "explorer.exe")
+            system_root = os.environ.get("SystemRoot") or os.environ.get("WINDIR") or r"C:\Windows"
+            explorer = os.path.join(system_root, "explorer.exe")
             subprocess.Popen(
                 [explorer, f"shell:AppsFolder\\{app_id}"],
                 shell=False,

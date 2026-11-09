@@ -65,6 +65,13 @@ APPLICATIONS: Dict[str, tuple[str, ...]] = {
         os.path.expandvars(r"%LOCALAPPDATA%\Programs\Telegram Desktop\Telegram.exe"),
         os.path.expandvars(r"%LOCALAPPDATA%\Telegram Desktop\Telegram.exe"),
     ),
+    "android studio": (
+        "studio64.exe",
+        "studio.exe",
+        os.path.expandvars(r"%PROGRAMFILES%\Android\Android Studio\bin\studio64.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Android Studio\bin\studio64.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Android\Android Studio\bin\studio.exe"),
+    ),
 
     "notepad": (
         "notepad.exe",
@@ -111,6 +118,8 @@ ALIASES: Dict[str, str] = {
     "spotify desktop": "spotify",
 
     "telegram desktop": "telegram",
+    "androidstudio": "android studio",
+    "android studio ide": "android studio",
 
     "file explorer": "explorer",
     "windows explorer": "explorer",
