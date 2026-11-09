@@ -7,6 +7,7 @@ from typing import Any, Dict
 
 class RiskLevel(str, Enum):
     LOW = "low"
+    MEDIUM = "medium"
     HIGH = "high"
 
 
@@ -22,6 +23,10 @@ class AutomationAction:
     action_type: str
     parameters: Dict[str, Any]
     risk: RiskLevel = RiskLevel.LOW
+    # Set only by a trusted, typed automation handler when Windows elevation
+    # is actually required. This never causes the parent JARVIS process to
+    # run as Administrator.
+    requires_admin: bool = False
 
 
 # Actions that can affect the system substantially.
@@ -40,15 +45,19 @@ HIGH_RISK_ACTIONS = {
     "modify_system_settings",
     "install_software",
     "uninstall_software",
+    "registry_write",
+    "service_control",
+    "firewall_configuration",
+    "system_wide_install",
+    "system_wide_uninstall",
+    "elevated_powershell",
+    "create_system_task",
+    "user_account_management",
 }
 
 
 def requires_confirmation(action: AutomationAction) -> bool:
-    """
-    Determine whether this action must pass the security gate.
-    """
+    """Backward-compatible wrapper around the central action policy."""
+    from .policy import ActionTier, classify_action
 
-    if action.action_type in HIGH_RISK_ACTIONS:
-        return True
-
-    return action.risk == RiskLevel.HIGH
+    return classify_action(action) is not ActionTier.ORDINARY
