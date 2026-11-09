@@ -123,8 +123,8 @@ def test_pending_yes_resolves_delete_but_cannot_bypass_authorization(
 
     authorization_requests = []
 
-    def deny_authorization(action):
-        authorization_requests.append(action)
+    def deny_authorization(action, *, require_face=True):
+        authorization_requests.append((action, require_face))
         return False
 
     monkeypatch.setattr(
@@ -143,7 +143,8 @@ def test_pending_yes_resolves_delete_but_cannot_bypass_authorization(
     command.allCommands("yes")
 
     assert len(authorization_requests) == 1
-    assert authorization_requests[0].action_type == "delete_file"
-    assert authorization_requests[0].parameters["path"] == str(target)
+    assert authorization_requests[0][0].action_type == "delete_file"
+    assert authorization_requests[0][0].parameters["path"] == str(target)
+    assert authorization_requests[0][1] is True
     assert target.exists()
     assert get_interaction_state().has_state() is False
