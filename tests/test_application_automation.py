@@ -1046,7 +1046,7 @@ def test_start_menu_package_discovery_reads_get_start_apps_json_without_shell(mo
         ("telegram desktop", "TelegramMessengerLLP.TelegramDesktop_8wekyb3d8bbwe!App")
     ]
     assert calls[0][1]["timeout"] == 8
-    assert calls[0][1]["shell"] if "shell" in calls[0][1] else True
+    assert calls[0][1].get("shell", False) is False
     assert "-NoProfile" in calls[0][0]
     assert "Get-StartApps" in calls[0][0][-1]
 

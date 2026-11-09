@@ -441,12 +441,18 @@ def _resolve_uninstall_registry_path(name: str) -> Optional[str]:
                                 )
                                 if display_name not in display_candidates:
                                     continue
-                                install_location = str(
-                                    winreg.QueryValueEx(app_key, "InstallLocation")[0]
-                                ).strip()
-                                display_icon = str(
-                                    winreg.QueryValueEx(app_key, "DisplayIcon")[0]
-                                ).strip()
+                                try:
+                                    install_location = str(
+                                        winreg.QueryValueEx(app_key, "InstallLocation")[0]
+                                    ).strip()
+                                except OSError:
+                                    install_location = ""
+                                try:
+                                    display_icon = str(
+                                        winreg.QueryValueEx(app_key, "DisplayIcon")[0]
+                                    ).strip()
+                                except OSError:
+                                    display_icon = ""
                         except OSError:
                             continue
 
