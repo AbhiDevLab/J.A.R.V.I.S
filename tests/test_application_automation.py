@@ -380,6 +380,15 @@ def test_compound_open_and_type_reports_partial_success_without_claiming_typing(
     )
     monkeypatch.setattr(
         executor,
+        "create_new_notepad_document",
+        lambda application: {
+            "success": True,
+            "message": "Created and verified a new blank Notepad document.",
+            "new_document_created": True,
+        },
+    )
+    monkeypatch.setattr(
+        executor,
         "_execute_type_text",
         lambda action: {"success": False, "message": "Notepad is not in the foreground."},
     )
@@ -553,3 +562,53 @@ def test_editor_control_text_reader_distinguishes_blank_from_unreadable():
 
     assert _read_editor_control_text(BlankEditor()) == (True, "")
     assert _read_editor_control_text(UnreadableEditor()) == (False, "")
+
+
+def test_notepad_document_focus_never_selects_generic_edit_or_textbox_controls():
+    from engine.automation.windows_apps import _focus_notepad_document
+
+    class FakeControl:
+        def __init__(self, control_type, focused=False):
+            self.element_info = type("Info", (), {"control_type": control_type})()
+            self.focused = focused
+            self.focus_calls = 0
+
+        def has_keyboard_focus(self):
+            return self.focused
+
+        def set_focus(self):
+            self.focus_calls += 1
+            self.focused = True
+
+    search = FakeControl("Edit")
+    tabs = FakeControl("TextBox")
+    document = FakeControl("Document", focused=True)
+
+    class FakeWindow:
+        def descendants(self):
+            return [search, tabs, document]
+
+    assert _focus_notepad_document(FakeWindow()) is document
+    assert search.focus_calls == 0
+    assert tabs.focus_calls == 0
+
+
+def test_notepad_document_focus_fails_closed_when_multiple_documents_are_unfocused():
+    from engine.automation.windows_apps import _focus_notepad_document
+
+    first = type("FakeDocument", (), {
+        "element_info": type("Info", (), {"control_type": "Document"})(),
+        "has_keyboard_focus": lambda self: False,
+        "set_focus": lambda self: None,
+    })()
+    second = type("FakeDocument", (), {
+        "element_info": type("Info", (), {"control_type": "Document"})(),
+        "has_keyboard_focus": lambda self: False,
+        "set_focus": lambda self: None,
+    })()
+
+    class FakeWindow:
+        def descendants(self):
+            return [first, second]
+
+    assert _focus_notepad_document(FakeWindow()) is None

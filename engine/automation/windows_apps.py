@@ -408,6 +408,54 @@ def _focus_application_editor(window):
     return None
 
 
+def _focus_notepad_document(window):
+    """Return the active Notepad document control, never a generic Edit/TextBox.
+
+    Modern tabbed Notepad can expose other editable controls (for example,
+    search or tab UI). Only a UIA Document control is eligible for document
+    shortcuts and text entry. If several document controls exist, one must
+    already own keyboard focus; otherwise selection is ambiguous and we fail
+    closed rather than guessing which tab to target.
+    """
+    documents = []
+    for control in window.descendants():
+        try:
+            if str(control.element_info.control_type or "") == "Document":
+                documents.append(control)
+        except Exception:
+            continue
+
+    if not documents:
+        return None
+
+    focused = []
+    for control in documents:
+        checker = getattr(control, "has_keyboard_focus", None)
+        if callable(checker):
+            try:
+                if checker():
+                    focused.append(control)
+            except Exception:
+                continue
+
+    if len(focused) == 1:
+        return focused[0]
+    if len(documents) > 1:
+        return None
+
+    # A single Document control is unambiguous. Focus it and verify that the
+    # UIA provider reports keyboard focus before sending any shortcut/keys.
+    target = documents[0]
+    try:
+        target.set_focus()
+        checker = getattr(target, "has_keyboard_focus", None)
+        if callable(checker) and not checker():
+            return None
+        return target
+    except Exception:
+        return None
+
+
 def _read_editor_control_text(control) -> tuple[bool, str]:
     """Read the focused editor control, distinguishing blank from unreadable."""
     candidates = []
@@ -502,7 +550,7 @@ def create_new_notepad_document(
 
         desktop = Desktop(backend="uia")
         window = desktop.window(handle=selected.handle).wrapper_object()
-        editor = _focus_application_editor(window)
+        editor = _focus_notepad_document(window)
         if editor is None:
             return {
                 "success": False,
@@ -557,7 +605,7 @@ def create_new_notepad_document(
 
                 if active is not None and current_foreground == active.handle:
                     active_window = desktop.window(handle=active.handle).wrapper_object()
-                    active_editor = _focus_application_editor(active_window)
+                    active_editor = _focus_notepad_document(active_window)
                     if active_editor is not None:
                         blank_is_readable, new_text = _read_editor_control_text(active_editor)
                         if blank_is_readable and not new_text.strip():
@@ -697,7 +745,11 @@ def type_text_into_application(
             .window(handle=selected.handle)
             .wrapper_object()
         )
-        target = _focus_application_editor(window)
+        target = (
+            _focus_notepad_document(window)
+            if canonical == "notepad"
+            else _focus_application_editor(window)
+        )
         if target is None:
             return {
                 "success": False,
