@@ -1015,3 +1015,73 @@ def test_open_executor_launches_packaged_app_through_explorer_without_shell(monk
     )
     assert launched[0][1]["shell"] is False
     assert recorded == ["telegram"]
+
+
+def test_start_menu_package_discovery_reads_get_start_apps_json_without_shell(monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from engine.automation import applications
+
+    calls = []
+    monkeypatch.setattr(applications.os, "name", "nt")
+    monkeypatch.setattr(applications.shutil, "which", lambda name: "powershell.exe")
+    monkeypatch.setattr(
+        applications.subprocess,
+        "run",
+        lambda args, **kwargs: (
+            calls.append((args, kwargs))
+            or SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({
+                    "Name": "Telegram Desktop",
+                    "AppID": "TelegramMessengerLLP.TelegramDesktop_8wekyb3d8bbwe!App",
+                }),
+            )
+        ),
+    )
+
+    rows = applications.discover_start_menu_app_ids()
+
+    assert rows == [
+        ("telegram desktop", "TelegramMessengerLLP.TelegramDesktop_8wekyb3d8bbwe!App")
+    ]
+    assert calls[0][1]["timeout"] == 8
+    assert calls[0][1]["shell"] if "shell" in calls[0][1] else True
+    assert "-NoProfile" in calls[0][0]
+    assert "Get-StartApps" in calls[0][0][-1]
+
+
+def test_resolve_application_uses_classic_telegram_uninstall_install_location(monkeypatch, tmp_path):
+    from engine.automation import applications
+
+    install_dir = tmp_path / "Telegram Desktop"
+    install_dir.mkdir()
+    executable = install_dir / "Telegram.exe"
+    executable.write_bytes(b"placeholder")
+
+    monkeypatch.setattr(applications, "_resolve_app_path_registry", lambda name: None)
+    monkeypatch.setattr(
+        applications,
+        "_resolve_uninstall_registry_path",
+        lambda name: str(executable),
+    )
+    monkeypatch.setattr(applications, "discover_application_shortcuts", lambda: [])
+    monkeypatch.setattr(applications, "discover_start_menu_app_ids", lambda: [])
+
+    assert applications.resolve_application("Telegram") == str(executable)
+
+
+def test_canonical_application_name_recognizes_store_registered_app(monkeypatch):
+    from engine.automation import applications
+
+    monkeypatch.setattr(applications, "_resolve_app_path_registry", lambda name: None)
+    monkeypatch.setattr(applications, "_resolve_uninstall_registry_path", lambda name: None)
+    monkeypatch.setattr(applications, "discover_application_shortcuts", lambda: [])
+    monkeypatch.setattr(
+        applications,
+        "discover_start_menu_app_ids",
+        lambda: [("sample messenger", "Publisher.Sample_123!App")],
+    )
+
+    assert applications.canonical_application_name("Sample Messenger") == "sample messenger"
+    assert applications.find_application_reference("open Sample Messenger") == "sample messenger"
