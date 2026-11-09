@@ -16,6 +16,7 @@ from .application_state import (
 from .windows_apps import (
     close_application_window,
     read_application_window_text,
+    type_text_into_application,
 )
 from .filesystem import (
     copy_file,
@@ -248,6 +249,62 @@ SOURCE TEXT (the only evidence):
         return f"The visible text in {application.title()} does not provide an answer to that question."
     return answer
 
+def _execute_type_text(action: AutomationAction) -> Dict[str, Any]:
+    application = str(action.parameters.get("application", "")).strip()
+    text = str(action.parameters.get("text", ""))
+    if not application:
+        return _result(False, "No target application was specified.")
+    if not text:
+        return _result(False, "There is no text to type.")
+    return type_text_into_application(application, text)
+
+
+def _execute_open_application_and_type(action: AutomationAction) -> Dict[str, Any]:
+    application = str(action.parameters.get("application", "")).strip()
+    executable = str(action.parameters.get("executable", "")).strip()
+    text = str(action.parameters.get("text", ""))
+    if not application or not text:
+        return _result(False, "The application and text are both required.")
+
+    opened = _execute_open_application(
+        AutomationAction(
+            action_type="open_application",
+            parameters={"application": application, "executable": executable},
+            risk=action.risk,
+        )
+    )
+    if not opened.get("success"):
+        return opened
+
+    typed = _execute_type_text(
+        AutomationAction(
+            action_type="type_text",
+            parameters={"application": application, "text": text},
+            risk=action.risk,
+        )
+    )
+    open_message = str(opened.get("message") or f"Opened {application}.")
+    if not typed.get("success"):
+        return _result(
+            False,
+            (
+                f"{open_message} "
+                "However, I could not complete the typing step: "
+                f"{typed.get('message', 'the target was not verified')} "
+                "The application remains open; no typing retry was attempted."
+            ),
+            application_opened=True,
+            typing_completed=False,
+        )
+    return _result(
+        True,
+        f"{open_message} {typed.get('message', '')}".strip(),
+        application_opened=True,
+        typing_completed=True,
+        characters_typed=typed.get("characters_typed"),
+    )
+
+
 def _execute_read_application(action: AutomationAction) -> Dict[str, Any]:
     application = str(action.parameters.get("application", "")).strip()
     question = str(action.parameters.get("question", "")).strip()
@@ -450,6 +507,8 @@ def execute_action(
 
     handlers = {
         "open_application": _execute_open_application,
+        "open_application_and_type": _execute_open_application_and_type,
+        "type_text": _execute_type_text,
         "close_application": _execute_close_application,
         "read_application": _execute_read_application,
         "shell_command": _execute_shell_command,

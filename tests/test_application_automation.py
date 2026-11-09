@@ -270,3 +270,109 @@ def test_project_name_extraction_stops_at_following_fields_in_flattened_and_mult
         assert result["success"] is True
         assert result["answer"] == "The project name shown in Notepad is Orion."
 
+
+
+
+def test_type_text_request_routes_to_dedicated_named_application_action():
+    query = "Type Phase 9.2 barge-in test successful inside opened Notepad"
+    action = route_command(query)
+    assert action is not None
+    assert action.action_type == "type_text"
+    assert action.parameters == {
+        "application": "notepad",
+        "text": "Phase 9.2 barge-in test successful",
+    }
+
+
+def test_compound_open_and_type_routes_as_ordered_application_workflow():
+    query = "Open Notepad and type: Phase 9.2 barge-in test successful"
+    action = route_command(query)
+    assert action is not None
+    assert action.action_type == "open_application_and_type"
+    assert action.parameters["application"] == "notepad"
+    assert action.parameters["text"] == "Phase 9.2 barge-in test successful"
+
+
+def test_application_read_request_still_routes_to_accessibility_reader():
+    action = route_command("Read the text inside Notepad")
+    assert action is not None
+    assert action.action_type == "read_application"
+    assert action.parameters["application"] == "notepad"
+
+
+def test_type_text_executor_uses_explicit_allowlisted_target_and_exact_body(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        executor,
+        "type_text_into_application",
+        lambda application, text: (
+            captured.append((application, text))
+            or {"success": True, "message": "Typed text.", "characters_typed": len(text)}
+        ),
+    )
+    result = executor.execute_action(
+        AutomationAction(
+            action_type="type_text",
+            parameters={"application": "notepad", "text": "Hello {JARVIS}!"},
+            risk=RiskLevel.LOW,
+        )
+    )
+    assert result["success"] is True
+    assert captured == [("notepad", "Hello {JARVIS}!")]
+
+
+def test_compound_open_and_type_executes_launch_before_typing(monkeypatch):
+    events = []
+    monkeypatch.setattr(
+        executor,
+        "_execute_open_application",
+        lambda action: (
+            events.append(("open", action.parameters["application"]))
+            or {"success": True, "message": "Opening Notepad."}
+        ),
+    )
+    monkeypatch.setattr(
+        executor,
+        "_execute_type_text",
+        lambda action: (
+            events.append(("type", action.parameters["text"]))
+            or {"success": True, "message": "Typed text.", "characters_typed": 5}
+        ),
+    )
+    result = executor.execute_action(
+        AutomationAction(
+            action_type="open_application_and_type",
+            parameters={
+                "application": "notepad",
+                "executable": "notepad.exe",
+                "text": "Hello",
+            },
+            risk=RiskLevel.LOW,
+        )
+    )
+    assert result["success"] is True
+    assert events == [("open", "notepad"), ("type", "Hello")]
+    assert result["typing_completed"] is True
+
+
+def test_compound_open_and_type_reports_partial_success_without_claiming_typing(monkeypatch):
+    monkeypatch.setattr(
+        executor,
+        "_execute_open_application",
+        lambda action: {"success": True, "message": "Opening Notepad."},
+    )
+    monkeypatch.setattr(
+        executor,
+        "_execute_type_text",
+        lambda action: {"success": False, "message": "Notepad is not in the foreground."},
+    )
+    result = executor._execute_open_application_and_type(
+        AutomationAction(
+            action_type="open_application_and_type",
+            parameters={"application": "notepad", "text": "Hello"},
+            risk=RiskLevel.LOW,
+        )
+    )
+    assert result["success"] is False
+    assert result["application_opened"] is True
+    assert result["typing_completed"] is False

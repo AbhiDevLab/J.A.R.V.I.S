@@ -51,6 +51,10 @@ def _load_winapi():
     user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
     user32.GetWindowTextW.restype = ctypes.c_int
     user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.ShowWindow.restype = wintypes.BOOL
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.SetForegroundWindow.restype = wintypes.BOOL
     user32.IsWindow.argtypes = [wintypes.HWND]
     user32.IsWindow.restype = wintypes.BOOL
     user32.SendMessageTimeoutW.argtypes = [
@@ -358,3 +362,163 @@ def read_application_window_text(
         "spoken_message": f"I read the text currently visible in {canonical.title()} and displayed it.",
         "summary": f"Read the current visible text from {canonical.title()}.",
     }
+
+
+def type_text_into_application(
+    application: str,
+    text: str,
+    *,
+    wait_timeout: float = 8.0,
+) -> Dict[str, Any]:
+    """Focus an allowlisted application window and type into an editable UIA control.
+
+    This fails closed: keystrokes are sent only after the named application's
+    visible window and an enabled editable control inside it are verified.
+    """
+    canonical = canonical_application_name(application)
+    value = str(text or "")
+    if not canonical:
+        return {
+            "success": False,
+            "message": "That application is not in the supported application list.",
+        }
+    if not value:
+        return {"success": False, "message": "There is no text to type."}
+
+    try:
+        deadline = time.monotonic() + max(0.0, float(wait_timeout))
+        windows = []
+        while True:
+            windows = get_application_windows(canonical)
+            if windows or time.monotonic() >= deadline:
+                break
+            time.sleep(0.2)
+
+        if not windows:
+            return {
+                "success": False,
+                "message": (
+                    f"I could not find an open {canonical.title()} window. "
+                    "Open it first, then repeat the typing command."
+                ),
+            }
+
+        user32, _kernel32 = _load_winapi()
+        foreground = int(user32.GetForegroundWindow() or 0)
+        selected = next(
+            (item for item in windows if item.handle == foreground),
+            None,
+        )
+        if selected is None and len(windows) == 1:
+            selected = windows[0]
+        if selected is None:
+            titles = "; ".join(item.title for item in windows if item.title)
+            return {
+                "success": False,
+                "ambiguous": True,
+                "message": (
+                    f"I found multiple {canonical.title()} windows"
+                    + (f" ({titles})" if titles else "")
+                    + ". Bring the intended window to the foreground and try again."
+                ),
+            }
+
+        # Restore and activate only the verified allowlisted target window.
+        if foreground != selected.handle:
+            user32.ShowWindow(wintypes.HWND(selected.handle), 9)  # SW_RESTORE
+            user32.SetForegroundWindow(wintypes.HWND(selected.handle))
+            time.sleep(0.15)
+
+        if int(user32.GetForegroundWindow() or 0) != selected.handle:
+            return {
+                "success": False,
+                "message": (
+                    f"Windows did not allow me to focus {canonical.title()}. "
+                    "Bring that application to the foreground and repeat the command."
+                ),
+            }
+
+        try:
+            from pywinauto import Desktop
+        except Exception:
+            return {
+                "success": False,
+                "message": (
+                    "Windows UI Automation support is unavailable. "
+                    "Install the Windows-only pywinauto dependency and restart JARVIS."
+                ),
+            }
+
+        window = (
+            Desktop(backend="uia")
+            .window(handle=selected.handle)
+            .wrapper_object()
+        )
+        editable_controls = []
+        for control in window.descendants():
+            try:
+                control_type = str(control.element_info.control_type or "")
+                if control_type not in {"Edit", "Document", "TextBox"}:
+                    continue
+                if callable(getattr(control, "is_visible", None)) and not control.is_visible():
+                    continue
+                if callable(getattr(control, "is_enabled", None)) and not control.is_enabled():
+                    continue
+                editable_controls.append(control)
+            except Exception:
+                continue
+
+        if not editable_controls:
+            return {
+                "success": False,
+                "message": (
+                    f"I found {canonical.title()}, but it does not expose an enabled "
+                    "text-entry control. I did not send any keystrokes."
+                ),
+                "window_title": selected.title,
+            }
+
+        # Prefer an Edit control; some applications expose their editor as Document.
+        editable_controls.sort(
+            key=lambda control: (
+                0 if str(control.element_info.control_type or "") == "Edit" else 1
+            )
+        )
+        target = editable_controls[0]
+        target.set_focus()
+
+        # Verify focus again immediately before injecting any keyboard input.
+        if int(user32.GetForegroundWindow() or 0) != selected.handle:
+            return {
+                "success": False,
+                "message": (
+                    f"Focus moved away from {canonical.title()}. "
+                    "No text was typed; bring the intended window forward and retry."
+                ),
+            }
+
+        # Escape pywinauto key-sequence braces to preserve ordinary user text literally.
+        key_text = value.replace("{", "{{}").replace("}", "{}}")
+        target.type_keys(
+            key_text,
+            with_spaces=True,
+            with_tabs=True,
+            with_newlines=True,
+            pause=0.001,
+            vk_packet=True,
+        )
+        return {
+            "success": True,
+            "message": f"Typed the requested text into {canonical.title()}.",
+            "application": canonical,
+            "window_title": selected.title,
+            "characters_typed": len(value),
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "message": (
+                f"I could not safely type into {canonical.title()} "
+                f"({type(exc).__name__}). No automatic retry was attempted."
+            ),
+        }

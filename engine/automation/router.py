@@ -10,6 +10,8 @@ from .actions import (
 from .applications import (
     normalize_application_name,
     resolve_application,
+    APPLICATIONS,
+    ALIASES,
     canonical_application_name,
     find_application_reference,
     parse_hindi_application_command,
@@ -766,7 +768,7 @@ def _route_find_and_operate(
 
 
 _APPLICATION_CONTENT_REQUEST = re.compile(
-    r"\b(?:read|content|contents|text|written|inside|project\s+(?:name|title)|"
+    r"\b(?:read|content|contents|text|written|project\s+(?:name|title)|"
     r"document\s+title|file\s+name|author|meeting\s+time|summary|"
     r"summarize|summarise|extract|how\s+many|contains?)\b|"
     r"\bwhat(?:'s| is|s)?\s+(?:currently\s+)?in\b",
@@ -779,6 +781,70 @@ _APPLICATION_SPECIFIC_QUESTION = re.compile(
     r"how\s+many|contains?)\b",
     re.IGNORECASE,
 )
+
+
+_APPLICATION_NAMES = sorted(
+    set(APPLICATIONS) | set(ALIASES),
+    key=len,
+    reverse=True,
+)
+_APPLICATION_NAME_PATTERN = "(?:" + "|".join(
+    re.escape(name) for name in _APPLICATION_NAMES
+) + ")"
+
+
+def _route_compound_open_and_type(text: str) -> Optional[AutomationAction]:
+    """Route 'open Notepad and type ...' as one ordered desktop operation."""
+    match = re.match(
+        rf"^\s*(?:please\s+)?(?:open|launch|start)\s+(?:the\s+)?"
+        rf"(?P<application>{_APPLICATION_NAME_PATTERN})"
+        r"\s*,?\s*(?:and\s+then|then|and)\s+"
+        r"(?:type|enter|write)\s*:?[ \t]*(?P<text>.+?)\s*$",
+        str(text or ""),
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+
+    application = find_application_reference(match.group("application"))
+    body = match.group("text").strip()
+    if not application or not body:
+        return None
+
+    return AutomationAction(
+        action_type="open_application_and_type",
+        parameters={
+            "application": application,
+            "executable": resolve_application(application) or "",
+            "text": body,
+        },
+        risk=RiskLevel.LOW,
+    )
+
+
+def _route_type_text(text: str) -> Optional[AutomationAction]:
+    """Route explicit typing into a named, allowlisted application only."""
+    match = re.match(
+        rf"^\s*(?:please\s+)?(?:type|enter|write)\s*:?[ \t]*"
+        rf"(?P<body>.+?)\s+(?:inside|in|into)\s+(?:the\s+)?"
+        rf"(?:(?:already|previously)\s+)?(?:opened\s+)?"
+        rf"(?P<application>{_APPLICATION_NAME_PATTERN})\s*[.!?]*$",
+        str(text or ""),
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+
+    application = find_application_reference(match.group("application"))
+    body = match.group("body").strip()
+    if not application or not body:
+        return None
+
+    return AutomationAction(
+        action_type="type_text",
+        parameters={"application": application, "text": body},
+        risk=RiskLevel.LOW,
+    )
 
 
 def _route_close_application(text: str) -> Optional[AutomationAction]:
@@ -847,7 +913,17 @@ def route_command(
 
     if not text:
         return None
-    
+
+    # Text-entry commands take priority over the broader read-window matcher.
+    # Compound commands are kept together so launch always precedes typing.
+    action = _route_compound_open_and_type(text)
+    if action is not None:
+        return action
+
+    action = _route_type_text(text)
+    if action is not None:
+        return action
+
     action = _route_hindi_application_command(text)
 
     if action is not None:
