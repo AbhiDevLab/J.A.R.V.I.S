@@ -376,3 +376,86 @@ def test_compound_open_and_type_reports_partial_success_without_claiming_typing(
     assert result["success"] is False
     assert result["application_opened"] is True
     assert result["typing_completed"] is False
+
+
+
+def test_windows_editor_focus_does_not_reject_document_for_flaky_uia_state_flags():
+    from engine.automation.windows_apps import _focus_application_editor
+
+    class FakeInfo:
+        control_type = "Document"
+
+    class FakeDocument:
+        element_info = FakeInfo()
+
+        def __init__(self):
+            self.focused = False
+
+        def is_visible(self):
+            return False
+
+        def is_enabled(self):
+            return False
+
+        def set_focus(self):
+            self.focused = True
+
+        def has_focus(self):
+            return self.focused
+
+    document = FakeDocument()
+
+    class FakeWindow:
+        def descendants(self):
+            return [document]
+
+    assert _focus_application_editor(FakeWindow()) is document
+    assert document.focused is True
+
+
+def test_windows_editor_focus_tries_next_text_surface_when_first_cannot_focus():
+    from engine.automation.windows_apps import _focus_application_editor
+
+    class FakeControl:
+        def __init__(self, control_type, can_focus):
+            self.element_info = type("Info", (), {"control_type": control_type})()
+            self.can_focus = can_focus
+            self.focused = False
+
+        def set_focus(self):
+            if not self.can_focus:
+                raise RuntimeError("control cannot be focused")
+            self.focused = True
+
+        def has_focus(self):
+            return self.focused
+
+    first = FakeControl("Edit", False)
+    second = FakeControl("Document", True)
+
+    class FakeWindow:
+        def descendants(self):
+            return [second, first]
+
+    assert _focus_application_editor(FakeWindow()) is second
+    assert second.focused is True
+
+
+def test_text_entry_verification_requires_newly_visible_requested_text():
+    from engine.automation.windows_apps import _text_entry_verified
+
+    assert _text_entry_verified(
+        "Existing note",
+        "Existing note Phase 9.2 passed",
+        "Phase 9.2 passed",
+    )
+    assert not _text_entry_verified(
+        "Existing note Phase 9.2 passed",
+        "Existing note Phase 9.2 passed",
+        "Phase 9.2 passed",
+    )
+    assert not _text_entry_verified(
+        "",
+        "Existing note",
+        "Phase 9.2 passed",
+    )
