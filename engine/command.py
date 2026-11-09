@@ -1101,7 +1101,10 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
             # Classification selects the pathway only. The deterministic
             # router still constructs AutomationAction objects, and the
             # existing executor remains responsible for authorization.
-            if intent_result.needs_clarification:
+            if (
+                intent_result.needs_clarification
+                and intent_result.source == "voice_interpretation_unresolved"
+            ):
                 clarification = (
                     interpretation.clarification_question
                     if interpretation is not None

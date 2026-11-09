@@ -233,9 +233,10 @@ def classify_intent(
 ) -> IntentClassification:
     """Classify an utterance conservatively without executing it.
 
-    Explicit command forms are deterministic. Contextual model intent is used
-    only above the configured confidence threshold. An unresolved confirmation
-    cannot become an executable command just because the user said "yes".
+    Typed explicit commands retain deterministic routing. Spoken target commands
+    require a high-confidence contextual interpretation, and any correction must
+    preserve the requested operation family. An unresolved confirmation cannot
+    become executable merely because the user said "yes".
     """
     raw = str(raw_text if raw_text is not None else query or "").strip()
     normalized = str(query or "").strip()

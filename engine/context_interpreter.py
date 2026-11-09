@@ -67,7 +67,7 @@ _LAUNCH_PATTERN = re.compile(
 
 
 def _is_known_application_launch(transcript: str) -> bool:
-    """Keep unambiguous app launches on the fast path without an LLM call."""
+    """Identify a known app launch; voice callers still receive semantic review."""
     match = _LAUNCH_PATTERN.match(str(transcript or "").strip())
     if not match:
         return False
