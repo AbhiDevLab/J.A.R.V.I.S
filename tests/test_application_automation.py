@@ -612,3 +612,110 @@ def test_notepad_document_focus_fails_closed_when_multiple_documents_are_unfocus
             return [first, second]
 
     assert _focus_notepad_document(FakeWindow()) is None
+
+
+def test_telegram_is_a_supported_desktop_application_and_routes_for_open_close():
+    from engine.automation.applications import canonical_application_name, resolve_application
+
+    assert canonical_application_name("Telegram") == "telegram"
+    assert canonical_application_name("Telegram Desktop") == "telegram"
+
+    close_action = route_command("Close Telegram")
+    assert close_action is not None
+    assert close_action.action_type == "close_application"
+    assert close_action.parameters["application"] == "telegram"
+
+    open_action = route_command("Open Telegram")
+    assert open_action is not None
+    assert open_action.action_type == "open_application"
+    assert open_action.parameters["application"] == "telegram"
+
+
+def test_find_application_reference_discovers_start_menu_app_shortcuts(monkeypatch):
+    from engine import automation
+    from engine.automation import applications
+
+    monkeypatch.setattr(
+        applications,
+        "discover_application_shortcuts",
+        lambda: [
+            ("telegram desktop", r"C:\Users\Test\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Telegram Desktop.lnk"),
+        ],
+    )
+    assert applications.find_application_reference("close Telegram Desktop") == "telegram"
+
+
+def test_dynamic_shortcut_resolution_requires_a_unique_exact_display_name(monkeypatch, tmp_path):
+    from engine.automation import applications
+
+    shortcut_a = tmp_path / "One" / "Chat Client.lnk"
+    shortcut_b = tmp_path / "Two" / "Chat Client.lnk"
+    shortcut_a.parent.mkdir()
+    shortcut_b.parent.mkdir()
+    shortcut_a.touch()
+    shortcut_b.touch()
+
+    monkeypatch.setattr(
+        applications,
+        "discover_application_shortcuts",
+        lambda: [
+            ("chat client", str(shortcut_a)),
+            ("chat client", str(shortcut_b)),
+        ],
+    )
+    monkeypatch.setattr(applications, "_resolve_app_path_registry", lambda name: None)
+    assert applications.resolve_application("Chat Client") is None
+
+
+def test_open_executor_uses_windows_shell_for_discovered_lnk_shortcuts(monkeypatch, tmp_path):
+    from engine import automation
+    from engine.automation import executor as executor_module
+
+    shortcut = tmp_path / "Telegram.lnk"
+    shortcut.touch()
+    opened = []
+    recorded = []
+    monkeypatch.setattr(executor_module, "resolve_application", lambda name: str(shortcut))
+    monkeypatch.setattr(executor_module.os, "name", "nt")
+    monkeypatch.setattr(executor_module.os, "startfile", lambda path: opened.append(path), raising=False)
+    monkeypatch.setattr(executor_module, "record_application_opened", lambda name: recorded.append(name))
+    result = executor_module._execute_open_application(
+        AutomationAction(
+            action_type="open_application",
+            parameters={"application": "telegram", "executable": ""},
+            risk=RiskLevel.LOW,
+        )
+    )
+    assert result["success"] is True
+    assert opened == [str(shortcut)]
+    assert recorded == ["telegram"]
+
+
+def test_close_application_does_not_report_success_while_target_window_remains(monkeypatch):
+    from engine.automation import windows_apps
+
+    window = windows_apps.DesktopWindow(
+        handle=123,
+        process_id=456,
+        executable="telegram.exe",
+        title="Telegram",
+    )
+
+    class FakeUser32:
+        def GetForegroundWindow(self):
+            return 123
+
+        def SendMessageTimeoutW(self, *args):
+            return 1
+
+        def IsWindow(self, hwnd):
+            return True
+
+    monkeypatch.setattr(windows_apps, "_load_winapi", lambda: (FakeUser32(), object()))
+    monkeypatch.setattr(windows_apps, "get_application_windows", lambda app: [window])
+    monkeypatch.setattr(windows_apps.time, "sleep", lambda seconds: None)
+
+    result = windows_apps.close_application_window("telegram")
+    assert result["success"] is False
+    assert result["still_open"] is True
+    assert "still open" in result["message"].lower()

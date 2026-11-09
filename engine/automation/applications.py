@@ -56,6 +56,13 @@ APPLICATIONS: Dict[str, tuple[str, ...]] = {
         ),
     ),
 
+    "telegram": (
+        "Telegram.exe",
+        os.path.expandvars(r"%APPDATA%\Telegram Desktop\Telegram.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Telegram Desktop\Telegram.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Telegram Desktop\Telegram.exe"),
+    ),
+
     "notepad": (
         "notepad.exe",
     ),
@@ -100,6 +107,8 @@ ALIASES: Dict[str, str] = {
 
     "spotify desktop": "spotify",
 
+    "telegram desktop": "telegram",
+
     "file explorer": "explorer",
     "windows explorer": "explorer",
 
@@ -139,6 +148,144 @@ def normalize_application_name(
     )
 
 
+def discover_application_shortcuts() -> list[tuple[str, str]]:
+    """Return Start Menu application shortcuts as (display name, path) pairs.
+
+    This covers ordinary Win32 applications and many packaged apps that
+    register a Start Menu shortcut. It deliberately does not scan arbitrary
+    folders or infer an executable from a user's spoken text.
+    """
+    roots = []
+    appdata = os.environ.get("APPDATA")
+    programdata = os.environ.get("PROGRAMDATA")
+    if appdata:
+        roots.append(Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs")
+    if programdata:
+        roots.append(Path(programdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs")
+
+    found: list[tuple[str, str]] = []
+    seen_paths = set()
+    examined = 0
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for current, directories, filenames in os.walk(root):
+            directories[:] = [
+                name for name in directories
+                if not name.startswith(".")
+            ]
+            for filename in filenames:
+                if not filename.lower().endswith(".lnk"):
+                    continue
+                path = Path(current) / filename
+                key = str(path).casefold()
+                if key in seen_paths:
+                    continue
+                seen_paths.add(key)
+                found.append((normalize_application_name(path.stem), str(path)))
+                examined += 1
+                if examined >= 5000:
+                    return found
+    return found
+
+
+def _resolve_app_path_registry(name: str) -> Optional[str]:
+    """Resolve an exact executable name through Windows App Paths registry keys."""
+    if os.name != "nt":
+        return None
+    normalized = normalize_application_name(name)
+    canonical = ALIASES.get(normalized, normalized)
+    executable_names = {
+        f"{normalized.replace(' ', '')}.exe",
+        f"{canonical.replace(' ', '')}.exe",
+    }
+    try:
+        import winreg
+    except Exception:
+        return None
+
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        base = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+        for executable_name in executable_names:
+            try:
+                with winreg.OpenKey(hive, base + "\\" + executable_name) as key:
+                    value, _kind = winreg.QueryValueEx(key, None)
+                candidate = str(value or "").strip().strip('"')
+                path = Path(candidate)
+                if path.is_file():
+                    return str(path)
+            except (OSError, ValueError):
+                continue
+    return None
+
+
+def resolve_shortcut_target(shortcut_path: str) -> Optional[str]:
+    """Read a Windows .lnk target using the COM ShellLink automation object."""
+    if os.name != "nt":
+        return None
+    try:
+        from comtypes.client import CreateObject
+        shell = CreateObject("WScript.Shell")
+        shortcut = shell.CreateShortcut(str(shortcut_path))
+        target = str(shortcut.TargetPath or "").strip()
+        return target or None
+    except Exception:
+        return None
+
+
+def _application_name_candidates(name: str) -> set[str]:
+    normalized = normalize_application_name(name)
+    canonical = ALIASES.get(normalized, normalized)
+    candidates = {normalized, canonical}
+    candidates.update(
+        alias for alias, target in ALIASES.items()
+        if target == canonical
+    )
+    return {item for item in candidates if item}
+
+
+def application_name_variants(name: str) -> set[str]:
+    """Names usable for exact matching against live top-level window titles."""
+    return _application_name_candidates(name)
+
+
+def application_executable_names(name: str) -> set[str]:
+    """Return exact executable basenames that identify one requested app."""
+    normalized = normalize_application_name(name)
+    canonical = ALIASES.get(normalized, normalized)
+    executable_names: set[str] = set()
+
+    for candidate in APPLICATIONS.get(canonical, ()):
+        basename = os.path.basename(os.path.expandvars(candidate)).casefold()
+        if basename.endswith(".exe"):
+            executable_names.add(basename)
+
+    registered = _resolve_app_path_registry(canonical)
+    if registered:
+        executable_names.add(Path(registered).name.casefold())
+
+    display_candidates = _application_name_candidates(name)
+    for display_name, shortcut_path in discover_application_shortcuts():
+        if display_name not in display_candidates:
+            continue
+        target = resolve_shortcut_target(shortcut_path)
+        if target:
+            basename = Path(target).name.casefold()
+            # These are Windows shell hosts rather than the app's process.
+            if basename not in {
+                "explorer.exe",
+                "applicationframehost.exe",
+                "rundll32.exe",
+                "shellhost.exe",
+            } and basename.endswith(".exe"):
+                executable_names.add(basename)
+
+    # Exact-name fallback permits graceful control of a running Win32 app even
+    # when it has no Start Menu shortcut. It never performs substring matching.
+    executable_names.add((canonical.replace(" ", "") + ".exe").casefold())
+    return executable_names
+
+
 def resolve_application(
     name: str,
 ) -> Optional[str]:
@@ -165,50 +312,68 @@ def resolve_application(
     if not candidates:
         return None
 
-    for candidate in candidates:
+    for candidate in candidates or ():
         if not candidate:
             continue
 
         # First try PATH resolution.
-        path_match = shutil.which(
-            candidate
-        )
-
+        path_match = shutil.which(candidate)
         if path_match:
             return path_match
 
         # Then try direct filesystem path.
         path = Path(candidate)
-
         if path.is_file():
             return str(path)
 
+    # Resolve registered applications with an exact App Paths registry key.
+    registered = _resolve_app_path_registry(canonical)
+    if registered:
+        return registered
+
+    # Finally, allow a unique exact-name Start Menu shortcut. The executor
+    # launches the .lnk through Windows ShellExecute rather than CreateProcess.
+    display_candidates = _application_name_candidates(name)
+    shortcuts = [
+        path for display_name, path in discover_application_shortcuts()
+        if display_name in display_candidates
+    ]
+    unique = list(dict.fromkeys(shortcuts))
+    if len(unique) == 1:
+        return unique[0]
     return None
 
 def canonical_application_name(name: str) -> Optional[str]:
-    """Return the allowlisted canonical key for a known application name."""
+    """Return the canonical identity for a known or discoverable installed app."""
     normalized = normalize_application_name(name)
     canonical = ALIASES.get(normalized, normalized)
-    return canonical if canonical in APPLICATIONS else None
+    if canonical in APPLICATIONS:
+        return canonical
+    if _resolve_app_path_registry(canonical):
+        return canonical
+    candidates = _application_name_candidates(name)
+    if any(display_name in candidates for display_name, _path in discover_application_shortcuts()):
+        return canonical
+    return None
 
 
 def find_application_reference(text: str) -> Optional[str]:
-    """Find one allowlisted app name/alias mentioned in natural-language text."""
+    """Find one known or Start-Menu-discovered app name in natural language."""
     value = normalize_application_name(text)
-    candidates = sorted(
-        set(APPLICATIONS) | set(ALIASES),
-        key=len,
-        reverse=True,
+    candidates = set(APPLICATIONS) | set(ALIASES)
+    candidates.update(
+        display_name for display_name, _path in discover_application_shortcuts()
+        if display_name
     )
     matches = []
-    for candidate in candidates:
+    for candidate in sorted(candidates, key=len, reverse=True):
         if re.search(
             rf"(?<![a-z0-9]){re.escape(candidate)}(?![a-z0-9])",
             value,
             re.IGNORECASE,
         ):
-            canonical = canonical_application_name(candidate)
-            if canonical and canonical not in matches:
+            canonical = ALIASES.get(candidate, candidate)
+            if canonical not in matches:
                 matches.append(canonical)
     return matches[0] if len(matches) == 1 else None
 

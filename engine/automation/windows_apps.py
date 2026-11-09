@@ -13,7 +13,13 @@ from dataclasses import dataclass
 from ctypes import wintypes
 from typing import Any, Dict, List
 
-from .applications import APPLICATIONS, canonical_application_name
+from .applications import (
+    APPLICATIONS,
+    canonical_application_name,
+    application_executable_names,
+    application_name_variants,
+    normalize_application_name,
+)
 
 
 @dataclass(frozen=True)
@@ -90,20 +96,14 @@ def _process_executable(kernel32, process_id: int) -> str:
 
 
 def _application_executables(application: str) -> set[str]:
-    canonical = canonical_application_name(application)
-    if not canonical:
-        return set()
-    names = set()
-    for candidate in APPLICATIONS[canonical]:
-        expanded = os.path.expandvars(candidate)
-        names.add(os.path.basename(expanded).casefold())
-    return {name for name in names if name}
+    return application_executable_names(application)
 
 
 def get_application_windows(application: str) -> List[DesktopWindow]:
-    """Return visible top-level windows for one allowlisted app."""
+    """Return visible top-level windows identified by exact app process/title."""
     expected = _application_executables(application)
-    if not expected:
+    expected_titles = application_name_variants(application)
+    if not expected and not expected_titles:
         return []
     user32, kernel32 = _load_winapi()
     windows: List[DesktopWindow] = []
@@ -116,18 +116,24 @@ def get_application_windows(application: str) -> List[DesktopWindow]:
         process_id = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
         executable = _process_executable(kernel32, process_id.value)
-        if executable not in expected:
-            return True
 
         length = user32.GetWindowTextLengthW(hwnd)
         title_buffer = ctypes.create_unicode_buffer(max(1, length + 1))
         user32.GetWindowTextW(hwnd, title_buffer, len(title_buffer))
+        title = title_buffer.value.strip()
+        title_match = (
+            normalize_application_name(title) in expected_titles
+            if title else False
+        )
+        if executable not in expected and not title_match:
+            return True
+
         windows.append(
             DesktopWindow(
                 handle=int(hwnd),
                 process_id=int(process_id.value),
                 executable=executable,
-                title=title_buffer.value.strip(),
+                title=title,
             )
         )
         return True
