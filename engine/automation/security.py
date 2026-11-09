@@ -28,7 +28,7 @@ def _normalize(text: str) -> str:
     import re
 
     normalized = str(text or "").strip().lower()
-    normalized = re.sub(r"[^\\w\\s]", " ", normalized)
+    normalized = re.sub(r"[^\w\s]", " ", normalized)
     return " ".join(normalized.split())
 
 

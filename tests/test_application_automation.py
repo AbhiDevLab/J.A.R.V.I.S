@@ -85,6 +85,7 @@ def test_classifier_does_not_turn_general_notepad_question_into_read_action():
 def test_executor_close_records_closed_only_when_window_is_gone(monkeypatch):
     application_state.clear_application_activity()
     recorded = []
+    monkeypatch.setattr(executor, "request_authorization", lambda action, require_face=True: True)
     monkeypatch.setattr(
         executor,
         "close_application_window",
@@ -108,6 +109,7 @@ def test_executor_close_records_closed_only_when_window_is_gone(monkeypatch):
 
 def test_executor_does_not_record_app_closed_when_other_window_remains(monkeypatch):
     recorded = []
+    monkeypatch.setattr(executor, "request_authorization", lambda action, require_face=True: True)
     monkeypatch.setattr(
         executor,
         "close_application_window",
@@ -734,6 +736,7 @@ def test_close_unknown_installed_process_name_routes_to_exact_app_window_lookup(
 
 def test_close_telegram_does_not_record_closed_when_window_stays_visible(monkeypatch):
     recorded = []
+    monkeypatch.setattr(executor, "request_authorization", lambda action, require_face=True: True)
     monkeypatch.setattr(
         executor,
         "close_application_window",

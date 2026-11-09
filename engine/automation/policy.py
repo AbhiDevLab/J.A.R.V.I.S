@@ -211,6 +211,22 @@ def describe_action(action: Any, *, max_detail: int = 260) -> str:
     elif action_type in {"shell_command", "powershell_command"}:
         target = params.get("command") or params.get("script") or target
 
+    if action_type in {"type_text", "open_application_and_type"}:
+        application = params.get("application")
+        requested_text = params.get("text")
+        if application:
+            target = application
+        if requested_text not in (None, ""):
+            text_preview = str(requested_text).strip()
+            if len(text_preview) > 160:
+                text_preview = text_preview[:160].rstrip() + " … (truncated)"
+            target = f"{target or 'the selected application'}; text: {text_preview!r}"
+    elif action_type == "create_file" and params.get("content") not in (None, ""):
+        content_preview = str(params.get("content")).strip()
+        if len(content_preview) > 120:
+            content_preview = content_preview[:120].rstrip() + " … (truncated)"
+        target = f"{target or 'the selected path'}; initial content: {content_preview!r}"
+
     if target not in (None, ""):
         detail = str(target).strip()
         if len(detail) > max_detail:
