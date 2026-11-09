@@ -321,7 +321,7 @@ def test_type_text_executor_uses_explicit_allowlisted_target_and_exact_body(monk
     assert captured == [("notepad", "Hello {JARVIS}!")]
 
 
-def test_compound_open_and_type_executes_launch_before_typing(monkeypatch):
+def test_compound_open_and_type_creates_fresh_notepad_document_before_typing(monkeypatch):
     events = []
     monkeypatch.setattr(
         executor,
@@ -329,6 +329,18 @@ def test_compound_open_and_type_executes_launch_before_typing(monkeypatch):
         lambda action: (
             events.append(("open", action.parameters["application"]))
             or {"success": True, "message": "Opening Notepad."}
+        ),
+    )
+    monkeypatch.setattr(
+        executor,
+        "create_new_notepad_document",
+        lambda application: (
+            events.append(("new_document", application))
+            or {
+                "success": True,
+                "message": "Created and verified a new blank Notepad document.",
+                "new_document_created": True,
+            }
         ),
     )
     monkeypatch.setattr(
@@ -351,8 +363,13 @@ def test_compound_open_and_type_executes_launch_before_typing(monkeypatch):
         )
     )
     assert result["success"] is True
-    assert events == [("open", "notepad"), ("type", "Hello")]
+    assert events == [
+        ("open", "notepad"),
+        ("new_document", "notepad"),
+        ("type", "Hello"),
+    ]
     assert result["typing_completed"] is True
+    assert result["new_document_created"] is True
 
 
 def test_compound_open_and_type_reports_partial_success_without_claiming_typing(monkeypatch):
@@ -360,6 +377,15 @@ def test_compound_open_and_type_reports_partial_success_without_claiming_typing(
         executor,
         "_execute_open_application",
         lambda action: {"success": True, "message": "Opening Notepad."},
+    )
+    monkeypatch.setattr(
+        executor,
+        "create_new_notepad_document",
+        lambda application: {
+            "success": True,
+            "message": "Created and verified a new blank Notepad document.",
+            "new_document_created": True,
+        },
     )
     monkeypatch.setattr(
         executor,
@@ -483,3 +509,106 @@ def test_windows_editor_focus_rejects_control_that_does_not_gain_keyboard_focus(
             return [stale_document, live_document]
 
     assert _focus_application_editor(FakeWindow()) is live_document
+
+
+def test_compound_notepad_does_not_type_when_fresh_document_cannot_be_verified(monkeypatch):
+    typed = []
+    monkeypatch.setattr(
+        executor,
+        "_execute_open_application",
+        lambda action: {"success": True, "message": "Opening Notepad."},
+    )
+    monkeypatch.setattr(
+        executor,
+        "create_new_notepad_document",
+        lambda application: {
+            "success": False,
+            "message": "Could not verify a blank document.",
+        },
+    )
+    monkeypatch.setattr(
+        executor,
+        "_execute_type_text",
+        lambda action: typed.append(action) or {"success": True, "message": "typed"},
+    )
+
+    result = executor._execute_open_application_and_type(
+        AutomationAction(
+            action_type="open_application_and_type",
+            parameters={"application": "notepad", "text": "Hello"},
+            risk=RiskLevel.LOW,
+        )
+    )
+
+    assert result["success"] is False
+    assert result["application_opened"] is True
+    assert result["typing_completed"] is False
+    assert typed == []
+
+
+def test_editor_control_text_reader_distinguishes_blank_from_unreadable():
+    from engine.automation.windows_apps import _read_editor_control_text
+
+    class BlankEditor:
+        def get_value(self):
+            return ""
+
+    class UnreadableEditor:
+        def get_value(self):
+            raise RuntimeError("ValuePattern unavailable")
+
+        def window_text(self):
+            raise RuntimeError("Text unavailable")
+
+    assert _read_editor_control_text(BlankEditor()) == (True, "")
+    assert _read_editor_control_text(UnreadableEditor()) == (False, "")
+
+
+def test_notepad_document_focus_never_selects_generic_edit_or_textbox_controls():
+    from engine.automation.windows_apps import _focus_notepad_document
+
+    class FakeControl:
+        def __init__(self, control_type, focused=False):
+            self.element_info = type("Info", (), {"control_type": control_type})()
+            self.focused = focused
+            self.focus_calls = 0
+
+        def has_keyboard_focus(self):
+            return self.focused
+
+        def set_focus(self):
+            self.focus_calls += 1
+            self.focused = True
+
+    search = FakeControl("Edit")
+    tabs = FakeControl("TextBox")
+    document = FakeControl("Document", focused=True)
+
+    class FakeWindow:
+        def descendants(self):
+            return [search, tabs, document]
+
+    assert _focus_notepad_document(FakeWindow()) is document
+    assert search.focus_calls == 0
+    assert tabs.focus_calls == 0
+
+
+def test_notepad_document_focus_fails_closed_when_multiple_documents_are_unfocused():
+    from engine.automation.windows_apps import _focus_notepad_document
+
+    first = type("FakeDocument", (), {
+        "element_info": type("Info", (), {"control_type": "Document"})(),
+        "has_keyboard_focus": lambda self: False,
+        "set_focus": lambda self: None,
+    })()
+    second = type("FakeDocument", (), {
+        "element_info": type("Info", (), {"control_type": "Document"})(),
+        "has_keyboard_focus": lambda self: False,
+        "set_focus": lambda self: None,
+    })()
+
+    class FakeWindow:
+        def descendants(self):
+            return [first, second]
+
+    assert _focus_notepad_document(FakeWindow()) is None

@@ -8,7 +8,7 @@ from .actions import (
     AutomationAction,
     requires_confirmation,
 )
-from .applications import resolve_application
+from .applications import resolve_application, canonical_application_name
 from .application_state import (
     record_application_opened,
     record_application_closed,
@@ -17,6 +17,7 @@ from .windows_apps import (
     close_application_window,
     read_application_window_text,
     type_text_into_application,
+    create_new_notepad_document,
 )
 from .filesystem import (
     copy_file,
@@ -276,6 +277,27 @@ def _execute_open_application_and_type(action: AutomationAction) -> Dict[str, An
     if not opened.get("success"):
         return opened
 
+    open_message = str(opened.get("message") or f"Opened {application}.")
+    document_message = ""
+    new_document_created = False
+
+    if canonical_application_name(application) == "notepad":
+        prepared = create_new_notepad_document(application)
+        if not prepared.get("success"):
+            return _result(
+                False,
+                (
+                    f"{open_message} "
+                    f"{prepared.get('message', 'I could not prepare a blank document.')} "
+                    "I did not type anything, so the existing Notepad content remains untouched."
+                ),
+                application_opened=True,
+                typing_completed=False,
+                new_document_created=False,
+            )
+        document_message = str(prepared.get("message") or "")
+        new_document_created = bool(prepared.get("new_document_created"))
+
     typed = _execute_type_text(
         AutomationAction(
             action_type="type_text",
@@ -283,7 +305,6 @@ def _execute_open_application_and_type(action: AutomationAction) -> Dict[str, An
             risk=action.risk,
         )
     )
-    open_message = str(opened.get("message") or f"Opened {application}.")
     if not typed.get("success"):
         return _result(
             False,
@@ -298,9 +319,13 @@ def _execute_open_application_and_type(action: AutomationAction) -> Dict[str, An
         )
     return _result(
         True,
-        f"{open_message} {typed.get('message', '')}".strip(),
+        " ".join(
+            part for part in (open_message, document_message, str(typed.get("message") or ""))
+            if part
+        ),
         application_opened=True,
         typing_completed=True,
+        new_document_created=new_document_created,
         characters_typed=typed.get("characters_typed"),
     )
 

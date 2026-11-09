@@ -408,6 +408,240 @@ def _focus_application_editor(window):
     return None
 
 
+def _focus_notepad_document(window):
+    """Return the active Notepad document control, never a generic Edit/TextBox.
+
+    Modern tabbed Notepad can expose other editable controls (for example,
+    search or tab UI). Only a UIA Document control is eligible for document
+    shortcuts and text entry. If several document controls exist, one must
+    already own keyboard focus; otherwise selection is ambiguous and we fail
+    closed rather than guessing which tab to target.
+    """
+    documents = []
+    for control in window.descendants():
+        try:
+            if str(control.element_info.control_type or "") == "Document":
+                documents.append(control)
+        except Exception:
+            continue
+
+    if not documents:
+        return None
+
+    focused = []
+    for control in documents:
+        checker = getattr(control, "has_keyboard_focus", None)
+        if callable(checker):
+            try:
+                if checker():
+                    focused.append(control)
+            except Exception:
+                continue
+
+    if len(focused) == 1:
+        return focused[0]
+    if len(documents) > 1:
+        return None
+
+    # A single Document control is unambiguous. Focus it and verify that the
+    # UIA provider reports keyboard focus before sending any shortcut/keys.
+    target = documents[0]
+    try:
+        checker = getattr(target, "has_keyboard_focus", None)
+        if not callable(checker):
+            return None
+        target.set_focus()
+        if not checker():
+            return None
+        return target
+    except Exception:
+        return None
+
+
+def _read_editor_control_text(control) -> tuple[bool, str]:
+    """Read the focused editor control, distinguishing blank from unreadable."""
+    candidates = []
+    readable = False
+
+    for getter_name in ("get_value", "window_text"):
+        getter = getattr(control, getter_name, None)
+        if not callable(getter):
+            continue
+        try:
+            value = getter()
+            if value is not None:
+                readable = True
+                candidates.append(str(value).replace("\x00", ""))
+        except Exception:
+            continue
+
+    try:
+        text_pattern = control.iface_text
+        value = text_pattern.DocumentRange.GetText(-1)
+        if value is not None:
+            readable = True
+            candidates.append(str(value).replace("\x00", ""))
+    except Exception:
+        pass
+
+    return readable, max(candidates, key=len, default="").strip()
+
+
+def create_new_notepad_document(
+    application: str,
+    *,
+    wait_timeout: float = 5.0,
+) -> Dict[str, Any]:
+    """Ensure a blank Notepad document is active before a compound type command.
+
+    Existing content is never cleared or overwritten. If the active document
+    is non-empty, send Notepad's New-tab shortcut and verify that a readable,
+    blank editor becomes active before allowing the caller to type.
+    """
+    canonical = canonical_application_name(application)
+    if canonical != "notepad":
+        return {
+            "success": False,
+            "message": "Fresh-document creation is currently supported for Notepad only.",
+        }
+
+    try:
+        deadline = time.monotonic() + max(0.0, float(wait_timeout))
+        windows = []
+        while True:
+            windows = get_application_windows(canonical)
+            if windows or time.monotonic() >= deadline:
+                break
+            time.sleep(0.15)
+
+        if not windows:
+            return {
+                "success": False,
+                "message": "I could not find a visible Notepad window to prepare a new document.",
+            }
+
+        user32, _kernel32 = _load_winapi()
+        foreground = int(user32.GetForegroundWindow() or 0)
+        selected = next((item for item in windows if item.handle == foreground), None)
+        if selected is None and len(windows) == 1:
+            selected = windows[0]
+        if selected is None:
+            titles = "; ".join(item.title for item in windows if item.title)
+            return {
+                "success": False,
+                "ambiguous": True,
+                "message": (
+                    "I found multiple Notepad windows"
+                    + (f" ({titles})" if titles else "")
+                    + ". Bring the intended window to the foreground and retry."
+                ),
+            }
+
+        if foreground != selected.handle:
+            user32.ShowWindow(wintypes.HWND(selected.handle), 9)  # SW_RESTORE
+            user32.SetForegroundWindow(wintypes.HWND(selected.handle))
+            time.sleep(0.15)
+
+        if int(user32.GetForegroundWindow() or 0) != selected.handle:
+            return {
+                "success": False,
+                "message": "Windows did not let me focus the selected Notepad window.",
+            }
+
+        from pywinauto import Desktop
+
+        desktop = Desktop(backend="uia")
+        window = desktop.window(handle=selected.handle).wrapper_object()
+        editor = _focus_notepad_document(window)
+        if editor is None:
+            return {
+                "success": False,
+                "message": "I could not identify a focusable Notepad document. No content was changed.",
+            }
+
+        readable, current_text = _read_editor_control_text(editor)
+        if not readable:
+            return {
+                "success": False,
+                "message": "I could not verify the active Notepad document contents. I left it untouched.",
+            }
+
+        if not current_text.strip():
+            return {
+                "success": True,
+                "message": "A blank Notepad document is already active.",
+                "new_document_created": False,
+                "document_is_blank": True,
+            }
+
+        # Existing content is non-empty. Create a new tab; never clear,
+        # select-all, replace, or otherwise modify the active document.
+        if int(user32.GetForegroundWindow() or 0) != selected.handle:
+            return {
+                "success": False,
+                "message": "Notepad lost foreground focus. I did not create or type into a document.",
+            }
+        try:
+            editor.type_keys("^n", pause=0.05)
+        except Exception as exc:
+            return {
+                "success": False,
+                "message": (
+                    f"Notepad did not accept the new-document shortcut ({type(exc).__name__}). "
+                    "Existing content was left untouched."
+                ),
+            }
+
+        verify_deadline = time.monotonic() + max(2.0, float(wait_timeout))
+        last_error = ""
+        while time.monotonic() < verify_deadline:
+            try:
+                current_windows = get_application_windows(canonical)
+                current_foreground = int(user32.GetForegroundWindow() or 0)
+                active = next(
+                    (item for item in current_windows if item.handle == current_foreground),
+                    None,
+                )
+                if active is None and len(current_windows) == 1:
+                    active = current_windows[0]
+
+                if active is not None and current_foreground == active.handle:
+                    active_window = desktop.window(handle=active.handle).wrapper_object()
+                    active_editor = _focus_notepad_document(active_window)
+                    if active_editor is not None:
+                        blank_is_readable, new_text = _read_editor_control_text(active_editor)
+                        if blank_is_readable and not new_text.strip():
+                            return {
+                                "success": True,
+                                "message": "Created and verified a new blank Notepad document.",
+                                "new_document_created": True,
+                                "document_is_blank": True,
+                                "window_title": active.title,
+                            }
+            except Exception as exc:
+                last_error = type(exc).__name__
+            time.sleep(0.15)
+
+        detail = f" ({last_error})" if last_error else ""
+        return {
+            "success": False,
+            "message": (
+                "I sent Notepad's new-document shortcut, but could not verify a blank "
+                f"document became active{detail}. I did not type anything; check Notepad before retrying."
+            ),
+            "new_document_created": None,
+            "document_is_blank": False,
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "message": (
+                f"I could not safely prepare a new Notepad document ({type(exc).__name__}). "
+                "Existing content was left untouched."
+            ),
+        }
+
+
 def _normalise_visible_text(value: str) -> str:
     """Normalise whitespace for conservative post-entry verification."""
     return " ".join(str(value or "").split())
@@ -513,7 +747,11 @@ def type_text_into_application(
             .window(handle=selected.handle)
             .wrapper_object()
         )
-        target = _focus_application_editor(window)
+        target = (
+            _focus_notepad_document(window)
+            if canonical == "notepad"
+            else _focus_application_editor(window)
+        )
         if target is None:
             return {
                 "success": False,
