@@ -931,3 +931,87 @@ def test_unknown_open_target_still_routes_to_existing_folder(monkeypatch):
     assert action is not None
     assert action.action_type == "open_folder"
     assert action.parameters["path"] == "My Project Folder"
+
+
+def test_resolve_telegram_from_windows_start_apps_aumid(monkeypatch):
+    from engine.automation import applications
+
+    monkeypatch.setattr(applications, "discover_application_shortcuts", lambda: [])
+    monkeypatch.setattr(applications, "_resolve_app_path_registry", lambda name: None)
+    monkeypatch.setattr(
+        applications,
+        "discover_start_menu_app_ids",
+        lambda: [
+            ("telegram desktop", "TelegramMessengerLLP.TelegramDesktop_8wekyb3d8bbwe!App"),
+        ],
+    )
+
+    assert applications.resolve_application("Telegram") == (
+        "apps-folder:TelegramMessengerLLP.TelegramDesktop_8wekyb3d8bbwe!App"
+    )
+
+
+def test_packaged_app_discovery_rejects_ambiguous_exact_display_names(monkeypatch):
+    from engine.automation import applications
+
+    monkeypatch.setattr(
+        applications,
+        "discover_start_menu_app_ids",
+        lambda: [
+            ("telegram", "Publisher.One_123!App"),
+            ("telegram", "Publisher.Two_456!App"),
+        ],
+    )
+
+    assert applications._resolve_packaged_app_aumid("Telegram") is None
+
+
+def test_packaged_app_discovery_rejects_invalid_aumid(monkeypatch):
+    from engine.automation import applications
+
+    monkeypatch.setattr(
+        applications,
+        "discover_start_menu_app_ids",
+        lambda: [("telegram", r"Publisher.Package!App\..\evil")],
+    )
+
+    assert applications._resolve_packaged_app_aumid("Telegram") is None
+
+
+def test_open_executor_launches_packaged_app_through_explorer_without_shell(monkeypatch):
+    import os
+    from engine.automation import executor as executor_module
+
+    launched = []
+    recorded = []
+    monkeypatch.setattr(executor_module.os, "name", "nt")
+    monkeypatch.setattr(
+        executor_module,
+        "resolve_application",
+        lambda name: "apps-folder:TelegramMessengerLLP.TelegramDesktop_8wekyb3d8bbwe!App",
+    )
+    monkeypatch.setattr(
+        executor_module.subprocess,
+        "Popen",
+        lambda args, **kwargs: launched.append((args, kwargs)),
+    )
+    monkeypatch.setattr(
+        executor_module,
+        "record_application_opened",
+        lambda name: recorded.append(name),
+    )
+
+    action = AutomationAction(
+        action_type="open_application",
+        parameters={"application": "telegram", "executable": ""},
+        risk=RiskLevel.LOW,
+    )
+    result = executor_module._execute_open_application(action)
+
+    assert result["success"] is True
+    assert len(launched) == 1
+    assert launched[0][0][1] == (
+        r"shell:AppsFolder\TelegramMessengerLLP.TelegramDesktop_8wekyb3d8bbwe!App"
+    )
+    assert launched[0][1]["shell"] is False
+    assert recorded == ["telegram"]

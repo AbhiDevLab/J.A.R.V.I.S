@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -250,6 +252,89 @@ def discover_application_registry_names() -> set[str]:
     return names
 
 
+def discover_start_menu_app_ids() -> list[tuple[str, str]]:
+    """Discover Windows Start-menu apps as exact (display name, AUMID) pairs.
+
+    Get-StartApps is read-only and returns the Application User Model IDs used
+    by Windows to identify packaged apps. PowerShell receives a fixed command;
+    no spoken or user-supplied string is interpolated into it.
+    """
+    if os.name != "nt":
+        return []
+
+    powershell = shutil.which("powershell.exe") or shutil.which("pwsh.exe")
+    if not powershell:
+        system_root = os.environ.get("SystemRoot", r"C:\Windows")
+        fallback = Path(system_root) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+        if fallback.is_file():
+            powershell = str(fallback)
+    if not powershell:
+        return []
+
+    command = (
+        "$ErrorActionPreference='Stop'; "
+        "Get-StartApps | Select-Object Name,AppID | ConvertTo-Json -Compress"
+    )
+    try:
+        result = subprocess.run(
+            [
+                powershell,
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                command,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=8,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return []
+        payload = json.loads(result.stdout)
+        rows = payload if isinstance(payload, list) else [payload]
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError, ValueError):
+        return []
+
+    found: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows[:5000]:
+        if not isinstance(row, dict):
+            continue
+        display_name = normalize_application_name(row.get("Name", ""))
+        app_id = str(row.get("AppID", "") or "").strip()
+        # AUMIDs are identifiers, not arbitrary shell strings. Reject path
+        # separators, control chars and malformed IDs before building a shell URI.
+        if (
+            not display_name
+            or not app_id
+            or len(app_id) > 512
+            or not re.fullmatch(r"[A-Za-z0-9_.-]+![A-Za-z0-9_.-]+", app_id)
+        ):
+            continue
+        item = (display_name, app_id)
+        if item not in seen:
+            seen.add(item)
+            found.append(item)
+    return found
+
+
+def _resolve_packaged_app_aumid(name: str) -> Optional[str]:
+    """Resolve one exact installed Start app name to its validated AUMID."""
+    candidates = _application_name_candidates(name)
+    matches = {
+        app_id
+        for display_name, app_id in discover_start_menu_app_ids()
+        if display_name in candidates
+    }
+    if len(matches) == 1:
+        return next(iter(matches))
+    return None
+
+
 def resolve_shortcut_target(shortcut_path: str) -> Optional[str]:
     """Read a Windows .lnk target using the COM ShellLink automation object."""
     if os.name != "nt":
@@ -377,6 +462,13 @@ def resolve_application(
         }
         if len(resolved_targets) == 1:
             return unique[0]
+
+    # Packaged / Microsoft Store apps may have no ordinary .lnk or accessible
+    # executable path. Resolve their exact Start-menu AUMID and let Explorer
+    # activate the registered Windows application.
+    app_id = _resolve_packaged_app_aumid(name)
+    if app_id:
+        return f"apps-folder:{app_id}"
     return None
 
 def canonical_application_name(name: str) -> Optional[str]:
