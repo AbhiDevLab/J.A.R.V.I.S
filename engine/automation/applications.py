@@ -8,11 +8,12 @@ from typing import Dict, Optional
 
 
 # ------------------------------------------------------------------
-# Known desktop applications.
+# Built-in desktop application catalogue.
 #
-# Values are executable names and/or common Windows installation
-# locations. Only applications defined here can be launched by the
-# low-risk open_application action.
+# Values are executable names and/or common Windows installation locations.
+# Additional apps are discovered at runtime from exact Start Menu shortcuts
+# and Windows App Paths registry entries; spoken text is never treated as an
+# arbitrary shell command or executable path.
 # ------------------------------------------------------------------
 
 APPLICATIONS: Dict[str, tuple[str, ...]] = {
@@ -320,10 +321,10 @@ def resolve_application(
     name: str,
 ) -> Optional[str]:
     """
-    Resolve a normalized application name into an executable path.
+    Resolve a normalized application name into an executable or .lnk path.
 
-    Returns:
-        Executable path/name if found, otherwise None.
+    Resolution order: built-in paths, Windows App Paths, then a unique
+    exact-name Start Menu shortcut. Returns None when no safe match exists.
     """
 
     normalized = normalize_application_name(

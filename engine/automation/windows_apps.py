@@ -1,8 +1,10 @@
 """Windows desktop window control and accessibility text extraction.
 
-Only visible top-level windows belonging to allowlisted applications are
-considered. Closing uses WM_CLOSE (never TerminateProcess/taskkill /F), so
-unsaved-document prompts remain under the application's control.
+Only visible top-level windows are considered, matched by exact executable
+identity or exact application title. Installed apps may be discovered through
+the Windows Start Menu and App Paths registry. Closing uses WM_CLOSE (never
+TerminateProcess/taskkill /F), so unsaved-document prompts remain under the
+application's control.
 """
 from __future__ import annotations
 
