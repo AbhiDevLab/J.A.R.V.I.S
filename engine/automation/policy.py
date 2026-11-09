@@ -207,7 +207,10 @@ def describe_action(action: Any, *, max_detail: int = 260) -> str:
             target = f"from {source or 'the selected source'} to {destination or 'the selected destination'}"
     elif action_type == "delete_all_matches":
         paths = params.get("paths") or []
-        target = f"{len(paths)} matching items" if isinstance(paths, (list, tuple)) else target
+        if isinstance(paths, (list, tuple)):
+            target = f"{len(paths)} matches"
+            if params.get("name"):
+                target += f" for {params.get('name')}"
     elif action_type in {"shell_command", "powershell_command"}:
         target = params.get("command") or params.get("script") or target
 

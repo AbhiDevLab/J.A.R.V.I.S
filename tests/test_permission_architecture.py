@@ -256,3 +256,92 @@ def test_critical_authorization_is_denied_when_approval_is_not_explicit(monkeypa
     assert result["success"] is False
     assert result["cancelled"] is True
     assert calls == []
+
+
+def test_sensitive_voice_approval_does_not_start_face_authentication(monkeypatch):
+    import sys
+    from types import ModuleType
+    from engine.automation import security
+
+    spoken = []
+    fake_command = ModuleType("engine.command")
+    fake_command.speak = lambda message: spoken.append(message)
+    fake_command.takecommand = lambda: "I confirm"
+
+    monkeypatch.setitem(sys.modules, "engine.command", fake_command)
+    face_calls = []
+    monkeypatch.setattr(security.recognizer, "AuthenticateFace", lambda: face_calls.append(True) or 1)
+
+    approved = security.request_authorization(
+        make_action("close_application", {"application": "telegram"}),
+        require_face=False,
+    )
+
+    assert approved is True
+    assert face_calls == []
+    assert any("close application: telegram" in message for message in spoken)
+
+
+def test_critical_voice_approval_requires_successful_face_authentication(monkeypatch):
+    import sys
+    from types import ModuleType
+    from engine.automation import security
+
+    fake_command = ModuleType("engine.command")
+    fake_command.speak = lambda message: None
+    fake_command.takecommand = lambda: "confirm"
+    monkeypatch.setitem(sys.modules, "engine.command", fake_command)
+
+    monkeypatch.setattr(security.recognizer, "AuthenticateFace", lambda: 1)
+    assert security.request_authorization(
+        make_action("delete_file", {"path": "C:/Temp/important.txt"}),
+        require_face=True,
+    ) is True
+
+    monkeypatch.setattr(security.recognizer, "AuthenticateFace", lambda: 0)
+    assert security.request_authorization(
+        make_action("delete_file", {"path": "C:/Temp/important.txt"}),
+        require_face=True,
+    ) is False
+
+
+def test_authorization_rejects_non_explicit_confirmation_without_face_auth(monkeypatch):
+    import sys
+    from types import ModuleType
+    from engine.automation import security
+
+    fake_command = ModuleType("engine.command")
+    fake_command.speak = lambda message: None
+    fake_command.takecommand = lambda: "That sounds reasonable"
+    monkeypatch.setitem(sys.modules, "engine.command", fake_command)
+
+    face_calls = []
+    monkeypatch.setattr(security.recognizer, "AuthenticateFace", lambda: face_calls.append(True) or 1)
+
+    assert security.request_authorization(
+        make_action("delete_file", {"path": "C:/Temp/important.txt"}),
+        require_face=True,
+    ) is False
+    assert face_calls == []
+
+
+def test_authorization_normalization_handles_voice_punctuation():
+    from engine.automation.security import _normalize
+
+    assert _normalize("I confirm!") == "i confirm"
+    assert _normalize("CANCEL.") == "cancel"
+
+
+def test_admin_never_policy_blocks_elevation_dispatch(monkeypatch, tmp_path):
+    monkeypatch.setenv("JARVIS_AUTOMATION_AUDIT_DB", str(tmp_path / "audit.sqlite3"))
+    monkeypatch.setenv("JARVIS_ADMIN_ACCESS", "never")
+    monkeypatch.setattr(executor, "request_authorization", lambda action, require_face=True: True)
+    broker_calls = []
+    monkeypatch.setattr(executor, "execute_privileged_action", lambda action: broker_calls.append(action))
+
+    result = executor.execute_action(
+        make_action("shell_command", {"command": "net start Spooler"}, requires_admin=True)
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "admin_access_disabled"
+    assert broker_calls == []
