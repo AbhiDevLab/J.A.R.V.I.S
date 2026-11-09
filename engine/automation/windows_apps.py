@@ -397,8 +397,8 @@ def _focus_application_editor(window):
     for control in controls:
         try:
             control.set_focus()
-            has_focus = getattr(control, "has_focus", None)
-            if callable(has_focus) and not has_focus():
+            has_keyboard_focus = getattr(control, "has_keyboard_focus", None)
+            if callable(has_keyboard_focus) and not has_keyboard_focus():
                 continue
             return control
         except Exception:
@@ -432,7 +432,7 @@ def type_text_into_application(
     """Focus an allowlisted application window and type into an editable UIA control.
 
     This fails closed: keystrokes are sent only after the named application's
-    visible window and an enabled editable control inside it are verified.
+    visible window and a focusable editable control inside it are verified.
     """
     canonical = canonical_application_name(application)
     value = str(text or "")

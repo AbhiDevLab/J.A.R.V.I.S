@@ -400,7 +400,7 @@ def test_windows_editor_focus_does_not_reject_document_for_flaky_uia_state_flags
         def set_focus(self):
             self.focused = True
 
-        def has_focus(self):
+        def has_keyboard_focus(self):
             return self.focused
 
     document = FakeDocument()
@@ -459,3 +459,27 @@ def test_text_entry_verification_requires_newly_visible_requested_text():
         "Existing note",
         "Phase 9.2 passed",
     )
+
+
+def test_windows_editor_focus_rejects_control_that_does_not_gain_keyboard_focus():
+    from engine.automation.windows_apps import _focus_application_editor
+
+    class FakeControl:
+        def __init__(self, control_type, gains_focus):
+            self.element_info = type("Info", (), {"control_type": control_type})()
+            self.gains_focus = gains_focus
+
+        def set_focus(self):
+            pass
+
+        def has_keyboard_focus(self):
+            return self.gains_focus
+
+    stale_document = FakeControl("Edit", False)
+    live_document = FakeControl("Document", True)
+
+    class FakeWindow:
+        def descendants(self):
+            return [stale_document, live_document]
+
+    assert _focus_application_editor(FakeWindow()) is live_document
