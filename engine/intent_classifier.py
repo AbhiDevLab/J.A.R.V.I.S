@@ -117,7 +117,7 @@ _AFFIRMATIVE = re.compile(
 
 
 _APPLICATION_CONTENT_MARKER = re.compile(
-    r"\b(?:read|content|contents|text|written|inside|project\s+(?:name|title)|"
+    r"\b(?:read|content|contents|text|written|project\s+(?:name|title)|"
     r"document\s+title|file\s+name|author|meeting\s+time|summary|"
     r"summarize|summarise|extract|how\s+many|contains?)\b|"
     r"\bwhat(?:'s| is|s)?\s+(?:currently\s+)?in\b",
@@ -129,6 +129,22 @@ def _application_content_request(text: str) -> bool:
     value = str(text or "").strip()
     return bool(
         _APPLICATION_CONTENT_MARKER.search(value)
+        and find_application_reference(value)
+    )
+
+
+_TEXT_ENTRY_COMMAND = re.compile(
+    r"^\s*(?:please\s+)?(?:type|enter|write)\b|"
+    r"^\s*(?:please\s+)?(?:open|launch|start)\b.*"
+    r"\b(?:and\s+then|then|and)\s+(?:type|enter|write)\b",
+    re.IGNORECASE,
+)
+
+
+def _application_type_request(text: str) -> bool:
+    value = str(text or "").strip()
+    return bool(
+        _TEXT_ENTRY_COMMAND.search(value)
         and find_application_reference(value)
     )
 
@@ -162,6 +178,7 @@ def _explicit_automation(text: str) -> bool:
     return bool(
         _DIRECT_COMMAND.match(value)
         or _application_content_request(value)
+        or _application_type_request(value)
         or _FILE_SEARCH_COMMAND.match(value)
         or _FILE_LIST_COMMAND.match(value)
         or _CONTACT_COMMAND.match(value)
@@ -211,6 +228,18 @@ def classify_intent(
         ):
             return _result(SemanticIntent.AUTOMATION, interpreted_query, confidence, "context_interpreter", "affirmative reply resolved to the pending concrete action")
         return _result(SemanticIntent.CONFIRMATION, raw, confidence, "pending_state", "approval target is unresolved", needs_clarification=True)
+
+    # Explicit text-entry requests must win over broad application-content
+    # markers such as "text" or "inside". Otherwise a command to type into
+    # Notepad can be misclassified as a request to read Notepad.
+    if _application_type_request(raw):
+        return _result(
+            SemanticIntent.AUTOMATION,
+            raw,
+            0.99,
+            "application_type_request",
+            "explicit request to enter text into a named application",
+        )
 
     # App-content requests are information-shaped but require a live desktop
     # accessibility read, not a language-model guess. Normalize Hinglish app

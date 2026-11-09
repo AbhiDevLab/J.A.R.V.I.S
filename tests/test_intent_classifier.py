@@ -209,3 +209,21 @@ def test_self_contained_explicit_command_keeps_deterministic_fast_path():
     assert result.intent is SemanticIntent.AUTOMATION
     assert result.normalized_query == "close Notepad"
     assert result.source == "deterministic_raw_command"
+
+
+
+def test_explicit_type_text_request_is_not_misclassified_as_application_reading():
+    query = "Type Phase 9.2 barge-in test successful inside opened Notepad"
+    result = classify_intent(query, raw_text=query)
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.should_route_automation is True
+    assert result.normalized_query == query
+    assert result.source == "application_type_request"
+
+
+def test_compound_open_then_type_request_is_classified_as_automation():
+    query = "Open Notepad and type: Phase 9.2 barge-in test successful"
+    result = classify_intent(query, raw_text=query)
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.should_route_automation is True
+    assert result.normalized_query == query
