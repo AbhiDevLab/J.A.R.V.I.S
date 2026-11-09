@@ -447,9 +447,11 @@ def _focus_notepad_document(window):
     # UIA provider reports keyboard focus before sending any shortcut/keys.
     target = documents[0]
     try:
-        target.set_focus()
         checker = getattr(target, "has_keyboard_focus", None)
-        if callable(checker) and not checker():
+        if not callable(checker):
+            return None
+        target.set_focus()
+        if not checker():
             return None
         return target
     except Exception:
