@@ -364,6 +364,65 @@ def read_application_window_text(
     }
 
 
+
+
+
+def _focus_application_editor(window):
+    """Focus a usable text surface without trusting flaky UIA state flags.
+
+    The read helper intentionally discovers Edit/Document/TextBox descendants
+    without consulting is_visible()/is_enabled(). Some Notepad UIA providers
+    report those flags inconsistently even though the document can be read and
+    focused. Here, focus itself is the usability test: try the known text
+    control types and accept only a control that successfully takes focus.
+    """
+    controls = []
+    for control in window.descendants():
+        try:
+            control_type = str(control.element_info.control_type or "")
+        except Exception:
+            continue
+        if control_type not in {"Edit", "Document", "TextBox"}:
+            continue
+        controls.append(control)
+
+    priority = {"Edit": 0, "Document": 1, "TextBox": 2}
+    controls.sort(
+        key=lambda control: priority.get(
+            str(getattr(control.element_info, "control_type", "") or ""),
+            3,
+        )
+    )
+
+    for control in controls:
+        try:
+            control.set_focus()
+            has_keyboard_focus = getattr(control, "has_keyboard_focus", None)
+            if callable(has_keyboard_focus) and not has_keyboard_focus():
+                continue
+            return control
+        except Exception:
+            # A stale/disabled descendant must not prevent trying the next
+            # editable text surface in the same verified application window.
+            continue
+    return None
+
+
+def _normalise_visible_text(value: str) -> str:
+    """Normalise whitespace for conservative post-entry verification."""
+    return " ".join(str(value or "").split())
+
+
+def _text_entry_verified(before: str, after: str, requested: str) -> bool:
+    """Return true only when the requested text is newly visible after entry."""
+    expected = _normalise_visible_text(requested)
+    before_text = _normalise_visible_text(before)
+    after_text = _normalise_visible_text(after)
+    if not expected or expected not in after_text:
+        return False
+    return after_text.count(expected) > before_text.count(expected)
+
+
 def type_text_into_application(
     application: str,
     text: str,
@@ -373,7 +432,7 @@ def type_text_into_application(
     """Focus an allowlisted application window and type into an editable UIA control.
 
     This fails closed: keystrokes are sent only after the named application's
-    visible window and an enabled editable control inside it are verified.
+    visible window and a focusable editable control inside it are verified.
     """
     canonical = canonical_application_name(application)
     value = str(text or "")
@@ -454,38 +513,16 @@ def type_text_into_application(
             .window(handle=selected.handle)
             .wrapper_object()
         )
-        editable_controls = []
-        for control in window.descendants():
-            try:
-                control_type = str(control.element_info.control_type or "")
-                if control_type not in {"Edit", "Document", "TextBox"}:
-                    continue
-                if callable(getattr(control, "is_visible", None)) and not control.is_visible():
-                    continue
-                if callable(getattr(control, "is_enabled", None)) and not control.is_enabled():
-                    continue
-                editable_controls.append(control)
-            except Exception:
-                continue
-
-        if not editable_controls:
+        target = _focus_application_editor(window)
+        if target is None:
             return {
                 "success": False,
                 "message": (
-                    f"I found {canonical.title()}, but it does not expose an enabled "
-                    "text-entry control. I did not send any keystrokes."
+                    f"I found {canonical.title()}, but could not focus an editable "
+                    "document control. No keystrokes were sent."
                 ),
                 "window_title": selected.title,
             }
-
-        # Prefer an Edit control; some applications expose their editor as Document.
-        editable_controls.sort(
-            key=lambda control: (
-                0 if str(control.element_info.control_type or "") == "Edit" else 1
-            )
-        )
-        target = editable_controls[0]
-        target.set_focus()
 
         # Verify focus again immediately before injecting any keyboard input.
         if int(user32.GetForegroundWindow() or 0) != selected.handle:
@@ -497,6 +534,13 @@ def type_text_into_application(
                 ),
             }
 
+        baseline_result = read_application_window_text(canonical)
+        baseline_text = (
+            str(baseline_result.get("content") or "")
+            if baseline_result.get("success")
+            else ""
+        )
+
         # Escape pywinauto key-sequence braces to preserve ordinary user text literally.
         key_text = value.replace("{", "{{}").replace("}", "{}}")
         target.type_keys(
@@ -507,11 +551,37 @@ def type_text_into_application(
             pause=0.001,
             vk_packet=True,
         )
+
+        # Verify once by reading the named app window. Never repeat the typing
+        # call automatically: uncertain input must not create duplicate text.
+        time.sleep(0.15)
+        verification = read_application_window_text(canonical)
+        visible_text = (
+            str(verification.get("content") or "")
+            if verification.get("success")
+            else ""
+        )
+        if not _text_entry_verified(baseline_text, visible_text, value):
+            return {
+                "success": False,
+                "message": (
+                    f"Text entry was sent to {canonical.title()}, but I could not "
+                    "verify that the requested text appeared in the document. "
+                    "Please inspect the window before retrying; I did not resend it."
+                ),
+                "application": canonical,
+                "window_title": selected.title,
+                "typing_sent": True,
+                "typing_verified": False,
+                "characters_typed": len(value),
+            }
+
         return {
             "success": True,
-            "message": f"Typed the requested text into {canonical.title()}.",
+            "message": f"Typed and verified the requested text in {canonical.title()}.",
             "application": canonical,
             "window_title": selected.title,
+            "typing_verified": True,
             "characters_typed": len(value),
         }
     except Exception as exc:
