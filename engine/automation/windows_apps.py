@@ -149,10 +149,10 @@ def get_application_windows(application: str) -> List[DesktopWindow]:
 
 
 def close_application_window(application: str) -> Dict[str, Any]:
-    """Request a graceful close of the foreground/unique app window."""
-    canonical = canonical_application_name(application)
+    """Gracefully close one app window and verify that it is no longer visible."""
+    canonical = canonical_application_name(application) or normalize_application_name(application)
     if not canonical:
-        return {"success": False, "message": "That application is not in the supported application list."}
+        return {"success": False, "message": "No application name was specified."}
 
     try:
         windows = get_application_windows(canonical)
@@ -165,7 +165,8 @@ def close_application_window(application: str) -> Dict[str, Any]:
     if not windows:
         return {
             "success": False,
-            "message": f"{canonical.title()} does not have a visible open window.",
+            "message": f"No visible {canonical.title()} window was found. I did not claim it was closed.",
+            "not_found": True,
         }
 
     user32, _kernel32 = _load_winapi()
@@ -185,6 +186,7 @@ def close_application_window(application: str) -> Dict[str, Any]:
                 "Bring the one you want closed to the foreground, then repeat the command."
             ),
             "ambiguous": True,
+            "still_open": True,
         }
 
     WM_CLOSE = 0x0010
@@ -206,41 +208,67 @@ def close_application_window(application: str) -> Dict[str, Any]:
                 f"Windows did not confirm the close request for {canonical.title()}. "
                 "The application may be busy or waiting for input."
             ),
+            "still_open": True,
         }
 
-    # Give the UI a brief opportunity to process WM_CLOSE and display any
-    # unsaved-changes prompt. Never force-terminate the process.
-    time.sleep(0.2)
-    if user32.IsWindow(wintypes.HWND(selected.handle)):
+    # WM_CLOSE may be asynchronous. Poll the exact HWND and fresh application
+    # inventory. Do not equate a successful SendMessage with a closed window.
+    deadline = time.monotonic() + 2.0
+    target_visible = True
+    remaining = windows
+    while time.monotonic() < deadline:
+        try:
+            target_visible = bool(
+                user32.IsWindow(wintypes.HWND(selected.handle))
+                and user32.IsWindowVisible(wintypes.HWND(selected.handle))
+            )
+            remaining = get_application_windows(canonical)
+        except Exception as exc:
+            return {
+                "success": False,
+                "message": (
+                    f"I sent the close request to {canonical.title()}, but could not "
+                    f"verify its window state ({type(exc).__name__})."
+                ),
+                "verification_failed": True,
+            }
+
+        if not target_visible and not any(item.handle == selected.handle for item in remaining):
+            break
+        time.sleep(0.1)
+
+    if target_visible or any(item.handle == selected.handle for item in remaining):
         return {
             "success": False,
             "message": (
-                f"{canonical.title()} is still open. It may be displaying an "
-                "unsaved-changes prompt; resolve that prompt before asking me to close it again."
+                f"{canonical.title()} is still visible. It may have ignored the close "
+                "request or be waiting for confirmation; I did not report it as closed."
             ),
+            "still_open": True,
             "save_prompt_or_window_still_open": True,
         }
-
-    try:
-        remaining = get_application_windows(canonical)
-    except Exception:
-        remaining = []
 
     if remaining:
         return {
             "success": True,
             "message": (
                 f"I closed the active {canonical.title()} window. "
-                f"{len(remaining)} other {canonical.title()} window(s) remain open."
+                f"{len(remaining)} other visible {canonical.title()} window(s) remain open."
             ),
             "still_open": True,
             "remaining_windows": len(remaining),
+            "closed_window_handle": selected.handle,
         }
 
     return {
         "success": True,
-        "message": f"{canonical.title()} is now closed.",
+        "message": (
+            f"The visible {canonical.title()} window is closed. "
+            "The application may still run in the background or notification area."
+        ),
         "still_open": False,
+        "process_may_remain_in_background": True,
+        "closed_window_handle": selected.handle,
     }
 
 

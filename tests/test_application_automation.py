@@ -719,3 +719,107 @@ def test_close_application_does_not_report_success_while_target_window_remains(m
     assert result["success"] is False
     assert result["still_open"] is True
     assert "still open" in result["message"].lower()
+
+
+def test_close_unknown_installed_process_name_routes_to_exact_app_window_lookup():
+    action = route_command("Close MyChat")
+    assert action is not None
+    assert action.action_type == "close_application"
+    assert action.parameters["application"] == "mychat"
+
+
+def test_close_telegram_does_not_record_closed_when_window_stays_visible(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(
+        executor,
+        "close_application_window",
+        lambda app: {
+            "success": False,
+            "message": "Telegram is still visible.",
+            "still_open": True,
+        },
+    )
+    monkeypatch.setattr(
+        executor,
+        "record_application_closed",
+        lambda app: recorded.append(app),
+    )
+    result = executor.execute_action(
+        AutomationAction(
+            action_type="close_application",
+            parameters={"application": "telegram"},
+            risk=RiskLevel.LOW,
+        )
+    )
+    assert result["success"] is False
+    assert recorded == []
+
+
+def test_close_application_window_accepts_unknown_exact_process_name(monkeypatch):
+    from engine.automation import windows_apps
+
+    window = windows_apps.DesktopWindow(
+        handle=123,
+        process_id=456,
+        executable="mychat.exe",
+        title="MyChat",
+    )
+
+    class FakeUser32:
+        def GetForegroundWindow(self):
+            return 123
+
+        def SendMessageTimeoutW(self, *args):
+            return 1
+
+        def IsWindow(self, hwnd):
+            return False
+
+        def IsWindowVisible(self, hwnd):
+            return False
+
+    monkeypatch.setattr(windows_apps, "_load_winapi", lambda: (FakeUser32(), object()))
+    monkeypatch.setattr(
+        windows_apps,
+        "get_application_windows",
+        lambda app: [window] if app == "mychat" else [],
+    )
+    monkeypatch.setattr(windows_apps.time, "sleep", lambda seconds: None)
+
+    result = windows_apps.close_application_window("mychat")
+    assert result["success"] is True
+    assert result["still_open"] is False
+    assert result["process_may_remain_in_background"] is True
+
+
+def test_close_application_window_does_not_report_success_if_hwnd_remains_visible(monkeypatch):
+    from engine.automation import windows_apps
+
+    window = windows_apps.DesktopWindow(
+        handle=123,
+        process_id=456,
+        executable="telegram.exe",
+        title="Telegram",
+    )
+
+    class FakeUser32:
+        def GetForegroundWindow(self):
+            return 123
+
+        def SendMessageTimeoutW(self, *args):
+            return 1
+
+        def IsWindow(self, hwnd):
+            return True
+
+        def IsWindowVisible(self, hwnd):
+            return True
+
+    monkeypatch.setattr(windows_apps, "_load_winapi", lambda: (FakeUser32(), object()))
+    monkeypatch.setattr(windows_apps, "get_application_windows", lambda app: [window])
+    monkeypatch.setattr(windows_apps.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(windows_apps.time, "monotonic", lambda: 0.0)
+
+    result = windows_apps.close_application_window("telegram")
+    assert result["success"] is False
+    assert result["still_open"] is True

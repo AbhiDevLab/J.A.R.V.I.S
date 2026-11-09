@@ -341,6 +341,13 @@ def resolve_application(
     unique = list(dict.fromkeys(shortcuts))
     if len(unique) == 1:
         return unique[0]
+    if unique:
+        resolved_targets = {
+            resolve_shortcut_target(path) or path
+            for path in unique
+        }
+        if len(resolved_targets) == 1:
+            return unique[0]
     return None
 
 def canonical_application_name(name: str) -> Optional[str]:
