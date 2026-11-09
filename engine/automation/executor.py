@@ -5,10 +5,15 @@ import re
 import subprocess
 from typing import Any, Dict
 
-from .actions import (
-    AutomationAction,
-    requires_confirmation,
+from .actions import AutomationAction
+from .policy import (
+    ApprovalMode,
+    ActionTier,
+    action_fingerprint,
+    get_action_policy,
 )
+from .audit import record_action_event
+from .elevation import execute_privileged_action
 from .applications import resolve_application, canonical_application_name
 from .application_state import (
     record_application_opened,
@@ -517,24 +522,13 @@ def _execute_delete_all_matches(
 def execute_action(
     action: AutomationAction,
 ) -> Dict[str, Any]:
+    """Execute a supported action through the central permission policy.
+
+    Ordinary operations run automatically. Sensitive operations require a
+    one-time voice confirmation. Critical operations require voice + face.
+    Actions explicitly marked requires_admin are sent only to the privileged
+    broker after approval; the normal JARVIS process never self-elevates.
     """
-    Execute a structured automation action.
-
-    High-risk actions MUST pass the authorization gate.
-    """
-
-    if requires_confirmation(action):
-        authorized = request_authorization(
-            action
-        )
-
-        if not authorized:
-            return _result(
-                False,
-                "Action cancelled by authorization gate.",
-                cancelled=True,
-            )
-
     handlers = {
         "open_application": _execute_open_application,
         "open_application_and_type": _execute_open_application_and_type,
@@ -557,15 +551,132 @@ def execute_action(
         "delete_all_matches": _execute_delete_all_matches,
     }
 
-    handler = handlers.get(
-        action.action_type
-    )
-
+    handler = handlers.get(action.action_type)
     if handler is None:
         return _result(
             False,
-            f"Unsupported automation action: "
-            f"{action.action_type}",
+            f"Unsupported automation action: {action.action_type}",
+            error_code="unsupported_action",
         )
 
-    return handler(action)
+    permission = get_action_policy(action)
+    tier = permission.tier
+    approval_required = permission.approval_mode is not ApprovalMode.AUTOMATIC
+    fingerprint = action_fingerprint(action)
+
+    # Record the request without persisting raw paths, command text, document
+    # contents, or other action arguments. Sensitive/critical actions fail
+    # closed when the audit store cannot be written.
+    try:
+        audit_ok = record_action_event(
+            action, tier, "requested", "policy_evaluation_started"
+        )
+    except Exception as exc:
+        audit_ok = False
+        print(f"JARVIS audit write failed: {type(exc).__name__}")
+
+    if not audit_ok and tier is not ActionTier.ORDINARY:
+        return _result(
+            False,
+            "The security audit log is unavailable. This operation was blocked.",
+            error_code="audit_unavailable",
+        )
+
+    if approval_required:
+        try:
+            authorized = request_authorization(
+                action,
+                require_face=permission.requires_face,
+            )
+        except Exception as exc:
+            authorized = False
+            print(f"JARVIS authorization failed: {type(exc).__name__}")
+
+        if not authorized:
+            try:
+                record_action_event(action, tier, "denied", "approval_not_granted")
+            except Exception:
+                pass
+            return _result(
+                False,
+                "Action cancelled by the permission policy. No operation was executed.",
+                cancelled=True,
+                permission_tier=tier.value,
+            )
+
+        # The approval is operation-specific and one-shot. Any parameter
+        # mutation between approval and execution invalidates it.
+        if action_fingerprint(action) != fingerprint:
+            try:
+                record_action_event(action, tier, "denied", "approved_action_changed")
+            except Exception:
+                pass
+            return _result(
+                False,
+                "The approved operation changed before execution. It was cancelled.",
+                cancelled=True,
+                error_code="approval_fingerprint_mismatch",
+            )
+
+        try:
+            approved_logged = record_action_event(
+                action, tier, "approved", "one_time_approval_received"
+            )
+        except Exception as exc:
+            approved_logged = False
+            print(f"JARVIS approval audit failed: {type(exc).__name__}")
+
+        if not approved_logged:
+            return _result(
+                False,
+                "The approval could not be recorded securely. This operation was blocked.",
+                error_code="audit_unavailable",
+            )
+
+    if action.requires_admin:
+        if permission.administrator_access != "ondemand":
+            result = _result(
+                False,
+                "Administrator access is disabled by the current JARVIS policy.",
+                error_code="admin_access_disabled",
+            )
+        else:
+            # A dedicated one-shot UAC broker is introduced in Phase 7.4.4.
+            # Until it is installed, privileged actions are rejected instead
+            # of running through the normal, potentially under/over-privileged
+            # process or attempting blanket elevation.
+            result = execute_privileged_action(action)
+        try:
+            record_action_event(
+                action,
+                tier,
+                "execution_succeeded" if result.get("success") else "execution_blocked",
+                str(result.get("error_code") or "privileged_broker_result"),
+            )
+        except Exception as exc:
+            print(f"JARVIS audit write failed: {type(exc).__name__}")
+        return result
+
+    try:
+        result = handler(action)
+    except Exception as exc:
+        print(f"Automation handler error ({action.action_type}): {type(exc).__name__}")
+        result = _result(
+            False,
+            f"The requested operation failed ({type(exc).__name__}).",
+            error_code="handler_exception",
+        )
+
+    try:
+        record_action_event(
+            action,
+            tier,
+            "execution_succeeded" if result.get("success") else "execution_failed",
+            "handler_succeeded" if result.get("success") else str(result.get("error_code") or "handler_failed"),
+        )
+    except Exception as exc:
+        # Execution has already happened; report the operational result while
+        # surfacing the audit-write failure in logs for maintenance.
+        print(f"JARVIS audit write failed after execution: {type(exc).__name__}")
+
+    return result
