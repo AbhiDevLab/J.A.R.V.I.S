@@ -67,7 +67,7 @@ _LAUNCH_PATTERN = re.compile(
 
 
 def _is_known_application_launch(transcript: str) -> bool:
-    """Keep unambiguous app launches on the fast path without an LLM call."""
+    """Identify a known app launch; voice callers still receive semantic review."""
     match = _LAUNCH_PATTERN.match(str(transcript or "").strip())
     if not match:
         return False
@@ -130,7 +130,10 @@ def should_interpret_query(
         return True
 
     if _is_known_application_launch(raw):
-        return False
+        # Speech recognition can turn an intended application name into a
+        # different-looking phrase. Keep typed known-app launches on the fast
+        # path, but semantically review voice launches before routing.
+        return bool(is_voice_input)
 
     # Target-sensitive requests should be interpreted before deterministic
     # routing even if they are the first utterance in a new session.

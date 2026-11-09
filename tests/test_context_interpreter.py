@@ -161,11 +161,12 @@ def test_fresh_session_target_action_is_interpreted():
         assert should_interpret_query("open my resumy") is True
 
 
-def test_known_application_launch_uses_fast_path_without_context():
+def test_known_application_launch_uses_context_for_voice_but_fast_path_for_typed_text():
     with patch.dict("os.environ", {"JARVIS_INTERPRETATION_MODE": "auto"}):
         assert should_interpret_query("open Chrome") is False
-        assert should_interpret_query("open Chrome", is_voice_input=True) is False
+        assert should_interpret_query("open Chrome", is_voice_input=True) is True
         assert should_interpret_query("launch VS Code.") is False
+        assert should_interpret_query("launch VS Code.", is_voice_input=True) is True
 
 
 def test_fresh_voice_conversation_is_interpreted_but_typed_text_is_fast_path():
