@@ -864,7 +864,11 @@ def _route_close_application(text: str) -> Optional[AutomationAction]:
         # basename or exact window title; it never performs substring kills.
         target = re.sub(r"^(?:the\s+)?(?:application|app)\s+", "", target)
         target = re.sub(r"\s+(?:application|app)$", "", target)
-        if not target or target in {"it", "this", "that", "this window", "the window", "that app"}:
+        if (
+            not target
+            or target in {"it", "this", "that", "this window", "the window", "that app", "i used earlier"}
+            or target.split()[0] in {"i", "we", "you", "they", "he", "she", "it", "this", "that"}
+        ):
             return None
         if len(target.split()) > 3:
             return None

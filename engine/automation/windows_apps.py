@@ -243,7 +243,7 @@ def close_application_window(application: str) -> Dict[str, Any]:
         return {
             "success": False,
             "message": (
-                f"{canonical.title()} is still visible. It may have ignored the close "
+                f"{canonical.title()} is still open and visible. It may have ignored the close "
                 "request or be waiting for confirmation; I did not report it as closed."
             ),
             "still_open": True,
