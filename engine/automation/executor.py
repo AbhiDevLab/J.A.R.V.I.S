@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from typing import Any, Dict
@@ -150,7 +151,11 @@ def _execute_open_application(
     print(f"Executable: {executable}")
 
     try:
-        if application in {"command prompt", "cmd"}:
+        if str(executable).casefold().endswith(".lnk"):
+            if os.name != "nt" or not hasattr(os, "startfile"):
+                return _result(False, "Windows Start Menu shortcuts can only be launched on Windows.")
+            os.startfile(executable)
+        elif application in {"command prompt", "cmd"}:
             subprocess.Popen(
                 [executable, "/K"],
                 shell=False,

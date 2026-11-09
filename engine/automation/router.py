@@ -856,9 +856,23 @@ def _route_close_application(text: str) -> Optional[AutomationAction]:
     )
     if not match:
         return None
-    application = find_application_reference(match.group(1))
+    target = normalize_application_name(match.group(1))
+    application = find_application_reference(target)
     if not application:
-        return None
+        # Permit an exact short app/process name even when it has no Start Menu
+        # shortcut. The Windows layer will only match its exact executable
+        # basename or exact window title; it never performs substring kills.
+        target = re.sub(r"^(?:the\s+)?(?:application|app)\s+", "", target)
+        target = re.sub(r"\s+(?:application|app)$", "", target)
+        if (
+            not target
+            or target in {"it", "this", "that", "this window", "the window", "that app", "i used earlier"}
+            or target.split()[0] in {"i", "we", "you", "they", "he", "she", "it", "this", "that"}
+        ):
+            return None
+        if len(target.split()) > 3:
+            return None
+        application = target
     return AutomationAction(
         action_type="close_application",
         parameters={"application": application},
