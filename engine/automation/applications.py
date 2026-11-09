@@ -337,7 +337,12 @@ def _resolve_packaged_app_aumid(name: str) -> Optional[str]:
     matches = {
         app_id
         for display_name, app_id in discover_start_menu_app_ids()
-        if display_name in candidates
+        if (
+            display_name in candidates
+            and isinstance(app_id, str)
+            and len(app_id) <= 512
+            and re.fullmatch(r"[A-Za-z0-9_.-]+![A-Za-z0-9_.-]+", app_id)
+        )
     }
     if len(matches) == 1:
         return next(iter(matches))
