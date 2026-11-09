@@ -304,6 +304,7 @@ def test_application_read_request_still_routes_to_accessibility_reader():
 
 def test_type_text_executor_uses_explicit_allowlisted_target_and_exact_body(monkeypatch):
     captured = []
+    monkeypatch.setattr(executor, "request_authorization", lambda action, require_face=True: True)
     monkeypatch.setattr(
         executor,
         "type_text_into_application",
@@ -325,6 +326,7 @@ def test_type_text_executor_uses_explicit_allowlisted_target_and_exact_body(monk
 
 def test_compound_open_and_type_creates_fresh_notepad_document_before_typing(monkeypatch):
     events = []
+    monkeypatch.setattr(executor, "request_authorization", lambda action, require_face=True: True)
     monkeypatch.setattr(
         executor,
         "_execute_open_application",

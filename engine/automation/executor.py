@@ -678,5 +678,4 @@ def execute_action(
         # surfacing the audit-write failure in logs for maintenance.
         print(f"JARVIS audit write failed after execution: {type(exc).__name__}")
 
-    result.setdefault("permission_tier", tier.value)
     return result

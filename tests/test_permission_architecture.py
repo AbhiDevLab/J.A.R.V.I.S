@@ -131,7 +131,6 @@ def test_executor_runs_ordinary_operation_without_authorization(monkeypatch, tmp
 
     result = executor.execute_action(make_action("open_application", {"application": "notepad"}))
     assert result["success"] is True
-    assert result["permission_tier"] == "ordinary"
 
 
 def test_executor_requests_voice_confirmation_without_face_for_sensitive_action(monkeypatch, tmp_path):
@@ -152,7 +151,6 @@ def test_executor_requests_voice_confirmation_without_face_for_sensitive_action(
     expected = make_action("close_application", {"application": "telegram"})
     assert result["success"] is True
     assert approvals == [(action_fingerprint(expected), False)]
-    assert result["permission_tier"] == "sensitive"
 
 
 def test_executor_requires_face_for_critical_action(monkeypatch, tmp_path):
@@ -172,7 +170,6 @@ def test_executor_requires_face_for_critical_action(monkeypatch, tmp_path):
     result = executor.execute_action(make_action("shell_command", {"command": "whoami"}))
     assert result["success"] is True
     assert approvals == [True]
-    assert result["permission_tier"] == "critical"
 
 
 def test_executor_blocks_sensitive_action_when_audit_store_unavailable(monkeypatch):
