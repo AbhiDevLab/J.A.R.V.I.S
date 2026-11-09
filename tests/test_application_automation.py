@@ -711,6 +711,9 @@ def test_close_application_does_not_report_success_while_target_window_remains(m
         def IsWindow(self, hwnd):
             return True
 
+        def IsWindowVisible(self, hwnd):
+            return True
+
     monkeypatch.setattr(windows_apps, "_load_winapi", lambda: (FakeUser32(), object()))
     monkeypatch.setattr(windows_apps, "get_application_windows", lambda app: [window])
     monkeypatch.setattr(windows_apps.time, "sleep", lambda seconds: None)
@@ -779,10 +782,11 @@ def test_close_application_window_accepts_unknown_exact_process_name(monkeypatch
             return False
 
     monkeypatch.setattr(windows_apps, "_load_winapi", lambda: (FakeUser32(), object()))
+    inventories = iter(([window], []))
     monkeypatch.setattr(
         windows_apps,
         "get_application_windows",
-        lambda app: [window] if app == "mychat" else [],
+        lambda app: next(inventories, []),
     )
     monkeypatch.setattr(windows_apps.time, "sleep", lambda seconds: None)
 
@@ -818,7 +822,8 @@ def test_close_application_window_does_not_report_success_if_hwnd_remains_visibl
     monkeypatch.setattr(windows_apps, "_load_winapi", lambda: (FakeUser32(), object()))
     monkeypatch.setattr(windows_apps, "get_application_windows", lambda app: [window])
     monkeypatch.setattr(windows_apps.time, "sleep", lambda seconds: None)
-    monkeypatch.setattr(windows_apps.time, "monotonic", lambda: 0.0)
+    ticks = iter((0.0, 3.0))
+    monkeypatch.setattr(windows_apps.time, "monotonic", lambda: next(ticks, 3.0))
 
     result = windows_apps.close_application_window("telegram")
     assert result["success"] is False

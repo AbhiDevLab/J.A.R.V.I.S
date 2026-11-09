@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-from pathlib import Path
 from typing import Any, Dict
 
 from .actions import (
@@ -152,7 +151,7 @@ def _execute_open_application(
     print(f"Executable: {executable}")
 
     try:
-        if Path(executable).suffix.casefold() == ".lnk":
+        if str(executable).casefold().endswith(".lnk"):
             if os.name != "nt" or not hasattr(os, "startfile"):
                 return _result(False, "Windows Start Menu shortcuts can only be launched on Windows.")
             os.startfile(executable)
