@@ -7,10 +7,10 @@ from typing import Any, Dict
 
 from .actions import AutomationAction
 from .policy import (
+    ApprovalMode,
     ActionTier,
     action_fingerprint,
-    classify_action,
-    get_permission_config,
+    get_action_policy,
 )
 from .audit import record_action_event
 from .elevation import execute_privileged_action
@@ -559,8 +559,9 @@ def execute_action(
             error_code="unsupported_action",
         )
 
-    tier = classify_action(action)
-    permission = get_permission_config()
+    permission = get_action_policy(action)
+    tier = permission.tier
+    approval_required = permission.approval_mode is not ApprovalMode.AUTOMATIC
     fingerprint = action_fingerprint(action)
 
     # Record the request without persisting raw paths, command text, document
@@ -581,11 +582,11 @@ def execute_action(
             error_code="audit_unavailable",
         )
 
-    if tier is not ActionTier.ORDINARY:
+    if approval_required:
         try:
             authorized = request_authorization(
                 action,
-                require_face=(tier is ActionTier.CRITICAL),
+                require_face=permission.requires_face,
             )
         except Exception as exc:
             authorized = False
@@ -633,7 +634,7 @@ def execute_action(
             )
 
     if action.requires_admin:
-        if permission.admin_access_mode != "ondemand":
+        if permission.administrator_access != "ondemand":
             result = _result(
                 False,
                 "Administrator access is disabled by the current JARVIS policy.",

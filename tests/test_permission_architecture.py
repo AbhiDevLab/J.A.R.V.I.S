@@ -342,3 +342,31 @@ def test_admin_never_policy_blocks_elevation_dispatch(monkeypatch, tmp_path):
     assert result["success"] is False
     assert result["error_code"] == "admin_access_disabled"
     assert broker_calls == []
+
+
+def test_ordinary_policy_can_be_strengthened_to_voice_confirmation(monkeypatch):
+    monkeypatch.setenv("JARVIS_POLICY_ORDINARY", "confirm")
+    policy = get_action_policy(make_action("open_application", {"application": "notepad"}))
+    assert policy.tier is ActionTier.ORDINARY
+    assert policy.approval_mode is ApprovalMode.CONFIRM
+    assert requires_confirmation(make_action("open_application", {"application": "notepad"})) is True
+
+
+def test_executor_honors_ordinary_confirm_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("JARVIS_POLICY_ORDINARY", "confirm")
+    monkeypatch.setenv("JARVIS_AUTOMATION_AUDIT_DB", str(tmp_path / "audit.sqlite3"))
+    approvals = []
+    monkeypatch.setattr(
+        executor,
+        "request_authorization",
+        lambda action, require_face=True: approvals.append(require_face) or True,
+    )
+    monkeypatch.setattr(
+        executor,
+        "_execute_open_application",
+        lambda action: {"success": True, "message": "Opened Notepad."},
+    )
+
+    result = executor.execute_action(make_action("open_application", {"application": "notepad"}))
+    assert result["success"] is True
+    assert approvals == [False]

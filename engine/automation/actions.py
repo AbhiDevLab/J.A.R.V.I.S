@@ -58,6 +58,6 @@ HIGH_RISK_ACTIONS = {
 
 def requires_confirmation(action: AutomationAction) -> bool:
     """Backward-compatible wrapper around the central action policy."""
-    from .policy import ActionTier, classify_action
+    from .policy import ApprovalMode, get_action_policy
 
-    return classify_action(action) is not ActionTier.ORDINARY
+    return get_action_policy(action).approval_mode is not ApprovalMode.AUTOMATIC
