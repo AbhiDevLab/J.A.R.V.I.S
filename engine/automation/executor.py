@@ -283,12 +283,13 @@ def _execute_open_application_and_type(action: AutomationAction) -> Dict[str, An
             risk=action.risk,
         )
     )
+    open_message = str(opened.get("message") or f"Opened {application}.")
     if not typed.get("success"):
         return _result(
             False,
             (
-                f"{opened.get('message', f'Opened {application}.')} "
-                f"However, I could not complete the typing step: "
+                f"{open_message} "
+                "However, I could not complete the typing step: "
                 f"{typed.get('message', 'the target was not verified')} "
                 "The application remains open; no typing retry was attempted."
             ),
@@ -297,7 +298,7 @@ def _execute_open_application_and_type(action: AutomationAction) -> Dict[str, An
         )
     return _result(
         True,
-        f"{opened.get('message', f'Opened {application}.')} {typed.get('message', '')}".strip(),
+        f"{open_message} {typed.get('message', '')}".strip(),
         application_opened=True,
         typing_completed=True,
         characters_typed=typed.get("characters_typed"),
