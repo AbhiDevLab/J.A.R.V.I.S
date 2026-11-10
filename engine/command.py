@@ -674,10 +674,7 @@ def takecommand(
             f"User Said: {query}"
         )
 
-        print(
-            f"Speech language: {language} "
-            f"(confidence={confidence:.2f})"
-        )
+        print(f"Speech language: {language}")
 
         _safe_display(
             "animateRecognizedQuery",
@@ -996,8 +993,7 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                 print(
                     "Context interpretation: "
                     f"{interpretation.interpreted_query!r} "
-                    f"(intent={interpretation.intent}, "
-                    f"confidence={interpretation.confidence:.2f})"
+                    f"(intent={interpretation.intent})"
                 )
 
                 if interpretation.needs_clarification:
@@ -1091,8 +1087,7 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
             print(
                 "Semantic intent: "
                 f"{intent_result.intent.value} "
-                f"(confidence={intent_result.confidence:.2f}, "
-                f"source={intent_result.source})"
+                f"(source={intent_result.source})"
             )
             # Use the classifier's preserved/corrected query consistently
             # for both routing and the conversational response path.
