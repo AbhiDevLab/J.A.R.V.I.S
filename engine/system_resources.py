@@ -235,7 +235,89 @@ def _extract_registered_executable_path(value: Any) -> str | None:
     text = str(value or "").strip()
     if not text:
         return None
-    quoted = re.match(r'^"(?P<path>.+?\.exe)"(?:\s*,\s*-?\d+)?    """Discover applications and classify them by the strength of runtime evidence.
+    quoted = re.match(r'^"(?P<path>.+?\.exe)"(?:\s*,\s*-?\d+)?$', text, re.IGNORECASE)
+    if quoted:
+        candidate = quoted.group("path")
+    else:
+        candidate = re.sub(r",\s*-?\d+\s*$", "", text).strip().strip('"')
+    if not candidate.casefold().endswith(".exe"):
+        return None
+    return candidate
+
+
+def discover_application_path_executables() -> list[dict[str, Any]]:
+    """Read exact executable-to-path associations from Windows App Paths.
+
+    Returned paths are used only in memory for relationship matching and are
+    never included in the user-facing inventory.
+    """
+    if not _is_windows():
+        return []
+    try:
+        import winreg
+    except ImportError:
+        return []
+
+    base = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+    views = (
+        winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0),
+        winreg.KEY_READ | getattr(winreg, "KEY_WOW64_32KEY", 0),
+    )
+    roots = (
+        (winreg.HKEY_LOCAL_MACHINE, "machine"),
+        (winreg.HKEY_CURRENT_USER, "current_user"),
+    )
+    found: dict[tuple[str, str], dict[str, Any]] = {}
+    for hive, scope in roots:
+        for access in views:
+            try:
+                with winreg.OpenKey(hive, base, 0, access) as parent:
+                    index = 0
+                    while True:
+                        try:
+                            entry = winreg.EnumKey(parent, index)
+                        except OSError:
+                            break
+                        index += 1
+                        if not str(entry).casefold().endswith(".exe"):
+                            continue
+                        try:
+                            with winreg.OpenKey(parent, entry, 0, access) as child:
+                                raw_path = winreg.QueryValueEx(child, None)[0]
+                        except OSError:
+                            continue
+                        executable_path = str(raw_path or "").strip().strip('"')
+                        executable_name = ntpath.basename(executable_path or entry)
+                        if not executable_name.casefold().endswith(".exe"):
+                            continue
+                        normalized_path = _normalize_executable_path(executable_path)
+                        path_exists = bool(
+                            executable_path and Path(executable_path).is_file()
+                        )
+                        item_key = (str(entry).casefold(), normalized_path)
+                        found.setdefault(
+                            item_key,
+                            {
+                                "name": _application_discovery.normalize_application_name(
+                                    Path(str(entry)).stem
+                                ),
+                                "executable_name": executable_name.casefold(),
+                                "executable_path": normalized_path if path_exists else None,
+                                "source": f"app_paths_registry_{scope}",
+                                "path_verified": path_exists,
+                            },
+                        )
+            except OSError:
+                continue
+    return list(found.values())
+
+
+def discover_installed_applications(
+    *,
+    max_items: int = 500,
+    include_relationship_metadata: bool = False,
+) -> list[dict[str, Any]]:
+    """Discover applications and classify them by the strength of runtime evidence.
 
     Uninstall registry records are conventional installed applications.
     Start Menu package entries are packaged applications. App Paths entries
