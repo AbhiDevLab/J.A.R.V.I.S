@@ -514,6 +514,24 @@ def _read_cpu_registry_details() -> dict[str, Any]:
         return {}
 
 
+def _count_processor_core_records(raw: bytes, total_size: int | None = None) -> int | None:
+    """Parse SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX record headers."""
+    total = len(raw) if total_size is None else min(len(raw), int(total_size))
+    offset = 0
+    cores = 0
+    while offset + 8 <= total:
+        relationship = int.from_bytes(raw[offset:offset + 4], "little")
+        record_size = int.from_bytes(raw[offset + 4:offset + 8], "little")
+        if record_size < 8 or offset + record_size > total:
+            return None
+        if relationship == 0:  # RelationProcessorCore
+            cores += 1
+        offset += record_size
+    if offset != total:
+        return None
+    return cores or None
+
+
 def _physical_core_count() -> int | None:
     """Count Windows processor-core relationship records using a Win32 API."""
     if not _is_windows():
@@ -535,18 +553,10 @@ def _physical_core_count() -> int | None:
         if not get_info(0, buffer, ctypes.byref(required)):
             return None
 
-        offset = 0
-        total = int(required.value)
-        cores = 0
-        while offset + 8 <= total:
-            relationship = int.from_bytes(buffer.raw[offset:offset + 4], "little")
-            record_size = int.from_bytes(buffer.raw[offset + 4:offset + 8], "little")
-            if record_size < 8 or offset + record_size > total:
-                return None
-            if relationship == 0:
-                cores += 1
-            offset += record_size
-        return cores or None
+        return _count_processor_core_records(
+            buffer.raw,
+            int(required.value),
+        )
     except (AttributeError, OSError, TypeError, ValueError):
         return None
 
