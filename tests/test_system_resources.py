@@ -1323,6 +1323,65 @@ def test_application_state_report_does_not_claim_not_running_when_process_invent
     assert result["items"][0]["is_running"] is None
 
 
+def test_application_state_report_does_not_claim_closed_without_executable_identity():
+    applications = [
+        {
+            "display_name": "Packaged Utility",
+            "category": "packaged_application",
+            "is_installed": True,
+            "_executable_names": [],
+            "_executable_paths": [],
+            "_install_locations": [],
+        }
+    ]
+
+    result = system_resources.build_application_state_report(
+        applications, [], [], process_inventory_available=True
+    )
+
+    assert result["items"][0]["state"] == "not_verified_application_identity_unavailable"
+    assert result["items"][0]["is_running"] is None
+    assert result["items"][0]["process_identity_evidence_available"] is False
+
+
+def test_combined_application_state_scopes_strip_private_paths(monkeypatch):
+    private_path = r"C:\Program Files\Example\example.exe"
+    monkeypatch.setattr(
+        system_resources,
+        "discover_installed_applications",
+        lambda **kwargs: [{
+            "display_name": "Example",
+            "category": "installed_application",
+            "is_installed": True,
+            "_executable_names": ["example.exe"],
+            "_executable_paths": [system_resources._normalize_executable_path(private_path)],
+            "_install_locations": [],
+        }],
+    )
+    monkeypatch.setattr(
+        system_resources,
+        "discover_running_processes",
+        lambda **kwargs: [{
+            "name": "example.exe",
+            "pid": 10,
+            "_image_path": system_resources._normalize_executable_path(private_path),
+        }],
+    )
+    monkeypatch.setattr(system_resources, "discover_window_states", lambda **kwargs: [])
+
+    inventory = system_resources.discover_system_resources(
+        ["application_states", "applications", "processes"],
+        query="Example",
+    )
+
+    assert private_path.casefold() not in str(inventory).casefold()
+    assert "_image_path" not in str(inventory)
+    assert "_executable_paths" not in str(inventory)
+    assert "application_state_report" in inventory
+    assert inventory["installed_applications"][0]["display_name"] == "Example"
+    assert inventory["running_processes"][0]["pid"] == 10
+
+
 def test_application_process_relationship_query_filters_by_app_or_process():
     applications = [
         {
