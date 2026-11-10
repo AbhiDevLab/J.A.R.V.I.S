@@ -19,6 +19,8 @@ def test_resource_inventory_queries_use_deterministic_voice_fast_path(monkeypatc
         "show running processes",
         "what apps are open",
         "list logical drives",
+        "show application process relationships",
+        "which processes belong to Chrome",
         "find a file named report across all drives",
     ):
         assert should_interpret_query(query, is_voice_input=True) is False
@@ -53,6 +55,8 @@ def test_resource_inventory_requests_route_to_typed_read_only_actions():
             ["applications", "drives", "processes", "system", "windows"],
             None,
         ),
+        "show application process relationships": (["relationships"], None),
+        "which processes belong to Chrome": (["relationships"], "Chrome"),
         "list installed applications": (["applications"], None),
         "show running processes": (["processes"], None),
         "what apps are open": (["windows"], None),
@@ -210,3 +214,73 @@ def test_resource_report_labels_installed_and_usable_memory_separately(monkeypat
     assert "Installed desktop applications" in report
     assert "Start Menu shortcuts (installation not verified)" in report
     assert "NTFS" in report
+
+
+def test_application_process_relationship_report_is_structured_and_does_not_expose_paths(monkeypatch):
+    from engine.automation import executor
+
+    monkeypatch.setattr(
+        executor,
+        "discover_system_resources",
+        lambda scopes, query=None: {
+            "schema_version": 1,
+            "scopes": ["relationships"],
+            "application_process_relationships": {
+                "query": None,
+                "process_count": 3,
+                "matched_count": 1,
+                "ambiguous_count": 1,
+                "unmapped_count": 1,
+                "visible_window_count": 2,
+                "items": [
+                    {
+                        "application": "Google Chrome",
+                        "process": "chrome.exe",
+                        "pid": 100,
+                        "match_status": "matched",
+                        "match_basis": "exact_executable_path",
+                        "window_count": 2,
+                        "window_titles": ["JARVIS - Chrome", "Settings"],
+                        "has_foreground_window": True,
+                    },
+                    {
+                        "application": "Ambiguous: App A, App B",
+                        "process": "shared.exe",
+                        "pid": 200,
+                        "match_status": "ambiguous",
+                        "match_basis": "executable_name_claimed_by_multiple_apps",
+                        "window_count": 0,
+                        "window_titles": [],
+                        "has_foreground_window": False,
+                    },
+                    {
+                        "application": "Unmapped",
+                        "process": "svchost.exe",
+                        "pid": 300,
+                        "match_status": "unmapped",
+                        "match_basis": "unmatched",
+                        "window_count": 0,
+                        "window_titles": [],
+                        "has_foreground_window": False,
+                    },
+                ],
+            },
+        },
+    )
+    action = AutomationAction(
+        action_type="discover_system_resources",
+        parameters={"scopes": ["relationships"]},
+        risk=RiskLevel.LOW,
+    )
+
+    result = executor._execute_system_resource_discovery(action)
+    report = result["message"]
+
+    assert "## Application–process relationships" in report
+    assert "Google Chrome" in report
+    assert "Exact executable path" in report
+    assert "Ambiguous: App A, App B" in report
+    assert "Unmapped" in report
+    assert "JARVIS - Chrome; Settings" in report
+    assert "Ambiguous or inaccessible matches are not guessed." in report
+    assert result["inventory"]["scopes"] == ["relationships"]

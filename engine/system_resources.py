@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import ctypes
 import io
+import ntpath
 import os
 import platform
 import re
@@ -123,6 +124,8 @@ def discover_uninstall_registry_applications() -> list[dict[str, Any]]:
                                     "SystemComponent",
                                     "ReleaseType",
                                     "ParentKeyName",
+                                    "InstallLocation",
+                                    "DisplayIcon",
                                 ):
                                     try:
                                         values[value_name] = winreg.QueryValueEx(
@@ -165,7 +168,27 @@ def discover_uninstall_registry_applications() -> list[dict[str, Any]]:
                             "category": category,
                             "sources": {f"uninstall_registry_{scope}"},
                             "is_installed": True,
+                            "_executable_names": set(),
+                            "_executable_paths": set(),
+                            "_install_locations": set(),
                         }
+                        icon_path = _extract_registered_executable_path(
+                            values.get("DisplayIcon")
+                        )
+                        if icon_path:
+                            candidate["_executable_names"].add(
+                                ntpath.basename(icon_path).casefold()
+                            )
+                            candidate["_executable_paths"].add(
+                                _normalize_executable_path(icon_path)
+                            )
+                        install_location = str(
+                            values.get("InstallLocation") or ""
+                        ).strip().strip('"')
+                        if install_location:
+                            candidate["_install_locations"].add(
+                                _normalize_executable_path(install_location)
+                            )
                         if current is None:
                             records[key] = candidate
                         else:
@@ -176,19 +199,128 @@ def discover_uninstall_registry_applications() -> list[dict[str, Any]]:
                                 current["category"] = category
                             current["publisher"] = current.get("publisher") or candidate["publisher"]
                             current["version"] = current.get("version") or candidate["version"]
+                            current["_executable_names"].update(candidate["_executable_names"])
+                            current["_executable_paths"].update(candidate["_executable_paths"])
+                            current["_install_locations"].update(candidate["_install_locations"])
             except OSError:
                 continue
 
     return [
         {
-            **{key: value for key, value in record.items() if key != "sources"},
+            **{
+                key: (
+                    sorted(value)
+                    if isinstance(value, set)
+                    else value
+                )
+                for key, value in record.items()
+                if key != "sources"
+            },
             "sources": sorted(record["sources"]),
         }
         for _key, record in sorted(records.items())
     ]
 
 
-def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, Any]]:
+def _normalize_executable_path(value: Any) -> str:
+    """Normalize a Windows path for an in-memory equality/prefix comparison."""
+    text = str(value or "").strip().strip('"')
+    if not text:
+        return ""
+    return ntpath.normcase(ntpath.normpath(os.path.expandvars(text)))
+
+
+def _extract_registered_executable_path(value: Any) -> str | None:
+    """Extract an executable path from a registry DisplayIcon-style value."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    quoted = re.match(r'^"(?P<path>.+?\.exe)"(?:\s*,\s*-?\d+)?$', text, re.IGNORECASE)
+    if quoted:
+        candidate = quoted.group("path")
+    else:
+        candidate = re.sub(r",\s*-?\d+\s*$", "", text).strip().strip('"')
+    if not candidate.casefold().endswith(".exe"):
+        return None
+    return candidate
+
+
+def discover_application_path_executables() -> list[dict[str, Any]]:
+    """Read exact executable-to-path associations from Windows App Paths.
+
+    Returned paths are used only in memory for relationship matching and are
+    never included in the user-facing inventory.
+    """
+    if not _is_windows():
+        return []
+    try:
+        import winreg
+    except ImportError:
+        return []
+
+    base = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+    views = (
+        winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0),
+        winreg.KEY_READ | getattr(winreg, "KEY_WOW64_32KEY", 0),
+    )
+    roots = (
+        (winreg.HKEY_LOCAL_MACHINE, "machine"),
+        (winreg.HKEY_CURRENT_USER, "current_user"),
+    )
+    found: dict[tuple[str, str], dict[str, Any]] = {}
+    for hive, scope in roots:
+        for access in views:
+            try:
+                with winreg.OpenKey(hive, base, 0, access) as parent:
+                    index = 0
+                    while True:
+                        try:
+                            entry = winreg.EnumKey(parent, index)
+                        except OSError:
+                            break
+                        index += 1
+                        if not str(entry).casefold().endswith(".exe"):
+                            continue
+                        try:
+                            with winreg.OpenKey(parent, entry, 0, access) as child:
+                                raw_path = winreg.QueryValueEx(child, None)[0]
+                        except OSError:
+                            continue
+                        executable_path = str(raw_path or "").strip().strip('"')
+                        executable_name = ntpath.basename(executable_path or entry)
+                        if not executable_name.casefold().endswith(".exe"):
+                            continue
+                        normalized_path = _normalize_executable_path(executable_path)
+                        path_exists = bool(
+                            executable_path and Path(executable_path).is_file()
+                        )
+                        if not path_exists:
+                            # Ignore stale App Paths keys; a registry name
+                            # without a current target is not executable evidence.
+                            continue
+                        item_key = (str(entry).casefold(), normalized_path)
+                        found.setdefault(
+                            item_key,
+                            {
+                                "name": _application_discovery.normalize_application_name(
+                                    Path(str(entry)).stem
+                                ),
+                                "executable_name": executable_name.casefold(),
+                                "executable_path": normalized_path if path_exists else None,
+                                "source": f"app_paths_registry_{scope}",
+                                "path_verified": path_exists,
+                            },
+                        )
+            except OSError:
+                continue
+    return list(found.values())
+
+
+def discover_installed_applications(
+    *,
+    max_items: int = 500,
+    include_relationship_metadata: bool = False,
+) -> list[dict[str, Any]]:
     """Discover applications and classify them by the strength of runtime evidence.
 
     Uninstall registry records are conventional installed applications.
@@ -215,6 +347,9 @@ def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, A
         publisher: str | None = None,
         version: str | None = None,
         is_installed: bool | None = None,
+        executable_names: Iterable[str] | None = None,
+        executable_paths: Iterable[str] | None = None,
+        install_locations: Iterable[str] | None = None,
     ) -> None:
         normalized = _application_discovery.normalize_application_name(str(name or ""))
         if not normalized:
@@ -232,9 +367,23 @@ def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, A
                 "publisher": None,
                 "version": None,
                 "is_installed": is_installed,
+                "_executable_names": set(),
+                "_executable_paths": set(),
+                "_install_locations": set(),
             },
         )
         record["sources"].add(source)
+        record["_executable_names"].update(
+            str(item).casefold() for item in (executable_names or []) if item
+        )
+        record["_executable_paths"].update(
+            normalized for item in (executable_paths or [])
+            if (normalized := _normalize_executable_path(item))
+        )
+        record["_install_locations"].update(
+            normalized for item in (install_locations or [])
+            if (normalized := _normalize_executable_path(item))
+        )
         if category_priority.get(category, 0) > category_priority.get(record["category"], 0):
             record["category"] = category
             if display_name:
@@ -255,19 +404,58 @@ def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, A
                 publisher=item.get("publisher"),
                 version=item.get("version"),
                 is_installed=True,
+                executable_names=item.get("_executable_names") or [],
+                executable_paths=item.get("_executable_paths") or [],
+                install_locations=item.get("_install_locations") or [],
             )
     except Exception:
         pass
 
     try:
-        for display_name, _shortcut_path in _application_discovery.discover_application_shortcuts():
-            add(display_name, "start_menu_shortcut", "shortcut_only")
+        shortcuts = _application_discovery.discover_application_shortcuts()
+        for display_name, shortcut_path in shortcuts[:500]:
+            target_path = (
+                _application_discovery.resolve_shortcut_target(shortcut_path)
+                if include_relationship_metadata
+                else None
+            )
+            target_name = ntpath.basename(str(target_path or "")).casefold()
+            if target_path and (
+                not target_name.endswith(".exe")
+                or target_name in {
+                    "explorer.exe",
+                    "applicationframehost.exe",
+                    "rundll32.exe",
+                    "shellhost.exe",
+                }
+                or not Path(target_path).is_file()
+            ):
+                target_path = None
+                target_name = ""
+            add(
+                display_name,
+                "start_menu_shortcut",
+                "shortcut_only",
+                executable_names=[target_name] if target_name.endswith(".exe") else [],
+                executable_paths=[target_path] if target_path and target_name.endswith(".exe") else [],
+            )
     except Exception:
         pass
 
     try:
-        for executable_name in _application_discovery.discover_application_registry_names():
-            add(executable_name, "app_paths_registry", "registered_executable")
+        path_entries = discover_application_path_executables()
+        if path_entries:
+            for entry in path_entries:
+                add(
+                    entry.get("name"),
+                    entry.get("source") or "app_paths_registry",
+                    "registered_executable",
+                    executable_names=[entry.get("executable_name")],
+                    executable_paths=[entry.get("executable_path")] if entry.get("executable_path") else [],
+                )
+        else:
+            for executable_name in _application_discovery.discover_application_registry_names():
+                add(executable_name, "app_paths_registry", "registered_executable")
     except Exception:
         pass
 
@@ -286,18 +474,39 @@ def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, A
     for _key, record in sorted(discovered.items()):
         results.append(
             {
-                **{key: value for key, value in record.items() if key != "sources"},
+                **{
+                    (
+                        "executable_names"
+                        if key == "_executable_names"
+                        else key
+                    ): (
+                        sorted(value)
+                        if isinstance(value, set)
+                        else value
+                    )
+                    for key, value in record.items()
+                    if key != "sources"
+                    and (
+                        include_relationship_metadata
+                        or not str(key).startswith("_")
+                    )
+                },
                 "sources": sorted(record["sources"]),
             }
         )
     return results[:limit]
 
 
-def discover_running_processes(*, max_items: int = 250) -> list[dict[str, Any]]:
-    """Return a bounded Windows process list using the fixed tasklist command.
+def discover_running_processes(
+    *,
+    max_items: int = 250,
+    include_image_paths: bool = False,
+) -> list[dict[str, Any]]:
+    """Return bounded process metadata; image paths are opt-in and internal.
 
-    No shell is involved and no process command line, user name, or full
-    executable path is collected.
+    No shell is involved and no process command line or owner name is collected.
+    Full paths are added only to an in-memory relationship snapshot and are
+    removed before the inventory is returned to the UI or conversation.
     """
     if not _is_windows():
         return []
@@ -320,7 +529,25 @@ def discover_running_processes(*, max_items: int = 250) -> list[dict[str, Any]]:
 
     if completed.returncode != 0:
         return []
-    return _parse_tasklist_csv(completed.stdout, max_items=limit)
+    processes = _parse_tasklist_csv(completed.stdout, max_items=limit)
+    if include_image_paths and processes:
+        try:
+            apis = _load_windows_apis()
+            if apis is not None:
+                _user32, kernel32, wintypes = apis
+                for process in processes:
+                    image_path = _process_image_path(
+                        kernel32,
+                        wintypes,
+                        process["pid"],
+                    )
+                    if image_path:
+                        process["_image_path"] = _normalize_executable_path(image_path)
+        except Exception:
+            # Inaccessible process paths reduce relationship confidence; they
+            # never trigger administrator elevation or fail the process list.
+            pass
+    return processes
 
 
 def _load_windows_apis():
@@ -371,7 +598,8 @@ def _handle_to_int(handle: Any) -> int:
         return 0
 
 
-def _process_image_name(kernel32, wintypes, process_id: int) -> str:
+def _process_image_path(kernel32, wintypes, process_id: int) -> str:
+    """Return a process image path using query-limited access only."""
     process_query_limited_information = 0x1000
     handle = kernel32.OpenProcess(
         process_query_limited_information,
@@ -389,10 +617,202 @@ def _process_image_name(kernel32, wintypes, process_id: int) -> str:
             buffer,
             ctypes.byref(size),
         ):
-            return Path(buffer.value).name
+            return buffer.value
         return ""
     finally:
         kernel32.CloseHandle(handle)
+
+
+def _process_image_name(kernel32, wintypes, process_id: int) -> str:
+    image_path = _process_image_path(kernel32, wintypes, process_id)
+    return ntpath.basename(image_path) if image_path else ""
+
+
+def build_application_process_relationships(
+    applications: list[dict[str, Any]],
+    processes: list[dict[str, Any]],
+    windows: list[dict[str, Any]],
+    *,
+    query: str | None = None,
+) -> dict[str, Any]:
+    """Join live processes to application evidence and windows by exact IDs.
+
+    Match order:
+      1. Exact normalized executable path from registry/shortcut evidence.
+      2. Process image inside a registered installation directory.
+      3. Unique executable basename with no competing application candidate.
+
+    Ambiguous and unavailable matches are represented explicitly; no title or
+    substring heuristics are used to invent an application relationship.
+    """
+    by_executable: dict[str, list[dict[str, Any]]] = {}
+    by_executable_path: dict[str, list[dict[str, Any]]] = {}
+    install_locations: list[tuple[str, str]] = []
+
+    for app in applications:
+        if not isinstance(app, dict):
+            continue
+        app_name = str(app.get("display_name") or app.get("name") or "").strip()
+        if not app_name:
+            continue
+        for executable_name in app.get("_executable_names", app.get("executable_names", [])):
+            key = ntpath.basename(str(executable_name or "")).casefold()
+            if key.endswith(".exe"):
+                by_executable.setdefault(key, []).append(app)
+        for executable_path in app.get("_executable_paths", []):
+            key = _normalize_executable_path(executable_path)
+            if key:
+                by_executable_path.setdefault(key, []).append(app)
+        for install_location in app.get("_install_locations", []):
+            key = _normalize_executable_path(install_location)
+            if key:
+                install_locations.append((key, app_name))
+
+    windows_by_pid: dict[int, list[dict[str, Any]]] = {}
+    for window in windows:
+        if not isinstance(window, dict):
+            continue
+        try:
+            pid = int(window.get("process_id", 0))
+        except (TypeError, ValueError):
+            continue
+        if pid > 0:
+            windows_by_pid.setdefault(pid, []).append(window)
+
+    rows: list[dict[str, Any]] = []
+    matched = 0
+    ambiguous = 0
+    unmapped = 0
+
+    for process in processes:
+        if not isinstance(process, dict):
+            continue
+        try:
+            pid = int(process.get("pid", 0))
+        except (TypeError, ValueError):
+            continue
+        if pid <= 0:
+            continue
+
+        process_name = str(
+            process.get("executable_name") or process.get("name") or ""
+        ).strip()
+        executable_name = ntpath.basename(process_name).casefold()
+        image_path = _normalize_executable_path(process.get("_image_path"))
+        candidates: list[dict[str, Any]] = []
+        match_basis = "unmatched"
+        match_status = "unmapped"
+
+        exact_path_matches = by_executable_path.get(image_path, []) if image_path else []
+        if len(exact_path_matches) == 1:
+            candidates = exact_path_matches
+            match_basis = "exact_executable_path"
+            match_status = "matched"
+        elif len(exact_path_matches) > 1:
+            candidates = exact_path_matches
+            match_basis = "duplicate_executable_path_evidence"
+            match_status = "ambiguous"
+
+        if match_status == "unmapped" and image_path:
+            location_matches = [
+                app_name
+                for location, app_name in install_locations
+                if image_path.startswith(location.rstrip("\\/") + "\\")
+            ]
+            unique_names = sorted(set(location_matches), key=str.casefold)
+            if len(unique_names) == 1:
+                candidates = [
+                    app for app in applications
+                    if str(app.get("display_name") or app.get("name") or "") == unique_names[0]
+                ]
+                match_basis = "inside_registered_install_location"
+                match_status = "matched"
+            elif len(unique_names) > 1:
+                match_basis = "overlapping_install_locations"
+                match_status = "ambiguous"
+
+        if match_status == "unmapped" and executable_name:
+            name_matches = by_executable.get(executable_name, [])
+            unique_apps = {
+                str(app.get("display_name") or app.get("name") or "").casefold(): app
+                for app in name_matches
+            }
+            if len(unique_apps) == 1:
+                candidates = list(unique_apps.values())
+                match_basis = "unique_executable_name"
+                match_status = "matched"
+            elif len(unique_apps) > 1:
+                candidates = list(unique_apps.values())
+                match_basis = "executable_name_claimed_by_multiple_apps"
+                match_status = "ambiguous"
+
+        app_names = sorted(
+            {
+                str(app.get("display_name") or app.get("name") or "")
+                for app in candidates
+            },
+            key=str.casefold,
+        )
+        if match_status == "matched" and app_names:
+            application_label = app_names[0]
+            matched += 1
+        elif match_status == "ambiguous":
+            application_label = "Ambiguous: " + ", ".join(app_names)
+            ambiguous += 1
+        else:
+            application_label = "Unmapped"
+            unmapped += 1
+
+        related_windows = windows_by_pid.get(pid, [])
+        window_titles = [
+            str(window.get("title") or "").strip()
+            for window in related_windows
+            if str(window.get("title") or "").strip()
+        ]
+        rows.append(
+            {
+                "application": application_label,
+                "process": ntpath.basename(process_name) or "unknown",
+                "pid": pid,
+                "match_status": match_status,
+                "match_basis": match_basis,
+                "window_count": len(related_windows),
+                "window_titles": window_titles[:10],
+                "has_foreground_window": any(
+                    bool(window.get("is_foreground"))
+                    for window in related_windows
+                ),
+                "memory_kb": process.get("memory_kb"),
+            }
+        )
+
+    if query and str(query).strip():
+        needle = _application_discovery.normalize_application_name(str(query))
+        rows = [
+            item for item in rows
+            if needle in _application_discovery.normalize_application_name(
+                item.get("application", "")
+            )
+            or needle in _application_discovery.normalize_application_name(
+                item.get("process", "")
+            )
+        ]
+
+    rows.sort(key=lambda item: (item["application"].casefold(), item["pid"]))
+    matched = sum(1 for item in rows if item["match_status"] == "matched")
+    ambiguous = sum(1 for item in rows if item["match_status"] == "ambiguous")
+    unmapped = sum(1 for item in rows if item["match_status"] == "unmapped")
+    return {
+        "items": rows,
+        "process_count": len(rows),
+        "matched_count": matched,
+        "ambiguous_count": ambiguous,
+        "unmapped_count": unmapped,
+        "query": str(query).strip() if query else None,
+        "visible_window_count": sum(
+            int(item["window_count"]) for item in rows
+        ),
+    }
 
 
 def discover_visible_windows(*, max_items: int = 200) -> list[dict[str, Any]]:
@@ -1075,6 +1495,15 @@ _RESOURCE_REQUESTS = (
         ),
     ),
     (
+        "relationships",
+        re.compile(
+            r"^(?:please )?(?:(?:show|display|get|give me|tell me|list)(?: me)? )?"
+            r"(?:the )?(?:application[ -]process relationships?|app[ -]process map|"
+            r"process[ -]to[ -]application map|which processes belong to (?P<query>.+))$",
+            re.IGNORECASE,
+        ),
+    ),
+    (
         "drives",
         re.compile(
             r"^(?:please )?(?:(?:show|list|display)(?: me)? "
@@ -1121,6 +1550,16 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
         if pattern.fullmatch(value):
             if scope == "all":
                 return {"scopes": sorted(_DEFAULT_SCOPES)}
+            if scope == "relationships":
+                query_match = re.search(
+                    r"which processes belong to (.+)$",
+                    value,
+                    re.IGNORECASE,
+                )
+                parsed = {"scopes": ["relationships"]}
+                if query_match:
+                    parsed["query"] = query_match.group(1).strip()
+                return parsed
             return {"scopes": [scope]}
 
     for pattern in _FILE_SEARCH_REQUESTS:
@@ -1150,8 +1589,16 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
     return None
 
 
-_VALID_SCOPES = {"system", "applications", "processes", "windows", "drives", "files"}
-_DEFAULT_SCOPES = _VALID_SCOPES - {"files"}
+_VALID_SCOPES = {
+    "system",
+    "applications",
+    "processes",
+    "windows",
+    "drives",
+    "relationships",
+    "files",
+}
+_DEFAULT_SCOPES = _VALID_SCOPES - {"files", "relationships"}
 
 
 def discover_system_resources(
@@ -1192,23 +1639,63 @@ def discover_system_resources(
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "scopes": sorted(selected),
     }
+    relationships_requested = "relationships" in selected
+    applications = None
+    processes = None
+    windows = None
+
     if "system" in selected:
         inventory["system"] = get_system_information()
     if "applications" in selected:
-        inventory["installed_applications"] = discover_installed_applications()
-    if "processes" in selected:
-        inventory["running_processes"] = discover_running_processes(
-            max_items=max_processes
+        if relationships_requested:
+            applications = discover_installed_applications(
+                include_relationship_metadata=True
+            )
+        else:
+            applications = discover_installed_applications()
+        inventory["installed_applications"] = applications
+    elif relationships_requested:
+        applications = discover_installed_applications(
+            include_relationship_metadata=True
         )
-    if "windows" in selected:
+    if "processes" in selected or relationships_requested:
+        if relationships_requested:
+            processes = discover_running_processes(
+                max_items=max_processes,
+                include_image_paths=True,
+            )
+        else:
+            processes = discover_running_processes(max_items=max_processes)
+        if "processes" in selected:
+            inventory["running_processes"] = processes
+    if "windows" in selected or relationships_requested:
         windows = discover_visible_windows(max_items=max_windows)
-        inventory["visible_windows"] = windows
-        inventory["foreground_window"] = next(
-            (window for window in windows if window.get("is_foreground")),
-            None,
-        )
+        if "windows" in selected:
+            inventory["visible_windows"] = windows
+            inventory["foreground_window"] = next(
+                (window for window in windows if window.get("is_foreground")),
+                None,
+            )
     if "drives" in selected:
         inventory["drives"] = discover_drives()
+    if relationships_requested:
+        inventory["application_process_relationships"] = (
+            build_application_process_relationships(
+                applications,
+                processes or [],
+                windows or [],
+                query=query,
+            )
+        )
+        # The report exposes process names/PIDs and relationships, never the
+        # private full image paths used for exact in-memory matching.
+        for process in inventory.get("running_processes", []):
+            process.pop("_image_path", None)
+        for app in inventory.get("installed_applications", []):
+            app.pop("_executable_paths", None)
+            app.pop("_install_locations", None)
+            app.pop("_executable_names", None)
+            app.pop("executable_names", None)
     if "files" in selected:
         inventory["files_and_folders"] = discover_files_and_folders(
             query,
