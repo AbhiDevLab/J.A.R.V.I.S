@@ -812,8 +812,8 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             if isinstance(item, dict)
         ]
         table_rows = [
-            "| Application | Process | PID | Match evidence | Windows |",
-            "|---|---|---:|---|---:|",
+            "| Application | Process | PID | Match evidence | Windows | Foreground |",
+            "|---|---|---:|---|---:|---|",
         ]
         for item in rows[:40]:
             basis_labels = {
@@ -834,7 +834,8 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
                 f"| {_resource_markdown_cell(item.get('process'))} "
                 f"| {item.get('pid', '—')} "
                 f"| {_resource_markdown_cell(basis)} "
-                f"| {item.get('window_count', 0)} |"
+                f"| {item.get('window_count', 0)} "
+                f"| {'Yes' if item.get('has_foreground_window') else 'No'} |"
             )
             titles = [
                 _resource_markdown_cell(title)
