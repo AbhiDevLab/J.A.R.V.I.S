@@ -117,6 +117,10 @@ def test_resource_discovery_executes_without_confirmation_and_records_audit(
     assert result["inventory"]["scopes"] == ["processes"]
 
     events = list_recent_audit_events()
-    assert len(events) == 1
-    assert events[0]["action_type"] == "discover_system_resources"
-    assert events[0]["permission_tier"] == "ordinary"
+    assert len(events) == 2
+    assert {event["action"] if "action" in event else event["event"] for event in events} == {
+        "requested",
+        "execution_succeeded",
+    }
+    assert all(event["action_type"] == "discover_system_resources" for event in events)
+    assert all(event["permission_tier"] == "ordinary" for event in events)
