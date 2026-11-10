@@ -894,6 +894,24 @@ $(document).ready(function () {
     indicator.hidden = !listening;
     indicator.classList.toggle("is-active", listening);
 
+    // Keep both ChatGPT-style voice-mode controls synchronized with the
+    // authenticated listener state reported by the Python backend.
+    document.querySelectorAll(
+      "#ContinuousListeningBtn, #ConversationContinuousListeningBtn"
+    ).forEach((button) => {
+      button.classList.toggle("is-active", listening);
+      button.setAttribute("aria-pressed", String(listening));
+      button.setAttribute(
+        "aria-label",
+        listening
+          ? "Pause continuous listening"
+          : "Enable continuous listening"
+      );
+      button.title = listening
+        ? "Continuous listening is on. Click to pause."
+        : "Enable continuous listening";
+    });
+
     document.querySelectorAll("#MicBtn, #ConversationMicBtn").forEach(
       (button) => {
         button.disabled = listening;
@@ -903,10 +921,6 @@ $(document).ready(function () {
       }
     );
 
-    if (!listening) {
-      $("#SettingsContinuousListening").prop("checked", false);
-    }
-
     if (text) {
       text.textContent = message || (
         listening ? "Listening continuously" : "Paused"
@@ -914,6 +928,7 @@ $(document).ready(function () {
     }
   }
 
+  window.setContinuousListeningStatus = setContinuousListeningStatus;
   eel.expose(setContinuousListeningStatus);
   // Define handlers first, then expose them to Python via eel.expose.
   // This ensures the visual hood updates (big-screen) as well as chat (offcanvas).

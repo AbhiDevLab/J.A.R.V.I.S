@@ -365,10 +365,15 @@ This is where the assistant becomes substantially more capable as a voice/vision
 - [x] Reuse the contextual voice command pipeline for each captured utterance
 - [x] Use bounded phrase capture and silence-based endpoint detection
 - [x] Keep the Porcupine process from competing for the microphone while continuous mode is active
-- [x] Add a visible listening indicator and a settings toggle
+- [x] Add a visible live listening-status indicator
+- [x] Add an accessible one-tap voice-mode waveform button beside the one-shot microphone in both composers
+- [x] Remove the separate continuous-listening settings checkbox; the voice-mode button controls the existing authenticated listener and persists the preference
+- [x] Keep the one-shot microphone separate and disabled while continuous mode owns the microphone
 - [x] Support the voice command "stop listening" and an immediate UI pause control
 - [x] Verify live Windows microphone ownership and repeated hands-free turns (owner-verified on Windows, 2026-11-07)
 - [x] Verify stop/restart behavior and the existing wake-word mode after continuous mode is disabled (owner-verified on Windows, 2026-11-07)
+
+**UI control refinement (2026-11-10):** Replaced the continuous-listening settings checkbox with an accessible ChatGPT-style waveform button in the main and conversation composers. Both controls invoke the existing authenticated single-worker listener; the Python listener remains authoritative for active-state updates. The one-shot microphone remains a separate control and is disabled while continuous listening owns the microphone. The live listening indicator and pause fallback remain available. Automated UI lifecycle coverage is added in `tests/test_continuous_listening_ui.py`; local Windows interaction validation is required before recording this UI refinement as owner-verified.
 
 **Scope note:** Phase 9.1 is a sequential, half-duplex listening loop. The microphone is not opened while JARVIS is processing or speaking, which prevents its own TTS output from being transcribed. Voice barge-in without a wake word, acoustic echo cancellation, and full-duplex capture remain Phase 9.2 work.
 
