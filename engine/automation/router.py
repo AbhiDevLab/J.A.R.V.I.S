@@ -17,6 +17,7 @@ from .applications import (
     parse_hindi_application_command,
 )
 from .filesystem import search_paths
+from engine.system_resources import parse_system_resource_request
 
 
 OPEN_PREFIXES = (
@@ -923,6 +924,17 @@ def _route_hindi_application_command(text: str) -> Optional[AutomationAction]:
     )
 
 
+def _route_system_resource_discovery(text: str) -> Optional[AutomationAction]:
+    request = parse_system_resource_request(text)
+    if request is None:
+        return None
+    return AutomationAction(
+        action_type="discover_system_resources",
+        parameters=request,
+        risk=RiskLevel.LOW,
+    )
+
+
 def route_command(
     query: str,
 ) -> Optional[AutomationAction]:
@@ -932,6 +944,12 @@ def route_command(
 
     if not text:
         return None
+
+    # Explicit inventory requests are read-only and are routed before generic
+    # file/application matching can reinterpret their targets.
+    action = _route_system_resource_discovery(text)
+    if action is not None:
+        return action
 
     # Text-entry commands take priority over the broader read-window matcher.
     # Compound commands are kept together so launch always precedes typing.

@@ -40,6 +40,7 @@ from .filesystem import (
 )
 from .security import request_authorization
 from engine.llm_client import ask_llm
+from engine.system_resources import discover_system_resources
 
 
 def _result(
@@ -537,6 +538,167 @@ def _execute_delete_all_matches(
         deleted_count=deleted,
     )
 
+def _format_resource_size(value: Any) -> str:
+    try:
+        amount = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return "unknown"
+    if amount < 0:
+        return "unknown"
+    units = ("B", "KB", "MB", "GB", "TB")
+    for unit in units:
+        if amount < 1024 or unit == units[-1]:
+            return f"{amount:.1f} {unit}" if unit != "B" else f"{int(amount)} B"
+        amount /= 1024
+    return "unknown"
+
+
+def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, Any]:
+    parameters = action.parameters or {}
+    scopes = parameters.get("scopes")
+    query = str(parameters.get("query") or "").strip() or None
+
+    if not isinstance(scopes, (list, tuple, set)) or not scopes:
+        return _result(False, "No system resource category was specified.")
+
+    try:
+        inventory = discover_system_resources(
+            scopes,
+            query=query,
+        )
+    except (TypeError, ValueError) as exc:
+        return _result(
+            False,
+            f"I could not perform that resource search ({type(exc).__name__}).",
+            error_code="invalid_resource_request",
+        )
+
+    sections: list[str] = []
+    spoken_parts: list[str] = []
+
+    system = inventory.get("system")
+    if isinstance(system, dict):
+        operating_system = " ".join(
+            value for value in (
+                str(system.get("operating_system") or "").strip(),
+                str(system.get("os_release") or "").strip(),
+            ) if value
+        ) or "Unknown operating system"
+        architecture = str(system.get("architecture") or "unknown")
+        cpu_count = system.get("logical_cpu_count")
+        total_memory = _format_resource_size(system.get("memory_total_bytes"))
+        sections.append(
+            "SYSTEM\n"
+            f"Operating system: {operating_system}\n"
+            f"Architecture: {architecture}\n"
+            f"Processor: {system.get('processor') or 'unknown'}\n"
+            f"Logical CPUs: {cpu_count if cpu_count is not None else 'unknown'}\n"
+            f"Installed memory: {total_memory}"
+        )
+        spoken_parts.append(
+            f"system information for {operating_system} with {architecture} architecture"
+        )
+
+    applications = inventory.get("installed_applications")
+    if isinstance(applications, list):
+        names = [str(item.get("name") or "") for item in applications if isinstance(item, dict)]
+        sections.append(
+            f"INSTALLED APPLICATIONS ({len(names)})\n"
+            + ("\n".join(f"- {name}" for name in names[:25]) or "No registered applications were found.")
+            + ("\n[Showing the first 25 entries.]" if len(names) > 25 else "")
+        )
+        spoken_parts.append(f"{len(names)} registered applications")
+
+    processes = inventory.get("running_processes")
+    if isinstance(processes, list):
+        lines = [
+            f"- {item.get('name')} (PID {item.get('pid')})"
+            for item in processes[:20]
+            if isinstance(item, dict)
+        ]
+        sections.append(
+            f"RUNNING PROCESSES ({len(processes)} returned)\n"
+            + ("\n".join(lines) or "No process data was available.")
+            + ("\n[Showing the first 20 entries.]" if len(processes) > 20 else "")
+        )
+        spoken_parts.append(f"{len(processes)} running processes returned")
+
+    windows = inventory.get("visible_windows")
+    if isinstance(windows, list):
+        lines = [
+            f"- {item.get('title') or '(untitled)'} — {item.get('process_name') or 'unknown process'}"
+            for item in windows[:20]
+            if isinstance(item, dict)
+        ]
+        foreground = inventory.get("foreground_window")
+        foreground_line = (
+            f"Foreground window: {foreground.get('title') or '(untitled)'}"
+            if isinstance(foreground, dict)
+            else "Foreground window: unavailable"
+        )
+        sections.append(
+            f"VISIBLE WINDOWS ({len(windows)} returned)\n"
+            + foreground_line
+            + ("\n" + "\n".join(lines) if lines else "\nNo visible titled windows were found.")
+            + ("\n[Showing the first 20 entries.]" if len(windows) > 20 else "")
+        )
+        spoken_parts.append(f"{len(windows)} visible windows")
+
+    drives = inventory.get("drives")
+    if isinstance(drives, list):
+        lines = []
+        for item in drives:
+            if not isinstance(item, dict):
+                continue
+            capacity = _format_resource_size(item.get("total_bytes"))
+            free = _format_resource_size(item.get("free_bytes"))
+            lines.append(
+                f"- {item.get('root')} ({item.get('type')}): {free} free of {capacity}"
+            )
+        sections.append(
+            f"LOGICAL DRIVES ({len(drives)})\n"
+            + ("\n".join(lines) or "No logical drives were found.")
+        )
+        spoken_parts.append(f"{len(drives)} logical drives")
+
+    file_search = inventory.get("files_and_folders")
+    if isinstance(file_search, dict):
+        results = file_search.get("results", [])
+        lines = [
+            f"- [{item.get('kind')}] {item.get('path')}"
+            for item in results[:25]
+            if isinstance(item, dict)
+        ]
+        status = (
+            f"Search stopped at its {file_search.get('stop_reason')} limit."
+            if file_search.get("truncated")
+            else "Search completed within its configured limits."
+        )
+        sections.append(
+            f"FILES AND FOLDERS MATCHING {file_search.get('query')!r} "
+            f"({file_search.get('result_count', len(results))} found)\n"
+            + ("\n".join(lines) or "No matching names were found.")
+            + f"\n{status}"
+        )
+        spoken_parts.append(
+            f"{file_search.get('result_count', len(results))} file or folder names matching {file_search.get('query')}"
+        )
+
+    message = "J.A.R.V.I.S SYSTEM RESOURCE DISCOVERY\n\n" + "\n\n".join(sections)
+    spoken_message = (
+        "Resource discovery completed. " + "; ".join(spoken_parts) + "."
+        if spoken_parts
+        else "Resource discovery completed."
+    )
+    return _result(
+        True,
+        message,
+        spoken_message=spoken_message,
+        summary=spoken_message,
+        inventory=inventory,
+    )
+
+
 def execute_action(
     action: AutomationAction,
 ) -> Dict[str, Any]:
@@ -553,6 +715,7 @@ def execute_action(
         "type_text": _execute_type_text,
         "close_application": _execute_close_application,
         "read_application": _execute_read_application,
+        "discover_system_resources": _execute_system_resource_discovery,
         "shell_command": _execute_shell_command,
         "open_file": _execute_filesystem_action,
         "open_folder": _execute_filesystem_action,

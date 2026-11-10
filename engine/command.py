@@ -1203,6 +1203,21 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                             display=False,
                             language=query_language or "en",
                         )
+                    elif automation_action.action_type == "discover_system_resources":
+                        # Resource details are displayed in the UI; speak only
+                        # a concise count summary to avoid reading inventories aloud.
+                        _safe_display(
+                            "receiverText",
+                            automation_result.get("message", ""),
+                        )
+                        speak(
+                            automation_result.get(
+                                "spoken_message",
+                                "System resource discovery completed.",
+                            ),
+                            display=False,
+                            language=query_language or "en",
+                        )
                     elif (
                         automation_action.action_type
                         == "find_file"
@@ -1234,9 +1249,13 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     )
 
                 if automation_result.get("success"):
+                    summary_only_actions = {
+                        "read_application",
+                        "discover_system_resources",
+                    }
                     action_message = str(
                         automation_result.get(
-                            "summary" if automation_action.action_type == "read_application" else "message",
+                            "summary" if automation_action.action_type in summary_only_actions else "message",
                             "Action completed successfully.",
                         )
                     )

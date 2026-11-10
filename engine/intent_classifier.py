@@ -17,6 +17,7 @@ from engine.automation.applications import (
     find_application_reference,
     parse_hindi_application_command,
 )
+from engine.system_resources import parse_system_resource_request
 
 
 class SemanticIntent(str, Enum):
@@ -192,6 +193,7 @@ def _explicit_automation(text: str) -> bool:
         or _YOUTUBE_COMMAND.match(value)
         or _SHELL_COMMAND.match(value)
         or _DIRECTORY_LIST_QUESTION.match(value)
+        or parse_system_resource_request(value) is not None
     )
 
 
@@ -278,6 +280,16 @@ def classify_intent(
         ):
             return _result(SemanticIntent.AUTOMATION, interpreted_query, confidence, "context_interpreter", "affirmative reply resolved to the pending concrete action")
         return _result(SemanticIntent.CONFIRMATION, raw, confidence, "pending_state", "approval target is unresolved", needs_clarification=True)
+
+    resource_request = parse_system_resource_request(raw)
+    if resource_request is not None:
+        return _result(
+            SemanticIntent.AUTOMATION,
+            raw,
+            0.99,
+            "system_resource_discovery",
+            "explicit request for read-only system resource inventory",
+        )
 
     # A complete command naming a known application remains executable even
     # when the contextual model is unavailable. If a model does propose a

@@ -114,6 +114,16 @@ def should_interpret_query(
     if state_context:
         return True
 
+    # Explicit inventory requests are deterministic read-only operations and
+    # do not need a contextual model call, even when the LLM is unavailable.
+    try:
+        from engine.system_resources import parse_system_resource_request
+
+        if parse_system_resource_request(raw):
+            return False
+    except Exception:
+        pass
+
     # An exact, known application command is already unambiguous. Do not make
     # ordinary desktop control depend on an external interpretation service.
     if _is_known_application_command(raw):
