@@ -258,3 +258,116 @@ def test_system_resource_inventory_defaults_to_all_documented_scopes(monkeypatch
 def test_system_resource_inventory_rejects_unknown_or_empty_scopes(scopes):
     with pytest.raises(ValueError):
         system_resources.discover_system_resources(scopes)
+
+
+def test_drive_name_search_finds_files_and_folders_without_opening_contents(monkeypatch, tmp_path):
+    project = tmp_path / "Project Reports"
+    project.mkdir()
+    (project / "final-report.pdf").write_text("private document body", encoding="utf-8")
+    hidden = tmp_path / ".private"
+    hidden.mkdir()
+    (hidden / "report-secret.txt").write_text("hidden", encoding="utf-8")
+    system = tmp_path / "Windows"
+    system.mkdir()
+    (system / "report-system.ini").write_text("system", encoding="utf-8")
+
+    monkeypatch.setattr(
+        system_resources,
+        "discover_drives",
+        lambda: [{"root": str(tmp_path), "accessible": True}],
+    )
+
+    result = system_resources.discover_files_and_folders(
+        "report",
+        max_results=20,
+        max_directories=100,
+        max_seconds=2,
+    )
+
+    matches = {(item["name"], item["kind"]) for item in result["results"]}
+    assert ("Project Reports", "folder") in matches
+    assert ("final-report.pdf", "file") in matches
+    assert all("private" not in item["path"].casefold() for item in result["results"])
+    assert all("windows" not in item["path"].casefold() for item in result["results"])
+    assert "private document body" not in repr(result)
+    assert result["drive_count"] == 1
+    assert result["visited_directories"] >= 2
+
+
+def test_drive_name_search_requires_a_specific_nontrivial_query():
+    with pytest.raises(ValueError):
+        system_resources.discover_files_and_folders("")
+    with pytest.raises(ValueError):
+        system_resources.discover_files_and_folders("x")
+
+
+def test_drive_name_search_respects_result_and_directory_limits(monkeypatch, tmp_path):
+    for index in range(5):
+        folder = tmp_path / f"Report Folder {index}"
+        folder.mkdir()
+        (folder / f"report-{index}.txt").write_text("data", encoding="utf-8")
+
+    monkeypatch.setattr(
+        system_resources,
+        "discover_drives",
+        lambda: [{"root": str(tmp_path), "accessible": True}],
+    )
+
+    result = system_resources.discover_files_and_folders(
+        "report",
+        max_results=1,
+        max_directories=100,
+        max_seconds=2,
+    )
+    assert result["result_count"] == 1
+    assert result["truncated"] is True
+    assert result["stop_reason"] == "result_limit"
+
+    limited = system_resources.discover_files_and_folders(
+        "report",
+        max_results=20,
+        max_directories=1,
+        max_seconds=2,
+    )
+    assert limited["visited_directories"] == 1
+    assert limited["truncated"] is True
+    assert limited["stop_reason"] == "directory_limit"
+
+
+def test_system_resource_files_scope_is_explicit_and_query_scoped(monkeypatch):
+    with pytest.raises(ValueError, match="requires a specific"):
+        system_resources.discover_system_resources(["files"])
+
+    monkeypatch.setattr(
+        system_resources,
+        "discover_files_and_folders",
+        lambda query, **kwargs: {"query": query, "results": []},
+    )
+    inventory = system_resources.discover_system_resources(
+        ["files"],
+        query="project report",
+    )
+    assert inventory["files_and_folders"] == {
+        "query": "project report",
+        "results": [],
+    }
+    assert inventory["scopes"] == ["files"]
+
+
+def test_default_resource_scopes_do_not_trigger_a_drive_wide_name_search(monkeypatch):
+    monkeypatch.setattr(system_resources, "get_system_information", lambda: {})
+    monkeypatch.setattr(system_resources, "discover_installed_applications", lambda: [])
+    monkeypatch.setattr(system_resources, "discover_running_processes", lambda **kwargs: [])
+    monkeypatch.setattr(system_resources, "discover_visible_windows", lambda **kwargs: [])
+    monkeypatch.setattr(system_resources, "discover_drives", lambda: [])
+    monkeypatch.setattr(
+        system_resources,
+        "discover_files_and_folders",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("drive name search must be explicitly requested")
+        ),
+    )
+
+    inventory = system_resources.discover_system_resources()
+    assert "files" not in inventory["scopes"]
+    assert "files_and_folders" not in inventory
