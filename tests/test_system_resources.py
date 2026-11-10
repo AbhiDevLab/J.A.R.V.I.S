@@ -741,8 +741,12 @@ def test_application_inventory_does_not_promote_shortcuts_to_installed_apps(monk
     rows = system_resources.discover_installed_applications()
     indexed = {item["name"]: item for item in rows}
 
-    assert indexed["portable tool"]["category"] == "registered_executable"
+    # A shortcut title and a registry executable token that differ in
+    # spelling are kept separate until a verified alias connects them.
+    assert indexed["portable tool"]["category"] == "shortcut_only"
     assert indexed["portable tool"]["is_installed"] is None
+    assert indexed["portabletool"]["category"] == "registered_executable"
+    assert indexed["portabletool"]["is_installed"] is None
     assert indexed["packaged app"]["category"] == "packaged_application"
     assert indexed["packaged app"]["is_installed"] is True
 
