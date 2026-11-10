@@ -161,12 +161,24 @@ def test_fresh_session_target_action_is_interpreted():
         assert should_interpret_query("open my resumy") is True
 
 
-def test_known_application_launch_uses_context_for_voice_but_fast_path_for_typed_text():
+def test_exact_known_application_commands_use_fast_path_for_voice_and_typed_text():
     with patch.dict("os.environ", {"JARVIS_INTERPRETATION_MODE": "auto"}):
-        assert should_interpret_query("open Chrome") is False
-        assert should_interpret_query("open Chrome", is_voice_input=True) is True
-        assert should_interpret_query("launch VS Code.") is False
-        assert should_interpret_query("launch VS Code.", is_voice_input=True) is True
+        for command in ("open Chrome", "launch VS Code.", "close Notepad", "quit Telegram"):
+            assert should_interpret_query(command) is False
+            assert should_interpret_query(command, is_voice_input=True) is False
+
+        # Conversation/profile context must not force an exact app command
+        # through an external model that is unnecessary for the operation.
+        assert should_interpret_query(
+            "open Notepad",
+            conversation_context="Previous conversation discussed Notepad.",
+            memory_context="User often uses Notepad.",
+            profile_context="Relevant user profile context.",
+            is_voice_input=True,
+        ) is False
+
+        # A phonetic or unknown target still receives contextual recovery.
+        assert should_interpret_query("open load pad", is_voice_input=True) is True
 
 
 def test_fresh_voice_conversation_is_interpreted_but_typed_text_is_fast_path():
