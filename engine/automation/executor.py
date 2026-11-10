@@ -694,6 +694,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
         True,
         message,
         spoken_message=spoken_message,
+        summary=spoken_message,
         inventory=inventory,
     )
 
