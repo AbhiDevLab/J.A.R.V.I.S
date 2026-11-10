@@ -35,6 +35,11 @@ def test_tasklist_parser_handles_empty_malformed_and_unavailable_memory():
 
 def test_installed_app_discovery_deduplicates_names_and_keeps_sources(monkeypatch):
     monkeypatch.setattr(
+        system_resources,
+        "discover_uninstall_registry_applications",
+        lambda: [],
+    )
+    monkeypatch.setattr(
         system_resources._application_discovery,
         "discover_application_shortcuts",
         lambda: [("Google Chrome", r"C:\\Start Menu\\Chrome.lnk"), ("Telegram", "ignored")],
@@ -64,6 +69,11 @@ def test_installed_app_discovery_deduplicates_names_and_keeps_sources(monkeypatc
 
 
 def test_installed_app_discovery_is_resilient_when_windows_sources_fail(monkeypatch):
+    monkeypatch.setattr(
+        system_resources,
+        "discover_uninstall_registry_applications",
+        lambda: [],
+    )
     def fail():
         raise OSError("registry unavailable")
 
@@ -86,6 +96,11 @@ def test_installed_app_discovery_is_resilient_when_windows_sources_fail(monkeypa
 
 
 def test_installed_app_discovery_respects_result_limit(monkeypatch):
+    monkeypatch.setattr(
+        system_resources,
+        "discover_uninstall_registry_applications",
+        lambda: [],
+    )
     monkeypatch.setattr(
         system_resources._application_discovery,
         "discover_application_shortcuts",
