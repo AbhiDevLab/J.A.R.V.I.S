@@ -902,6 +902,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             "running_background": "Running in background",
             "not_running": "Not running",
             "not_verified_process_sample_limit": "Not verified (process sample limit)",
+            "not_verified_process_inventory_unavailable": "Not verified (process inventory unavailable)",
             "ambiguous": "Ambiguous application match",
         }
         for item in rows[:40]:
@@ -944,7 +945,12 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             )
 
         sample_note = ""
-        if application_states.get("process_sample_truncated"):
+        if not application_states.get("process_inventory_available", True):
+            sample_note = (
+                "\n\nA reliable process inventory was unavailable. "
+                "Applications without process evidence are marked unverified, not closed."
+            )
+        elif application_states.get("process_sample_truncated"):
             sample_note = (
                 "\n\nThe process sample reached its configured limit "
                 f"({application_states.get('process_sample_limit')}). "
