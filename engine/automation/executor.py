@@ -558,8 +558,8 @@ def _resource_markdown_cell(value: Any, fallback: str = "—") -> str:
     text = str(value if value not in (None, "") else fallback)
     return (
         text.replace("|", "¦")
-        .replace("\\r", " ")
-        .replace("\\n", " ")
+        .replace(chr(13), " ")
+        .replace(chr(10), " ")
         .replace("`", "'")
     )
 
