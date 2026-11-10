@@ -76,44 +76,215 @@ def _parse_tasklist_csv(output: str, *, max_items: int = 250) -> list[dict[str, 
     return processes
 
 
-def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, Any]]:
-    """Discover registered Start Menu/App Paths applications.
+def discover_uninstall_registry_applications() -> list[dict[str, Any]]:
+    """Read installed-program records from the Windows uninstall registry.
 
-    Names are deduplicated and source labels are retained. Shortcut paths and
-    packaged-app IDs are deliberately omitted from the returned inventory.
+    This is the primary evidence for conventional installed desktop software.
+    It is read-only and returns names, publisher, version and classification;
+    uninstall commands and arbitrary registry data are never exposed.
+    """
+    if not _is_windows():
+        return []
+
+    try:
+        import winreg
+    except ImportError:
+        return []
+
+    uninstall_key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    access_views = [
+        winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0),
+        winreg.KEY_READ | getattr(winreg, "KEY_WOW64_32KEY", 0),
+    ]
+    roots = [
+        (winreg.HKEY_LOCAL_MACHINE, "machine"),
+        (winreg.HKEY_CURRENT_USER, "current_user"),
+    ]
+
+    records: dict[str, dict[str, Any]] = {}
+    for hive, scope in roots:
+        for access in access_views:
+            try:
+                with winreg.OpenKey(hive, uninstall_key, 0, access) as parent:
+                    index = 0
+                    while True:
+                        try:
+                            child_name = winreg.EnumKey(parent, index)
+                        except OSError:
+                            break
+                        index += 1
+                        try:
+                            with winreg.OpenKey(parent, child_name, 0, access) as child:
+                                values: dict[str, Any] = {}
+                                for value_name in (
+                                    "DisplayName",
+                                    "DisplayVersion",
+                                    "Publisher",
+                                    "SystemComponent",
+                                    "ReleaseType",
+                                    "ParentKeyName",
+                                ):
+                                    try:
+                                        values[value_name] = winreg.QueryValueEx(
+                                            child, value_name
+                                        )[0]
+                                    except OSError:
+                                        continue
+                        except OSError:
+                            continue
+
+                        display_name = str(values.get("DisplayName") or "").strip()
+                        if not display_name:
+                            continue
+
+                        normalized = _application_discovery.normalize_application_name(
+                            display_name
+                        )
+                        if not normalized:
+                            continue
+                        canonical = _application_discovery.ALIASES.get(
+                            normalized, normalized
+                        )
+                        release_type = str(values.get("ReleaseType") or "").strip()
+                        try:
+                            system_component = int(values.get("SystemComponent", 0)) == 1
+                        except (TypeError, ValueError):
+                            system_component = False
+                        category = (
+                            "windows_component"
+                            if system_component or release_type or values.get("ParentKeyName")
+                            else "installed_application"
+                        )
+                        key = canonical.casefold()
+                        current = records.get(key)
+                        candidate = {
+                            "name": canonical,
+                            "publisher": str(values.get("Publisher") or "").strip() or None,
+                            "version": str(values.get("DisplayVersion") or "").strip() or None,
+                            "category": category,
+                            "sources": {f"uninstall_registry_{scope}"},
+                            "is_installed": True,
+                        }
+                        if current is None:
+                            records[key] = candidate
+                        else:
+                            current["sources"].add(f"uninstall_registry_{scope}")
+                            # Preserve the strongest classification and first
+                            # non-empty publisher/version evidence.
+                            if category == "installed_application":
+                                current["category"] = category
+                            current["publisher"] = current.get("publisher") or candidate["publisher"]
+                            current["version"] = current.get("version") or candidate["version"]
+            except OSError:
+                continue
+
+    return [
+        {
+            **{key: value for key, value in record.items() if key != "sources"},
+            "sources": sorted(record["sources"]),
+        }
+        for _key, record in sorted(records.items())
+    ]
+
+
+def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, Any]]:
+    """Discover applications and classify them by the strength of runtime evidence.
+
+    Uninstall registry records are conventional installed applications.
+    Start Menu package entries are packaged applications. App Paths entries
+    are registered executables (not proof of a conventional installation).
+    Shortcut-only entries are explicitly marked unverified.
     """
     limit = _bounded_limit(max_items, 500, 2000)
-    discovered: dict[str, set[str]] = {}
+    discovered: dict[str, dict[str, Any]] = {}
 
-    def add(name: Any, source: str) -> None:
+    category_priority = {
+        "shortcut_only": 1,
+        "registered_executable": 2,
+        "packaged_application": 3,
+        "installed_application": 4,
+        "windows_component": 5,
+    }
+
+    def add(
+        name: Any,
+        source: str,
+        category: str,
+        *,
+        publisher: str | None = None,
+        version: str | None = None,
+        is_installed: bool | None = None,
+    ) -> None:
         normalized = _application_discovery.normalize_application_name(str(name or ""))
         if not normalized:
             return
         canonical = _application_discovery.ALIASES.get(normalized, normalized)
-        discovered.setdefault(canonical, set()).add(source)
+        key = canonical.casefold()
+        record = discovered.setdefault(
+            key,
+            {
+                "name": canonical,
+                "sources": set(),
+                "category": category,
+                "publisher": None,
+                "version": None,
+                "is_installed": is_installed,
+            },
+        )
+        record["sources"].add(source)
+        if category_priority.get(category, 0) > category_priority.get(record["category"], 0):
+            record["category"] = category
+        if publisher and not record["publisher"]:
+            record["publisher"] = publisher
+        if version and not record["version"]:
+            record["version"] = version
+        if is_installed is True:
+            record["is_installed"] = True
+
+    try:
+        for item in discover_uninstall_registry_applications():
+            add(
+                item.get("name"),
+                "uninstall_registry",
+                str(item.get("category") or "installed_application"),
+                publisher=item.get("publisher"),
+                version=item.get("version"),
+                is_installed=True,
+            )
+    except Exception:
+        pass
 
     try:
         for display_name, _shortcut_path in _application_discovery.discover_application_shortcuts():
-            add(display_name, "start_menu_shortcut")
+            add(display_name, "start_menu_shortcut", "shortcut_only")
     except Exception:
         pass
 
     try:
         for executable_name in _application_discovery.discover_application_registry_names():
-            add(executable_name, "app_paths_registry")
+            add(executable_name, "app_paths_registry", "registered_executable")
     except Exception:
         pass
 
     try:
         for display_name, _application_id in _application_discovery.discover_start_menu_app_ids():
-            add(display_name, "start_menu_app_id")
+            add(
+                display_name,
+                "start_menu_app_id",
+                "packaged_application",
+                is_installed=True,
+            )
     except Exception:
         pass
 
-    results = [
-        {"name": name, "sources": sorted(sources)}
-        for name, sources in sorted(discovered.items())
-    ]
+    results = []
+    for _key, record in sorted(discovered.items()):
+        results.append(
+            {
+                **{key: value for key, value in record.items() if key != "sources"},
+                "sources": sorted(record["sources"]),
+            }
+        )
     return results[:limit]
 
 
@@ -318,6 +489,85 @@ def _memory_bytes() -> tuple[int | None, int | None]:
         return None, None
 
 
+def _read_cpu_registry_details() -> dict[str, Any]:
+    """Read the processor's reported model string and current registry clock."""
+    if not _is_windows():
+        return {}
+    try:
+        import winreg
+
+        path = r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            path,
+            0,
+            winreg.KEY_READ,
+        ) as key:
+            values: dict[str, Any] = {}
+            for name in ("ProcessorNameString", "Identifier", "~MHz", "VendorIdentifier"):
+                try:
+                    values[name] = winreg.QueryValueEx(key, name)[0]
+                except OSError:
+                    continue
+            return values
+    except (ImportError, OSError, AttributeError):
+        return {}
+
+
+def _physical_core_count() -> int | None:
+    """Count Windows processor-core relationship records using a Win32 API."""
+    if not _is_windows():
+        return None
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        get_info = kernel32.GetLogicalProcessorInformationEx
+        get_info.argtypes = [
+            ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_ulong),
+        ]
+        get_info.restype = ctypes.c_int
+        required = ctypes.c_ulong(0)
+        get_info(0, None, ctypes.byref(required))  # RelationProcessorCore = 0
+        if not required.value:
+            return None
+        buffer = ctypes.create_string_buffer(required.value)
+        if not get_info(0, buffer, ctypes.byref(required)):
+            return None
+
+        offset = 0
+        total = int(required.value)
+        cores = 0
+        while offset + 8 <= total:
+            relationship = int.from_bytes(buffer.raw[offset:offset + 4], "little")
+            record_size = int.from_bytes(buffer.raw[offset + 4:offset + 8], "little")
+            if record_size < 8 or offset + record_size > total:
+                return None
+            if relationship == 0:
+                cores += 1
+            offset += record_size
+        return cores or None
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+
+
+def _installed_memory_bytes() -> int | None:
+    """Read physically installed RAM using GetPhysicallyInstalledSystemMemory."""
+    if not _is_windows():
+        return None
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        function = kernel32.GetPhysicallyInstalledSystemMemory
+        function.argtypes = [ctypes.POINTER(ctypes.c_ulonglong)]
+        function.restype = ctypes.c_int
+        kilobytes = ctypes.c_ulonglong(0)
+        if not function(ctypes.byref(kilobytes)) or not kilobytes.value:
+            return None
+        return int(kilobytes.value) * 1024
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+
+
 def _read_windows_version_registry() -> dict[str, Any]:
     """Read Windows product/build metadata without relying on compatibility APIs."""
     if not _is_windows():
@@ -336,6 +586,8 @@ def _read_windows_version_registry() -> dict[str, Any]:
             values: dict[str, Any] = {}
             for name in (
                 "ProductName",
+                "EditionID",
+                "InstallationType",
                 "DisplayVersion",
                 "ReleaseId",
                 "CurrentBuildNumber",
@@ -422,34 +674,86 @@ def _windows_version_fields() -> dict[str, str]:
     if update_build:
         version += f".{update_build}"
 
+    edition_id = str(metadata.get("EditionID") or "").strip()
+    edition_labels = {
+        "Core": "Home",
+        "CoreN": "Home N",
+        "CoreSingleLanguage": "Home Single Language",
+        "CoreCountrySpecific": "Home China",
+        "Professional": "Pro",
+        "ProfessionalN": "Pro N",
+        "Enterprise": "Enterprise",
+        "EnterpriseN": "Enterprise N",
+        "Education": "Education",
+        "EducationN": "Education N",
+        "ProfessionalEducation": "Pro Education",
+        "ProfessionalWorkstation": "Pro for Workstations",
+    }
+    edition = edition_labels.get(edition_id, edition_id or "Unknown edition")
+    installation_type = str(metadata.get("InstallationType") or "").strip()
     return {
         "operating_system": label,
+        "os_edition": edition,
+        "os_installation_type": installation_type or "unknown",
         "os_release": display_version or f"Build {build}",
         "os_version": version,
         "os_build": str(build) if build else "unknown",
+        "os_update_revision": str(update_build) if update_build else "0",
     }
 
 
 def get_system_information() -> dict[str, Any]:
-    """Return non-identifying OS, CPU, Python, and memory details."""
+    """Return current OS, processor, installed/usable RAM and Python details."""
     memory_total, memory_available = _memory_bytes()
+    cpu_data = _read_cpu_registry_details() if _is_windows() else {}
+    installed_memory = _installed_memory_bytes() if _is_windows() else None
+    if not installed_memory:
+        installed_memory = None
+
+    try:
+        cpu_clock_mhz = int(cpu_data.get("~MHz")) if cpu_data.get("~MHz") else None
+    except (TypeError, ValueError, OverflowError):
+        cpu_clock_mhz = None
+
+    logical_cpus = os.cpu_count()
+    physical_cores = _physical_core_count() if _is_windows() else None
+    memory_used = (
+        max(0, memory_total - memory_available)
+        if memory_total is not None and memory_available is not None
+        else None
+    )
+    memory_load_percent = (
+        round((memory_used / memory_total) * 100, 1)
+        if memory_used is not None and memory_total
+        else None
+    )
     os_fields = (
         _windows_version_fields()
         if _is_windows()
         else {
             "operating_system": platform.system(),
+            "os_edition": "unknown",
+            "os_installation_type": "unknown",
             "os_release": platform.release(),
             "os_version": platform.version(),
             "os_build": "unknown",
+            "os_update_revision": "unknown",
         }
     )
     return {
         **os_fields,
-        "architecture": platform.machine(),
-        "processor": platform.processor() or "unknown",
-        "logical_cpu_count": os.cpu_count(),
+        "architecture": platform.machine() or "unknown",
+        "processor": str(cpu_data.get("ProcessorNameString") or platform.processor() or "unknown").strip(),
+        "processor_identifier": str(cpu_data.get("Identifier") or "").strip() or None,
+        "processor_vendor": str(cpu_data.get("VendorIdentifier") or "").strip() or None,
+        "processor_clock_mhz": cpu_clock_mhz,
+        "physical_core_count": physical_cores,
+        "logical_cpu_count": logical_cpus,
+        "memory_installed_bytes": installed_memory,
         "memory_total_bytes": memory_total,
+        "memory_used_bytes": memory_used,
         "memory_available_bytes": memory_available,
+        "memory_load_percent": memory_load_percent,
         "python_version": platform.python_version(),
     }
 
@@ -486,6 +790,8 @@ def discover_drives() -> list[dict[str, Any]]:
                 "root": root,
                 "type": drive_type_labels.get(drive_type, "unknown"),
                 "accessible": False,
+                "volume_label": None,
+                "filesystem": None,
                 "total_bytes": None,
                 "used_bytes": None,
                 "free_bytes": None,
@@ -502,6 +808,36 @@ def discover_drives() -> list[dict[str, Any]]:
                 )
             except OSError:
                 pass
+
+            try:
+                volume_label = ctypes.create_unicode_buffer(261)
+                filesystem_name = ctypes.create_unicode_buffer(261)
+                kernel32.GetVolumeInformationW.argtypes = [
+                    wintypes.LPCWSTR,
+                    wintypes.LPWSTR,
+                    wintypes.DWORD,
+                    ctypes.POINTER(wintypes.DWORD),
+                    ctypes.POINTER(wintypes.DWORD),
+                    ctypes.POINTER(wintypes.DWORD),
+                    wintypes.LPWSTR,
+                    wintypes.DWORD,
+                ]
+                kernel32.GetVolumeInformationW.restype = wintypes.BOOL
+                if kernel32.GetVolumeInformationW(
+                    root,
+                    volume_label,
+                    len(volume_label),
+                    None,
+                    None,
+                    None,
+                    filesystem_name,
+                    len(filesystem_name),
+                ):
+                    record["volume_label"] = volume_label.value or None
+                    record["filesystem"] = filesystem_name.value or None
+            except (AttributeError, OSError, TypeError):
+                pass
+
             drives.append(record)
         return drives
     except Exception:
