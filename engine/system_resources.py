@@ -607,7 +607,7 @@ _FILE_SEARCH_REQUESTS = (
         re.IGNORECASE,
     ),
     re.compile(
-        r"^(?:please )?(?:search|scan) (?:all|every|accessible) drives "
+        r"^(?:please )?(?:search|scan) (?:all|every|accessible) drives? "
         r"for (?P<query>.+)$",
         re.IGNORECASE,
     ),
