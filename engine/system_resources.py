@@ -373,7 +373,11 @@ def _extract_registered_executable_path(value: Any) -> str | None:
         results.append(
             {
                 **{
-                    key: (
+                    (
+                        "executable_names"
+                        if key == "_executable_names"
+                        else key
+                    ): (
                         sorted(value)
                         if isinstance(value, set)
                         else value
@@ -387,11 +391,16 @@ def _extract_registered_executable_path(value: Any) -> str | None:
     return results[:limit]
 
 
-def discover_running_processes(*, max_items: int = 250) -> list[dict[str, Any]]:
-    """Return a bounded Windows process list using the fixed tasklist command.
+def discover_running_processes(
+    *,
+    max_items: int = 250,
+    include_image_paths: bool = False,
+) -> list[dict[str, Any]]:
+    """Return bounded process metadata; image paths are opt-in and internal.
 
-    No shell is involved and no process command line, user name, or full
-    executable path is collected.
+    No shell is involved and no process command line or owner name is collected.
+    Full paths are added only to an in-memory relationship snapshot and are
+    removed before the inventory is returned to the UI or conversation.
     """
     if not _is_windows():
         return []
@@ -414,7 +423,25 @@ def discover_running_processes(*, max_items: int = 250) -> list[dict[str, Any]]:
 
     if completed.returncode != 0:
         return []
-    return _parse_tasklist_csv(completed.stdout, max_items=limit)
+    processes = _parse_tasklist_csv(completed.stdout, max_items=limit)
+    if include_image_paths and processes:
+        try:
+            apis = _load_windows_apis()
+            if apis is not None:
+                _user32, kernel32, wintypes = apis
+                for process in processes:
+                    image_path = _process_image_path(
+                        kernel32,
+                        wintypes,
+                        process["pid"],
+                    )
+                    if image_path:
+                        process["_image_path"] = _normalize_executable_path(image_path)
+        except Exception:
+            # Inaccessible process paths reduce relationship confidence; they
+            # never trigger administrator elevation or fail the process list.
+            pass
+    return processes
 
 
 def _load_windows_apis():
@@ -465,7 +492,8 @@ def _handle_to_int(handle: Any) -> int:
         return 0
 
 
-def _process_image_name(kernel32, wintypes, process_id: int) -> str:
+def _process_image_path(kernel32, wintypes, process_id: int) -> str:
+    """Return a process image path using query-limited access only."""
     process_query_limited_information = 0x1000
     handle = kernel32.OpenProcess(
         process_query_limited_information,
@@ -483,10 +511,184 @@ def _process_image_name(kernel32, wintypes, process_id: int) -> str:
             buffer,
             ctypes.byref(size),
         ):
-            return Path(buffer.value).name
+            return buffer.value
         return ""
     finally:
         kernel32.CloseHandle(handle)
+
+
+def _process_image_name(kernel32, wintypes, process_id: int) -> str:
+    image_path = _process_image_path(kernel32, wintypes, process_id)
+    return ntpath.basename(image_path) if image_path else ""
+
+
+def build_application_process_relationships(
+    applications: list[dict[str, Any]],
+    processes: list[dict[str, Any]],
+    windows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Join live processes to application evidence and windows by exact IDs.
+
+    Match order:
+      1. Exact normalized executable path from registry/shortcut evidence.
+      2. Process image inside a registered installation directory.
+      3. Unique executable basename with no competing application candidate.
+
+    Ambiguous and unavailable matches are represented explicitly; no title or
+    substring heuristics are used to invent an application relationship.
+    """
+    by_executable: dict[str, list[dict[str, Any]]] = {}
+    by_executable_path: dict[str, list[dict[str, Any]]] = {}
+    install_locations: list[tuple[str, str]] = []
+
+    for app in applications:
+        if not isinstance(app, dict):
+            continue
+        app_name = str(app.get("display_name") or app.get("name") or "").strip()
+        if not app_name:
+            continue
+        for executable_name in app.get("_executable_names", app.get("executable_names", [])):
+            key = ntpath.basename(str(executable_name or "")).casefold()
+            if key.endswith(".exe"):
+                by_executable.setdefault(key, []).append(app)
+        for executable_path in app.get("_executable_paths", []):
+            key = _normalize_executable_path(executable_path)
+            if key:
+                by_executable_path.setdefault(key, []).append(app)
+        for install_location in app.get("_install_locations", []):
+            key = _normalize_executable_path(install_location)
+            if key:
+                install_locations.append((key, app_name))
+
+    windows_by_pid: dict[int, list[dict[str, Any]]] = {}
+    for window in windows:
+        if not isinstance(window, dict):
+            continue
+        try:
+            pid = int(window.get("process_id", 0))
+        except (TypeError, ValueError):
+            continue
+        if pid > 0:
+            windows_by_pid.setdefault(pid, []).append(window)
+
+    rows: list[dict[str, Any]] = []
+    matched = 0
+    ambiguous = 0
+    unmapped = 0
+
+    for process in processes:
+        if not isinstance(process, dict):
+            continue
+        try:
+            pid = int(process.get("pid", 0))
+        except (TypeError, ValueError):
+            continue
+        if pid <= 0:
+            continue
+
+        process_name = str(
+            process.get("executable_name") or process.get("name") or ""
+        ).strip()
+        executable_name = ntpath.basename(process_name).casefold()
+        image_path = _normalize_executable_path(process.get("_image_path"))
+        candidates: list[dict[str, Any]] = []
+        match_basis = "unmatched"
+        match_status = "unmapped"
+
+        exact_path_matches = by_executable_path.get(image_path, []) if image_path else []
+        if len(exact_path_matches) == 1:
+            candidates = exact_path_matches
+            match_basis = "exact_executable_path"
+            match_status = "matched"
+        elif len(exact_path_matches) > 1:
+            candidates = exact_path_matches
+            match_basis = "duplicate_executable_path_evidence"
+            match_status = "ambiguous"
+
+        if match_status == "unmapped" and image_path:
+            location_matches = [
+                app_name
+                for location, app_name in install_locations
+                if image_path.startswith(location.rstrip("\\/") + "\\")
+            ]
+            unique_names = sorted(set(location_matches), key=str.casefold)
+            if len(unique_names) == 1:
+                candidates = [
+                    app for app in applications
+                    if str(app.get("display_name") or app.get("name") or "") == unique_names[0]
+                ]
+                match_basis = "inside_registered_install_location"
+                match_status = "matched"
+            elif len(unique_names) > 1:
+                match_basis = "overlapping_install_locations"
+                match_status = "ambiguous"
+
+        if match_status == "unmapped" and executable_name:
+            name_matches = by_executable.get(executable_name, [])
+            unique_apps = {
+                str(app.get("display_name") or app.get("name") or "").casefold(): app
+                for app in name_matches
+            }
+            if len(unique_apps) == 1:
+                candidates = list(unique_apps.values())
+                match_basis = "unique_executable_name"
+                match_status = "matched"
+            elif len(unique_apps) > 1:
+                candidates = list(unique_apps.values())
+                match_basis = "executable_name_claimed_by_multiple_apps"
+                match_status = "ambiguous"
+
+        app_names = sorted(
+            {
+                str(app.get("display_name") or app.get("name") or "")
+                for app in candidates
+            },
+            key=str.casefold,
+        )
+        if match_status == "matched" and app_names:
+            application_label = app_names[0]
+            matched += 1
+        elif match_status == "ambiguous":
+            application_label = "Ambiguous: " + ", ".join(app_names)
+            ambiguous += 1
+        else:
+            application_label = "Unmapped"
+            unmapped += 1
+
+        related_windows = windows_by_pid.get(pid, [])
+        window_titles = [
+            str(window.get("title") or "").strip()
+            for window in related_windows
+            if str(window.get("title") or "").strip()
+        ]
+        rows.append(
+            {
+                "application": application_label,
+                "process": ntpath.basename(process_name) or "unknown",
+                "pid": pid,
+                "match_status": match_status,
+                "match_basis": match_basis,
+                "window_count": len(related_windows),
+                "window_titles": window_titles[:10],
+                "has_foreground_window": any(
+                    bool(window.get("is_foreground"))
+                    for window in related_windows
+                ),
+                "memory_kb": process.get("memory_kb"),
+            }
+        )
+
+    rows.sort(key=lambda item: (item["application"].casefold(), item["pid"]))
+    return {
+        "items": rows,
+        "process_count": len(rows),
+        "matched_count": matched,
+        "ambiguous_count": ambiguous,
+        "unmapped_count": unmapped,
+        "visible_window_count": sum(
+            int(item["window_count"]) for item in rows
+        ),
+    }
 
 
 def discover_visible_windows(*, max_items: int = 200) -> list[dict[str, Any]]:
@@ -1169,6 +1371,15 @@ _RESOURCE_REQUESTS = (
         ),
     ),
     (
+        "relationships",
+        re.compile(
+            r"^(?:please )?(?:(?:show|display|get|give me|tell me|list)(?: me)? )?"
+            r"(?:the )?(?:application[ -]process relationships?|app[ -]process map|"
+            r"process[ -]to[ -]application map|which processes belong to (?P<query>.+))$",
+            re.IGNORECASE,
+        ),
+    ),
+    (
         "drives",
         re.compile(
             r"^(?:please )?(?:(?:show|list|display)(?: me)? "
@@ -1215,6 +1426,16 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
         if pattern.fullmatch(value):
             if scope == "all":
                 return {"scopes": sorted(_DEFAULT_SCOPES)}
+            if scope == "relationships":
+                query_match = re.search(
+                    r"which processes belong to (.+)$",
+                    value,
+                    re.IGNORECASE,
+                )
+                parsed = {"scopes": ["relationships"]}
+                if query_match:
+                    parsed["query"] = query_match.group(1).strip()
+                return parsed
             return {"scopes": [scope]}
 
     for pattern in _FILE_SEARCH_REQUESTS:
@@ -1244,7 +1465,15 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
     return None
 
 
-_VALID_SCOPES = {"system", "applications", "processes", "windows", "drives", "files"}
+_VALID_SCOPES = {
+    "system",
+    "applications",
+    "processes",
+    "windows",
+    "drives",
+    "relationships",
+    "files",
+}
 _DEFAULT_SCOPES = _VALID_SCOPES - {"files"}
 
 
@@ -1290,11 +1519,13 @@ def discover_system_resources(
         inventory["system"] = get_system_information()
     if "applications" in selected:
         inventory["installed_applications"] = discover_installed_applications()
-    if "processes" in selected:
+    relationships_requested = "relationships" in selected
+    if "processes" in selected or relationships_requested:
         inventory["running_processes"] = discover_running_processes(
-            max_items=max_processes
+            max_items=max_processes,
+            include_image_paths=relationships_requested,
         )
-    if "windows" in selected:
+    if "windows" in selected or relationships_requested:
         windows = discover_visible_windows(max_items=max_windows)
         inventory["visible_windows"] = windows
         inventory["foreground_window"] = next(
@@ -1303,6 +1534,21 @@ def discover_system_resources(
         )
     if "drives" in selected:
         inventory["drives"] = discover_drives()
+    if relationships_requested:
+        applications = inventory.get("installed_applications")
+        if not isinstance(applications, list):
+            applications = discover_installed_applications()
+        processes = inventory.get("running_processes", [])
+        windows = inventory.get("visible_windows", [])
+        inventory["application_process_relationships"] = (
+            build_application_process_relationships(
+                applications,
+                processes,
+                windows,
+            )
+        )
+        for process in processes:
+            process.pop("_image_path", None)
     if "files" in selected:
         inventory["files_and_folders"] = discover_files_and_folders(
             query,
