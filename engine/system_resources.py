@@ -967,6 +967,11 @@ def build_application_state_report(
         if not name:
             continue
         executable_names = app.get("_executable_names", app.get("executable_names", []))
+        has_process_identity_evidence = bool(
+            executable_names
+            or app.get("_executable_paths")
+            or app.get("_install_locations")
+        )
         search_fields = [
             name,
             str(app.get("name") or ""),
@@ -1043,6 +1048,9 @@ def build_application_state_report(
         elif sample_truncated:
             state = "not_verified_process_sample_limit"
             is_running = None
+        elif not has_process_identity_evidence:
+            state = "not_verified_application_identity_unavailable"
+            is_running = None
         else:
             state = "not_running"
             is_running = False
@@ -1059,6 +1067,7 @@ def build_application_state_report(
         results.append({
             "application": name,
             "category": str(app.get("category") or "unknown"),
+            "process_identity_evidence_available": has_process_identity_evidence,
             "state": state,
             "is_running": is_running,
             "process_count": len(process_ids),
@@ -2040,8 +2049,9 @@ def discover_system_resources(
             )
         )
         inventory["application_process_relationships"]["process_sample_limit"] = process_limit
-        # The report exposes process names/PIDs and relationships, never the
-        # private full image paths used for exact in-memory matching.
+    if relationships_requested or application_states_requested:
+        # Full paths and internal executable evidence remain in this call only.
+        # Never return them, including when scopes are combined explicitly.
         for process in inventory.get("running_processes", []):
             process.pop("_image_path", None)
         for app in inventory.get("installed_applications", []):
