@@ -14,6 +14,7 @@ def test_resource_inventory_queries_use_deterministic_voice_fast_path(monkeypatc
 
     for query in (
         "show system info",
+        "show system resources",
         "list installed applications",
         "show running processes",
         "what apps are open",
@@ -48,6 +49,10 @@ def test_resource_inventory_queries_classify_as_automation_without_llm():
 def test_resource_inventory_requests_route_to_typed_read_only_actions():
     cases = {
         "show system info": (["system"], None),
+        "show system resources": (
+            ["applications", "drives", "processes", "system", "windows"],
+            None,
+        ),
         "list installed applications": (["applications"], None),
         "show running processes": (["processes"], None),
         "what apps are open": (["windows"], None),
