@@ -845,10 +845,10 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             if titles:
                 table_rows.append(
                     f"| ↳ Window titles | {_resource_markdown_cell('; '.join(titles))} "
-                    "| — | Joined by exact PID | — |"
+                    "| — | Joined by exact PID | — | — |"
                 )
         if not rows:
-            table_rows.append("| No process relationships returned | — | — | — | — |")
+            table_rows.append("| No process relationships returned | — | — | — | — | — |")
 
         query_label = relationships.get("query")
         summary = (
