@@ -294,6 +294,10 @@ def discover_application_path_executables() -> list[dict[str, Any]]:
                         path_exists = bool(
                             executable_path and Path(executable_path).is_file()
                         )
+                        if not path_exists:
+                            # Ignore stale App Paths keys; a registry name
+                            # without a current target is not executable evidence.
+                            continue
                         item_key = (str(entry).casefold(), normalized_path)
                         found.setdefault(
                             item_key,
