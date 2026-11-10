@@ -15,6 +15,7 @@ from .applications import (
     canonical_application_name,
     find_application_reference,
     parse_hindi_application_command,
+    resolve_website_url,
 )
 from .filesystem import search_paths
 from engine.system_resources import parse_system_resource_request
@@ -542,6 +543,19 @@ def _route_open(
     normalized = normalize_application_name(
         target
     )
+
+    # Website names must win before installed-app and recursive folder lookup.
+    # Otherwise package folders such as googleapis/lib/youtube can be mistaken
+    # for the requested website.
+    if resolve_website_url(normalized):
+        return AutomationAction(
+            action_type="open_application",
+            parameters={
+                "application": "youtube",
+                "executable": "",
+            },
+            risk=RiskLevel.LOW,
+        )
 
     executable = resolve_application(
         normalized
