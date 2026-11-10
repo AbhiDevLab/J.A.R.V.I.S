@@ -1654,6 +1654,10 @@ def discover_system_resources(
         else:
             applications = discover_installed_applications()
         inventory["installed_applications"] = applications
+    elif relationships_requested:
+        applications = discover_installed_applications(
+            include_relationship_metadata=True
+        )
     if "processes" in selected or relationships_requested:
         if relationships_requested:
             processes = discover_running_processes(
@@ -1675,10 +1679,6 @@ def discover_system_resources(
     if "drives" in selected:
         inventory["drives"] = discover_drives()
     if relationships_requested:
-        if applications is None:
-            applications = discover_installed_applications(
-                include_relationship_metadata=True
-            )
         inventory["application_process_relationships"] = (
             build_application_process_relationships(
                 applications,
