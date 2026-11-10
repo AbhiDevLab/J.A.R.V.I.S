@@ -606,7 +606,8 @@ _RESOURCE_REQUESTS = (
             re.IGNORECASE,
         ),
     ),
-)_FILE_SEARCH_REQUESTS = (
+)
+_FILE_SEARCH_REQUESTS = (
     re.compile(
         r"^(?:please )?(?:find|search for|locate) "
         r"(?:(?:the|a|all) )?(?:files?|folders?|documents?)"
