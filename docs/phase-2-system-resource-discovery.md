@@ -71,3 +71,8 @@ The current resource-inventory implementation supplements the initial Phase 2 co
 No machine-specific model, RAM size, processor count, application list, volume label, or capacity is embedded in the inventory code. Missing or inaccessible sources remain `unknown` rather than being filled with example values.
 
 The CPU clock from the `~MHz` registry value is a registry-reported clock value, not a live per-core frequency measurement. The memory-use percentage is calculated from the current total and available physical-memory values, not a hardcoded threshold.
+
+
+### Evidence and classification limits
+
+A Start Menu shortcut can point to an installed program, a portable executable, a web link, or a broken target. An App Paths entry is registration evidence, not conclusive proof of a conventional installation. These are therefore not silently classified as installed or portable. The inventory reports them as unverified launch entries. A portable-app label will only be added when the target executable and installation context can be positively established at runtime.
