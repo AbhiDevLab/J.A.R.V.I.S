@@ -48,6 +48,7 @@ ORDINARY_ACTIONS = {
     "open_folder",
     "list_directory",
     "find_file",
+    "discover_system_resources",
 }
 
 SENSITIVE_ACTIONS = {
