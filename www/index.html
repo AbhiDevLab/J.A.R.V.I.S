@@ -496,6 +496,18 @@
                   <button id="MicBtn" class="glow-on-hover">
                     <i class="bi bi-mic"></i>
                   </button>
+                  <button
+                    id="ContinuousListeningBtn"
+                    class="voice-mode-btn"
+                    type="button"
+                    aria-label="Enable continuous listening"
+                    aria-pressed="false"
+                    title="Enable continuous listening"
+                  >
+                    <span class="voice-mode-waveform" aria-hidden="true">
+                      <span></span><span></span><span></span><span></span><span></span>
+                    </span>
+                  </button>
                   <button id="SettingsBtn" class="glow-on-hover">
                     <i class="bi bi-gear"></i>
                   </button>
@@ -561,6 +573,19 @@
 
             <button id="ConversationMicBtn" class="glow-on-hover" type="button">
               <i class="bi bi-mic"></i>
+            </button>
+
+            <button
+              id="ConversationContinuousListeningBtn"
+              class="voice-mode-btn"
+              type="button"
+              aria-label="Enable continuous listening"
+              aria-pressed="false"
+              title="Enable continuous listening"
+            >
+              <span class="voice-mode-waveform" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span>
+              </span>
             </button>
 
             <button
@@ -717,16 +742,11 @@
             </label>
           </div>
 
-          <div class="settings-item">
+          <div class="settings-item settings-item-column">
             <div class="settings-item-content">
-              <strong>Continuous listening</strong>
-              <span>Keep the microphone ready for normal speech. Say “stop listening” or switch this off to pause. Background audio is not saved as a recording.</span>
+              <strong>Hands-free listening</strong>
+              <span>Use the purple voice-wave button beside the microphone in either message bar to start or pause continuous listening. JARVIS only activates it after authentication.</span>
             </div>
-
-            <label class="settings-switch">
-              <input type="checkbox" id="SettingsContinuousListening" />
-              <span class="settings-switch-slider"></span>
-            </label>
           </div>
         </section>
 
