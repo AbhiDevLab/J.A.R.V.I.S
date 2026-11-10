@@ -600,23 +600,52 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
         operating_system = " ".join(
             value for value in (
                 str(system.get("operating_system") or "").strip(),
+                str(system.get("os_edition") or "").strip(),
                 str(system.get("os_release") or "").strip(),
-            ) if value
+            ) if value and value.casefold() != "unknown"
         ) or "Unknown operating system"
         architecture = str(system.get("architecture") or "unknown")
-        cpu_count = system.get("logical_cpu_count")
-        memory_total = _format_resource_size(system.get("memory_total_bytes"))
+        processor = str(system.get("processor") or "unknown")
+        physical_cores = system.get("physical_core_count")
+        logical_cpus = system.get("logical_cpu_count")
+        clock_mhz = system.get("processor_clock_mhz")
+        cpu_details = (
+            f"{physical_cores} physical cores, {logical_cpus} logical processors"
+            if physical_cores is not None and logical_cpus is not None
+            else f"{logical_cpus} logical processors"
+            if logical_cpus is not None
+            else "unknown"
+        )
+        if clock_mhz is not None:
+            cpu_details += f", registry clock {clock_mhz} MHz"
+
+        memory_installed = _format_resource_size(system.get("memory_installed_bytes"))
+        memory_usable = _format_resource_size(system.get("memory_total_bytes"))
+        memory_used = _format_resource_size(system.get("memory_used_bytes"))
         memory_available = _format_resource_size(system.get("memory_available_bytes"))
+        memory_load = (
+            f"{system.get('memory_load_percent')}%"
+            if system.get("memory_load_percent") is not None
+            else "unknown"
+        )
+        os_version = str(system.get("os_version") or "unknown")
+        os_build = str(system.get("os_build") or "unknown")
+        os_ubr = str(system.get("os_update_revision") or "unknown")
         sections.append(
             "## System overview\n"
-            "| Property | Value |\n"
+            "| Property | Runtime value |\n"
             "|---|---|\n"
             f"| Operating system | {_resource_markdown_cell(operating_system)} |\n"
+            f"| OS version | {_resource_markdown_cell(os_version)} |\n"
+            f"| OS build | {_resource_markdown_cell(os_build)} (UBR { _resource_markdown_cell(os_ubr) }) |\n"
             f"| Architecture | {_resource_markdown_cell(architecture)} |\n"
-            f"| Processor | {_resource_markdown_cell(system.get('processor'), 'unknown')} |\n"
-            f"| Logical CPUs | {cpu_count if cpu_count is not None else 'unknown'} |\n"
-            f"| Installed memory | {memory_total} |\n"
-            f"| Available memory | {memory_available} |"
+            f"| Processor | {_resource_markdown_cell(processor)} |\n"
+            f"| CPU cores / processors | {_resource_markdown_cell(cpu_details)} |\n"
+            f"| Installed physical RAM | {memory_installed} |\n"
+            f"| Usable physical RAM | {memory_usable} |\n"
+            f"| Physical RAM in use | {memory_used} |\n"
+            f"| Available physical RAM | {memory_available} |\n"
+            f"| Calculated physical memory use | {memory_load} |"
         )
         spoken_parts.append(
             f"system information for {operating_system} with {architecture} architecture"
@@ -624,33 +653,74 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
 
     applications = inventory.get("installed_applications")
     if isinstance(applications, list):
-        rows = [
-            item for item in applications
-            if isinstance(item, dict)
+        rows = [item for item in applications if isinstance(item, dict)]
+        category_labels = {
+            "installed_application": "Installed desktop applications",
+            "packaged_application": "Packaged applications",
+            "windows_component": "Windows components and updates",
+            "registered_executable": "Registered executables (installation not verified)",
+            "shortcut_only": "Start Menu shortcuts (installation not verified)",
+        }
+        category_order = (
+            "installed_application",
+            "packaged_application",
+            "windows_component",
+            "registered_executable",
+            "shortcut_only",
+        )
+        category_counts = {
+            category: sum(1 for item in rows if item.get("category") == category)
+            for category in category_order
+        }
+        app_summary = [
+            "| Evidence category | Count |",
+            "|---|---:|",
         ]
-        table_rows = [
-            "| Application | Discovery sources |",
-            "|---|---|",
-        ]
-        for item in rows[:25]:
-            source_labels = ", ".join(item.get("sources") or []) or "unknown"
-            table_rows.append(
-                f"| {_resource_markdown_cell(item.get('name'))} "
-                f"| {_resource_markdown_cell(source_labels)} |"
-            )
+        for category in category_order:
+            count = category_counts[category]
+            if count:
+                app_summary.append(
+                    f"| {category_labels[category]} | {count} |"
+                )
         if not rows:
-            table_rows.append("| No registered applications found | — |")
-        suffix = (
-            f"\n\nShowing **25 of {len(rows)}** returned entries."
-            if len(rows) > 25
-            else f"\n\n**{len(rows)}** registered application entries returned."
-        )
+            app_summary.append("| No application evidence returned | 0 |")
         sections.append(
-            "## Installed applications\n"
-            + "\n".join(table_rows)
-            + suffix
+            "## Application discovery\n"
+            + "\n".join(app_summary)
+            + "\n\nA shortcut or App Paths entry alone is not treated as proof "
+              "that a conventional application is installed."
         )
-        spoken_parts.append(f"{len(rows)} registered applications")
+
+        for category in category_order:
+            category_rows = [item for item in rows if item.get("category") == category]
+            if not category_rows:
+                continue
+            table_rows = [
+                "| Name | Publisher | Version | Evidence |",
+                "|---|---|---|---|",
+            ]
+            for item in category_rows[:25]:
+                source_labels = ", ".join(item.get("sources") or []) or "unknown"
+                table_rows.append(
+                    f"| {_resource_markdown_cell(item.get('display_name') or item.get('name'))} "
+                    f"| {_resource_markdown_cell(item.get('publisher'))} "
+                    f"| {_resource_markdown_cell(item.get('version'))} "
+                    f"| {_resource_markdown_cell(source_labels)} |"
+                )
+            suffix = (
+                f"\n\nShowing **25 of {len(category_rows)}** entries."
+                if len(category_rows) > 25
+                else f"\n\n**{len(category_rows)}** entries."
+            )
+            sections.append(
+                f"### {category_labels[category]}\n"
+                + "\n".join(table_rows)
+                + suffix
+            )
+        verified_count = category_counts["installed_application"] + category_counts["packaged_application"]
+        spoken_parts.append(
+            f"{verified_count} verified installed or packaged applications"
+        )
 
     processes = inventory.get("running_processes")
     if isinstance(processes, list):
@@ -742,19 +812,21 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             if isinstance(item, dict)
         ]
         table_rows = [
-            "| Drive | Type | Capacity | Used | Free |",
-            "|---|---|---:|---:|---:|",
+            "| Drive | Volume label | Type | File system | Capacity | Used | Free |",
+            "|---|---|---|---|---:|---:|---:|",
         ]
         for item in rows:
             table_rows.append(
                 f"| {_resource_markdown_cell(item.get('root'))} "
+                f"| {_resource_markdown_cell(item.get('volume_label'))} "
                 f"| {_resource_markdown_cell(item.get('type'))} "
+                f"| {_resource_markdown_cell(item.get('filesystem'))} "
                 f"| {_format_resource_size(item.get('total_bytes'))} "
                 f"| {_format_resource_size(item.get('used_bytes'))} "
                 f"| {_format_resource_size(item.get('free_bytes'))} |"
             )
         if not rows:
-            table_rows.append("| No logical drives found | — | — | — | — |")
+            table_rows.append("| No logical drives found | — | — | — | — | — | — |")
         sections.append(
             "## Logical drives\n"
             + "\n".join(table_rows)

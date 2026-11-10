@@ -35,6 +35,11 @@ def test_tasklist_parser_handles_empty_malformed_and_unavailable_memory():
 
 def test_installed_app_discovery_deduplicates_names_and_keeps_sources(monkeypatch):
     monkeypatch.setattr(
+        system_resources,
+        "discover_uninstall_registry_applications",
+        lambda: [],
+    )
+    monkeypatch.setattr(
         system_resources._application_discovery,
         "discover_application_shortcuts",
         lambda: [("Google Chrome", r"C:\\Start Menu\\Chrome.lnk"), ("Telegram", "ignored")],
@@ -60,10 +65,21 @@ def test_installed_app_discovery_deduplicates_names_and_keeps_sources(monkeypatc
     ]
     assert indexed["telegram"] == ["start_menu_shortcut"]
     assert indexed["android studio"] == ["start_menu_app_id"]
+    by_name = {row["name"]: row for row in rows}
+    assert by_name["chrome"]["category"] == "packaged_application"
+    assert by_name["chrome"]["is_installed"] is True
+    assert by_name["chrome"]["display_name"] == "Chrome"
+    assert by_name["telegram"]["category"] == "shortcut_only"
+    assert by_name["telegram"]["is_installed"] is None
     assert all("path" not in row and "app_id" not in row for row in rows)
 
 
 def test_installed_app_discovery_is_resilient_when_windows_sources_fail(monkeypatch):
+    monkeypatch.setattr(
+        system_resources,
+        "discover_uninstall_registry_applications",
+        lambda: [],
+    )
     def fail():
         raise OSError("registry unavailable")
 
@@ -86,6 +102,11 @@ def test_installed_app_discovery_is_resilient_when_windows_sources_fail(monkeypa
 
 
 def test_installed_app_discovery_respects_result_limit(monkeypatch):
+    monkeypatch.setattr(
+        system_resources,
+        "discover_uninstall_registry_applications",
+        lambda: [],
+    )
     monkeypatch.setattr(
         system_resources._application_discovery,
         "discover_application_shortcuts",
@@ -498,8 +519,10 @@ def test_windows_registry_reader_uses_the_current_version_key(monkeypatch):
 
     captured = {}
     registry_values = {
-        "ProductName": "Windows 10 Pro",
-        "DisplayVersion": "24H2",
+        "ProductName": "Windows 10 Home Single Language",
+        "EditionID": "CoreSingleLanguage",
+        "InstallationType": "Client",
+        "DisplayVersion": "26H2",
         "CurrentBuildNumber": "26100",
         "CurrentMajorVersionNumber": 10,
         "CurrentMinorVersionNumber": 0,
@@ -541,6 +564,7 @@ def test_windows_registry_reader_uses_the_current_version_key(monkeypatch):
     assert captured["reserved"] == 0
     assert captured["access"] == FakeWinreg.KEY_READ | FakeWinreg.KEY_WOW64_64KEY
     assert metadata["CurrentBuildNumber"] == "26100"
+    assert metadata["EditionID"] == "CoreSingleLanguage"
 
 
 def test_windows_system_information_uses_detected_version_fields(monkeypatch):
@@ -562,3 +586,310 @@ def test_windows_system_information_uses_detected_version_fields(monkeypatch):
     assert info["operating_system"] == "Windows 11"
     assert info["os_release"] == "24H2"
     assert info["os_build"] == "26100"
+
+
+def test_physical_core_record_parser_counts_cores_and_rejects_malformed_records():
+    core_record = (0).to_bytes(4, "little") + (16).to_bytes(4, "little") + bytes(8)
+    numa_record = (1).to_bytes(4, "little") + (16).to_bytes(4, "little") + bytes(8)
+    raw = core_record + numa_record + core_record
+
+    assert system_resources._count_processor_core_records(raw) == 2
+    assert system_resources._count_processor_core_records(raw, len(raw) - 1) is None
+    assert system_resources._count_processor_core_records(b"bad") is None
+
+
+def test_get_system_information_uses_live_cpu_memory_and_edition_sources(monkeypatch):
+    gib = 1024 ** 3
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setattr(system_resources, "_memory_bytes", lambda: (int(15.7 * gib), int(2.0 * gib)))
+    monkeypatch.setattr(system_resources, "_installed_memory_bytes", lambda: 16 * gib)
+    monkeypatch.setattr(system_resources, "_physical_core_count", lambda: 10)
+    monkeypatch.setattr(
+        system_resources,
+        "_read_cpu_registry_details",
+        lambda: {
+            "ProcessorNameString": "13th Gen Intel(R) Core(TM) i7-13620H",
+            "Identifier": "Intel64 Family 6 Model 186",
+            "VendorIdentifier": "GenuineIntel",
+            "~MHz": 2400,
+        },
+    )
+    monkeypatch.setattr(
+        system_resources,
+        "_windows_version_fields",
+        lambda: {
+            "operating_system": "Windows 11",
+            "os_edition": "Home Single Language",
+            "os_installation_type": "Client",
+            "os_release": "26H2",
+            "os_version": "10.0.26300.9711",
+            "os_build": "26300",
+            "os_update_revision": "9711",
+        },
+    )
+    monkeypatch.setattr(system_resources.os, "cpu_count", lambda: 16)
+
+    info = system_resources.get_system_information()
+
+    assert info["processor"] == "13th Gen Intel(R) Core(TM) i7-13620H"
+    assert info["physical_core_count"] == 10
+    assert info["logical_cpu_count"] == 16
+    assert info["processor_clock_mhz"] == 2400
+    assert info["memory_installed_bytes"] == 16 * gib
+    assert info["memory_total_bytes"] == int(15.7 * gib)
+    assert info["memory_used_bytes"] == int(15.7 * gib) - int(2.0 * gib)
+    assert info["memory_load_percent"] > 0
+    assert info["os_edition"] == "Home Single Language"
+    assert info["os_build"] == "26300"
+    assert info["os_update_revision"] == "9711"
+
+
+def test_uninstall_registry_discovery_separates_apps_from_windows_components(monkeypatch):
+    import sys
+
+    uninstall_key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    entries = {
+        "App-One": {
+            "DisplayName": "Example Desktop App",
+            "DisplayVersion": "3.2.1",
+            "Publisher": "Example Publisher",
+        },
+        "Windows-Feature": {
+            "DisplayName": "Example Windows Feature",
+            "SystemComponent": 1,
+            "Publisher": "Microsoft Corporation",
+        },
+        "Update-One": {
+            "DisplayName": "Example Security Update",
+            "ReleaseType": "Security Update",
+            "Publisher": "Microsoft Corporation",
+        },
+    }
+
+    class FakeKey:
+        def __init__(self, name="root"):
+            self.name = name
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeWinreg:
+        HKEY_LOCAL_MACHINE = object()
+        HKEY_CURRENT_USER = object()
+        KEY_READ = 0x20019
+        KEY_WOW64_64KEY = 0x0100
+        KEY_WOW64_32KEY = 0x0200
+
+        @staticmethod
+        def OpenKey(root, path, reserved=0, access=0):
+            if path == uninstall_key:
+                return FakeKey("parent")
+            if path in entries:
+                return FakeKey(path)
+            raise OSError("key not found")
+
+        @staticmethod
+        def EnumKey(parent, index):
+            names = list(entries)
+            if index >= len(names):
+                raise OSError("no more entries")
+            return names[index]
+
+        @staticmethod
+        def QueryValueEx(key, name):
+            values = entries[key.name]
+            if name not in values:
+                raise OSError("value not found")
+            return values[name], 1
+
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setitem(sys.modules, "winreg", FakeWinreg)
+
+    rows = system_resources.discover_uninstall_registry_applications()
+    indexed = {item["name"]: item for item in rows}
+
+    assert indexed["example desktop app"]["category"] == "installed_application"
+    assert indexed["example desktop app"]["publisher"] == "Example Publisher"
+    assert indexed["example desktop app"]["version"] == "3.2.1"
+    assert indexed["example windows feature"]["category"] == "windows_component"
+    assert indexed["example security update"]["category"] == "windows_component"
+
+
+def test_application_inventory_does_not_promote_shortcuts_to_installed_apps(monkeypatch):
+    monkeypatch.setattr(
+        system_resources,
+        "discover_uninstall_registry_applications",
+        lambda: [],
+    )
+    monkeypatch.setattr(
+        system_resources._application_discovery,
+        "discover_application_shortcuts",
+        lambda: [("Portable Tool", r"C:\\Users\\Test\\Desktop\\Portable Tool.lnk")],
+    )
+    monkeypatch.setattr(
+        system_resources._application_discovery,
+        "discover_application_registry_names",
+        lambda: {"portabletool"},
+    )
+    monkeypatch.setattr(
+        system_resources._application_discovery,
+        "discover_start_menu_app_ids",
+        lambda: [("Packaged App", "Package.Test!App")],
+    )
+
+    rows = system_resources.discover_installed_applications()
+    indexed = {item["name"]: item for item in rows}
+
+    # A shortcut title and a registry executable token that differ in
+    # spelling are kept separate until a verified alias connects them.
+    assert indexed["portable tool"]["category"] == "shortcut_only"
+    assert indexed["portable tool"]["is_installed"] is None
+    assert indexed["portabletool"]["category"] == "registered_executable"
+    assert indexed["portabletool"]["is_installed"] is None
+    assert indexed["packaged app"]["category"] == "packaged_application"
+    assert indexed["packaged app"]["is_installed"] is True
+
+
+def test_installed_memory_reader_converts_win32_kilobytes_to_bytes(monkeypatch):
+    class FakeFunction:
+        argtypes = None
+        restype = None
+        def __call__(self, pointer):
+            import ctypes
+            ctypes.cast(
+                pointer,
+                ctypes.POINTER(ctypes.c_ulonglong),
+            ).contents.value = 16 * 1024 * 1024
+            return 1
+
+    class FakeKernel32:
+        GetPhysicallyInstalledSystemMemory = FakeFunction()
+
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setattr(
+        system_resources.ctypes,
+        "WinDLL",
+        lambda *args, **kwargs: FakeKernel32(),
+        raising=False,
+    )
+
+    assert system_resources._installed_memory_bytes() == 16 * 1024 ** 3
+
+
+def test_cpu_registry_reader_returns_runtime_processor_identity(monkeypatch):
+    import sys
+
+    values = {
+        "ProcessorNameString": "13th Gen Intel(R) Core(TM) i7-13620H",
+        "Identifier": "Intel64 Family 6 Model 186 Stepping 2",
+        "VendorIdentifier": "GenuineIntel",
+        "~MHz": 2400,
+    }
+
+    class FakeKey:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeWinreg:
+        HKEY_LOCAL_MACHINE = object()
+        KEY_READ = 0x20019
+
+        @staticmethod
+        def OpenKey(root, path, reserved, access):
+            assert path == r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
+            return FakeKey()
+
+        @staticmethod
+        def QueryValueEx(key, name):
+            if name not in values:
+                raise OSError("missing")
+            return values[name], 1
+
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setitem(sys.modules, "winreg", FakeWinreg)
+
+    result = system_resources._read_cpu_registry_details()
+
+    assert result["ProcessorNameString"] == values["ProcessorNameString"]
+    assert result["VendorIdentifier"] == "GenuineIntel"
+    assert result["~MHz"] == 2400
+
+
+def test_windows_version_fields_preserve_runtime_edition_and_ubr(monkeypatch):
+    monkeypatch.setattr(system_resources, "_read_windows_version_registry", lambda: {
+        "ProductName": "Windows 10 Home Single Language",
+        "EditionID": "CoreSingleLanguage",
+        "InstallationType": "Client",
+        "DisplayVersion": "26H2",
+        "CurrentMajorVersionNumber": 10,
+        "CurrentMinorVersionNumber": 0,
+        "CurrentBuildNumber": "26300",
+        "UBR": 9711,
+    })
+
+    fields = system_resources._windows_version_fields()
+
+    assert fields["operating_system"] == "Windows 11"
+    assert fields["os_edition"] == "Home Single Language"
+    assert fields["os_release"] == "26H2"
+    assert fields["os_version"] == "10.0.26300.9711"
+    assert fields["os_build"] == "26300"
+    assert fields["os_update_revision"] == "9711"
+
+
+def test_drive_discovery_returns_runtime_volume_label_and_filesystem(monkeypatch):
+    from types import SimpleNamespace
+
+    class FakeFunction:
+        def __init__(self, callback):
+            self.callback = callback
+            self.argtypes = None
+            self.restype = None
+        def __call__(self, *args):
+            return self.callback(*args)
+
+    class FakeKernel32:
+        def __init__(self):
+            self.GetLogicalDrives = FakeFunction(lambda: 1 << 2)
+            self.GetDriveTypeW = FakeFunction(lambda root: 3)
+            def volume_info(root, volume_label, volume_size, serial, max_component,
+                            flags, filesystem, filesystem_size):
+                volume_label.value = "Windows"
+                filesystem.value = "NTFS"
+                return 1
+            self.GetVolumeInformationW = FakeFunction(volume_info)
+
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setattr(
+        system_resources.ctypes,
+        "WinDLL",
+        lambda *args, **kwargs: FakeKernel32(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        system_resources.shutil,
+        "disk_usage",
+        lambda root: SimpleNamespace(
+            total=500 * 1024 ** 3,
+            used=300 * 1024 ** 3,
+            free=200 * 1024 ** 3,
+        ),
+    )
+
+    drives = system_resources.discover_drives()
+
+    assert drives == [
+        {
+            "root": "C:\\",
+            "type": "fixed",
+            "accessible": True,
+            "volume_label": "Windows",
+            "filesystem": "NTFS",
+            "total_bytes": 500 * 1024 ** 3,
+            "used_bytes": 300 * 1024 ** 3,
+            "free_bytes": 200 * 1024 ** 3,
+        }
+    ]

@@ -132,3 +132,81 @@ def test_resource_discovery_executes_without_confirmation_and_records_audit(
     }
     assert all(event["action_type"] == "discover_system_resources" for event in events)
     assert all(event["permission_tier"] == "ordinary" for event in events)
+
+
+def test_resource_report_labels_installed_and_usable_memory_separately(monkeypatch):
+    from engine.automation import executor
+
+    monkeypatch.setattr(
+        executor,
+        "discover_system_resources",
+        lambda scopes, query=None: {
+            "schema_version": 1,
+            "scopes": ["system", "applications", "drives"],
+            "system": {
+                "operating_system": "Windows 11",
+                "os_edition": "Home Single Language",
+                "os_release": "26H2",
+                "os_version": "10.0.26300.9711",
+                "os_build": "26300",
+                "os_update_revision": "9711",
+                "architecture": "AMD64",
+                "processor": "13th Gen Intel(R) Core(TM) i7-13620H",
+                "physical_core_count": 10,
+                "logical_cpu_count": 16,
+                "processor_clock_mhz": 2400,
+                "memory_installed_bytes": 16 * 1024 ** 3,
+                "memory_total_bytes": int(15.7 * 1024 ** 3),
+                "memory_used_bytes": int(13.6 * 1024 ** 3),
+                "memory_available_bytes": int(2.1 * 1024 ** 3),
+                "memory_load_percent": 86.6,
+            },
+            "installed_applications": [
+                {
+                    "name": "example app",
+                    "category": "installed_application",
+                    "publisher": "Example Publisher",
+                    "version": "1.2.3",
+                    "sources": ["uninstall_registry_machine"],
+                },
+                {
+                    "name": "portable tool",
+                    "category": "shortcut_only",
+                    "publisher": None,
+                    "version": None,
+                    "sources": ["start_menu_shortcut"],
+                },
+            ],
+            "drives": [
+                {
+                    "root": "C:\\",
+                    "type": "fixed",
+                    "volume_label": "Windows",
+                    "filesystem": "NTFS",
+                    "total_bytes": 500 * 1024 ** 3,
+                    "used_bytes": 300 * 1024 ** 3,
+                    "free_bytes": 200 * 1024 ** 3,
+                }
+            ],
+        },
+    )
+    action = AutomationAction(
+        action_type="discover_system_resources",
+        parameters={"scopes": ["system", "applications", "drives"]},
+        risk=RiskLevel.LOW,
+    )
+
+    result = executor._execute_system_resource_discovery(action)
+    report = result["message"]
+
+    assert "Windows 11 Home Single Language 26H2" in report
+    assert "10.0.26300.9711" in report
+    assert "26300 (UBR 9711)" in report
+    assert "13th Gen Intel(R) Core(TM) i7-13620H" in report
+    assert "10 physical cores, 16 logical processors" in report
+    assert "Installed physical RAM | 16.0 GB" in report
+    assert "Usable physical RAM | 15.7 GB" in report
+    assert "Calculated physical memory use | 86.6%" in report
+    assert "Installed desktop applications" in report
+    assert "Start Menu shortcuts (installation not verified)" in report
+    assert "NTFS" in report
