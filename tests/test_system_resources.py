@@ -893,3 +893,218 @@ def test_drive_discovery_returns_runtime_volume_label_and_filesystem(monkeypatch
             "free_bytes": 200 * 1024 ** 3,
         }
     ]
+
+
+def test_application_process_relationships_prefer_paths_and_join_windows_by_pid():
+    applications = [
+        {
+            "name": "chrome",
+            "display_name": "Google Chrome",
+            "_executable_names": ["chrome.exe"],
+            "_executable_paths": [r"c:\\program files\\google\\chrome\\application\\chrome.exe"],
+            "_install_locations": [r"c:\\program files\\google\\chrome"],
+        },
+        {
+            "name": "brave",
+            "display_name": "Brave",
+            "_executable_names": ["brave.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        },
+        {
+            "name": "app alpha",
+            "display_name": "App Alpha",
+            "_executable_names": ["shared.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        },
+        {
+            "name": "app beta",
+            "display_name": "App Beta",
+            "_executable_names": ["shared.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        },
+    ]
+    processes = [
+        {
+            "name": "chrome.exe",
+            "pid": 100,
+            "memory_kb": 12000,
+            "_image_path": r"c:\\program files\\google\\chrome\\application\\chrome.exe",
+        },
+        {
+            "name": "brave.exe",
+            "pid": 200,
+            "memory_kb": 14000,
+        },
+        {
+            "name": "shared.exe",
+            "pid": 300,
+            "memory_kb": 1000,
+        },
+        {
+            "name": "svchost.exe",
+            "pid": 400,
+            "memory_kb": 2000,
+        },
+    ]
+    windows = [
+        {
+            "process_id": 100,
+            "title": "JARVIS - Brave",
+            "is_foreground": True,
+        },
+        {
+            "process_id": 100,
+            "title": "Settings",
+            "is_foreground": False,
+        },
+        {
+            "process_id": 200,
+            "title": "Brave",
+            "is_foreground": False,
+        },
+    ]
+
+    result = system_resources.build_application_process_relationships(
+        applications,
+        processes,
+        windows,
+    )
+    rows = {row["pid"]: row for row in result["items"]}
+
+    assert rows[100]["application"] == "Google Chrome"
+    assert rows[100]["match_basis"] == "exact_executable_path"
+    assert rows[100]["window_count"] == 2
+    assert rows[100]["has_foreground_window"] is True
+    assert rows[200]["application"] == "Brave"
+    assert rows[200]["match_basis"] == "unique_executable_name"
+    assert rows[300]["match_status"] == "ambiguous"
+    assert "App Alpha" in rows[300]["application"]
+    assert "App Beta" in rows[300]["application"]
+    assert rows[400]["application"] == "Unmapped"
+    assert result["matched_count"] == 2
+    assert result["ambiguous_count"] == 1
+    assert result["unmapped_count"] == 1
+
+
+def test_application_process_relationship_query_filters_by_app_or_process():
+    applications = [
+        {
+            "name": "chrome",
+            "display_name": "Google Chrome",
+            "_executable_names": ["chrome.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        },
+        {
+            "name": "brave",
+            "display_name": "Brave",
+            "_executable_names": ["brave.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        },
+    ]
+    processes = [
+        {"name": "chrome.exe", "pid": 1},
+        {"name": "brave.exe", "pid": 2},
+    ]
+
+    result = system_resources.build_application_process_relationships(
+        applications,
+        processes,
+        [],
+        query="chrome",
+    )
+
+    assert [item["pid"] for item in result["items"]] == [1]
+    assert result["query"] == "chrome"
+    assert result["matched_count"] == 1
+
+
+def test_relationship_scope_collects_dependencies_internally_and_hides_paths(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        system_resources,
+        "discover_installed_applications",
+        lambda **kwargs: (
+            calls.append(("applications", kwargs))
+            or [{
+                "name": "sample",
+                "display_name": "Sample App",
+                "_executable_names": ["sample.exe"],
+                "_executable_paths": [r"c:\\apps\\sample.exe"],
+                "_install_locations": [r"c:\\apps"],
+            }]
+        ),
+    )
+    monkeypatch.setattr(
+        system_resources,
+        "discover_running_processes",
+        lambda **kwargs: (
+            calls.append(("processes", kwargs))
+            or [{
+                "name": "sample.exe",
+                "pid": 42,
+                "_image_path": r"c:\\apps\\sample.exe",
+            }]
+        ),
+    )
+    monkeypatch.setattr(
+        system_resources,
+        "discover_visible_windows",
+        lambda **kwargs: (
+            calls.append(("windows", kwargs))
+            or [{
+                "process_id": 42,
+                "title": "Sample App",
+                "is_foreground": True,
+            }]
+        ),
+    )
+
+    inventory = system_resources.discover_system_resources(["relationships"])
+
+    assert [name for name, _kwargs in calls] == [
+        "applications",
+        "processes",
+        "windows",
+    ]
+    assert calls[0][1]["include_relationship_metadata"] is True
+    assert calls[1][1]["include_image_paths"] is True
+    assert "installed_applications" not in inventory
+    assert "running_processes" not in inventory
+    assert "visible_windows" not in inventory
+    relation = inventory["application_process_relationships"]["items"][0]
+    assert relation["application"] == "Sample App"
+    assert relation["match_basis"] == "exact_executable_path"
+    assert "c:\\apps" not in str(inventory).casefold()
+
+
+def test_relationship_scope_is_not_added_to_normal_inventory_defaults():
+    assert "relationships" not in system_resources._DEFAULT_SCOPES
+    assert "relationships" in system_resources._VALID_SCOPES
+
+
+def test_relationship_request_parser_recognizes_generic_and_app_specific_queries():
+    assert system_resources.parse_system_resource_request(
+        "show application process relationships"
+    ) == {"scopes": ["relationships"]}
+    assert system_resources.parse_system_resource_request(
+        "which processes belong to Chrome"
+    ) == {"scopes": ["relationships"], "query": "Chrome"}
+
+
+def test_application_path_normalization_and_icon_extraction_are_conservative():
+    assert system_resources._normalize_executable_path(
+        r"C:\\Program Files\\Sample\\sample.exe"
+    ) == system_resources._normalize_executable_path(
+        r"c:\\program files\\sample\\sample.exe"
+    )
+    assert system_resources._extract_registered_executable_path(
+        r'"C:\\Program Files\\Sample\\sample.exe",0'
+    ) == r"C:\\Program Files\\Sample\\sample.exe"
+    assert system_resources._extract_registered_executable_path(
+        r"C:\\Program Files\\Sample\\sample.dll,0"
+    ) is None
