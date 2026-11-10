@@ -1118,3 +1118,73 @@ def test_android_studio_can_resolve_from_classic_install_registry(monkeypatch):
     monkeypatch.setattr(applications, "discover_start_menu_app_ids", lambda: [])
 
     assert applications.resolve_application("Android Studio") == expected
+
+
+def test_youtube_resolves_to_a_fixed_website_destination():
+    from engine.automation.applications import resolve_website_url
+
+    assert resolve_website_url("YouTube") == "https://www.youtube.com"
+    assert resolve_website_url("you tube") == "https://www.youtube.com"
+    assert resolve_website_url("youtube.com") == "https://www.youtube.com"
+    assert resolve_website_url("youtube project") is None
+
+
+def test_open_youtube_routes_before_ambiguous_package_folders(monkeypatch):
+    from engine.automation import router as router_module
+
+    monkeypatch.setattr(router_module, "resolve_application", lambda _name: None)
+    monkeypatch.setattr(router_module, "canonical_application_name", lambda _name: None)
+
+    def unexpected_folder_search(*args, **kwargs):
+        raise AssertionError(
+            "YouTube must bypass folder lookup, including Pub Cache googleapis/lib/youtube "
+            "and googleapis/test/youtube matches."
+        )
+
+    monkeypatch.setattr(router_module, "search_paths", unexpected_folder_search)
+
+    action = route_command("Open YouTube")
+
+    assert action is not None
+    assert action.action_type == "open_application"
+    assert action.parameters["application"] == "youtube"
+    assert action.parameters["executable"] == ""
+
+
+def test_open_youtube_uses_windows_default_browser_handler(monkeypatch):
+    from engine.automation import executor as executor_module
+
+    opened = []
+    recorded = []
+    monkeypatch.setattr(executor_module.os, "name", "nt")
+    monkeypatch.setattr(
+        executor_module.os,
+        "startfile",
+        lambda target: opened.append(target),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        executor_module,
+        "resolve_application",
+        lambda _name: (_ for _ in ()).throw(
+            AssertionError("A website must not be resolved as an executable.")
+        ),
+    )
+    monkeypatch.setattr(
+        executor_module,
+        "record_application_opened",
+        lambda name: recorded.append(name),
+    )
+
+    result = executor_module._execute_open_application(
+        AutomationAction(
+            action_type="open_application",
+            parameters={"application": "youtube", "executable": ""},
+            risk=RiskLevel.LOW,
+        )
+    )
+
+    assert result["success"] is True
+    assert opened == ["https://www.youtube.com"]
+    assert recorded == ["youtube"]
+    assert "default browser" in result["message"].lower()

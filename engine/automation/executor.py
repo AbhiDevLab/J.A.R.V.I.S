@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import webbrowser
 from typing import Any, Dict
 
 from .actions import AutomationAction
@@ -14,7 +15,11 @@ from .policy import (
 )
 from .audit import record_action_event
 from .elevation import execute_privileged_action
-from .applications import resolve_application, canonical_application_name
+from .applications import (
+    resolve_application,
+    canonical_application_name,
+    resolve_website_url,
+)
 from .application_state import (
     record_application_opened,
     record_application_closed,
@@ -141,6 +146,36 @@ def _execute_open_application(
             False,
             "No application was specified.",
         )
+
+    website_url = resolve_website_url(application)
+    if website_url:
+        try:
+            if os.name == "nt":
+                # os.startfile delegates HTTPS to the user's default browser.
+                startfile = getattr(os, "startfile", None)
+                if not callable(startfile):
+                    return _result(
+                        False,
+                        "Windows could not hand YouTube to the default browser.",
+                        error_code="default_browser_unavailable",
+                    )
+                startfile(website_url)
+            else:
+                if not webbrowser.open(website_url, new=2):
+                    return _result(
+                        False,
+                        "I could not open YouTube in the default browser.",
+                        error_code="default_browser_unavailable",
+                    )
+            record_application_opened("youtube")
+            return _result(True, "Opening YouTube in your default browser.")
+        except Exception as exc:
+            print(f"Website launch error: {type(exc).__name__}")
+            return _result(
+                False,
+                "I could not open YouTube in your default browser.",
+                error_code="website_open_failed",
+            )
 
     resolved = resolve_application(application)
 
