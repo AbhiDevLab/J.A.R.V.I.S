@@ -542,6 +542,7 @@ def discover_files_and_folders(
 
 
 _VALID_SCOPES = {"system", "applications", "processes", "windows", "drives", "files"}
+_DEFAULT_SCOPES = _VALID_SCOPES - {"files"}
 
 
 def discover_system_resources(
@@ -563,7 +564,7 @@ def discover_system_resources(
     never opened or indexed.
     """
     if scopes is None:
-        selected = set(_VALID_SCOPES)
+        selected = set(_DEFAULT_SCOPES)
     elif isinstance(scopes, str):
         selected = {scopes.strip().lower()}
     else:
