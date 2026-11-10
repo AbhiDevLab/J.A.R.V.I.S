@@ -648,9 +648,12 @@ def _windows_version_fields() -> dict[str, str]:
             label = "Windows (version unavailable)"
         return {
             "operating_system": label,
+            "os_edition": "unknown",
+            "os_installation_type": "unknown",
             "os_release": f"Build {build}" if build else "Version metadata unavailable",
             "os_version": raw_version,
             "os_build": str(build) if build else "unknown",
+            "os_update_revision": "unknown",
         }
 
     label = _windows_version_label(metadata)
