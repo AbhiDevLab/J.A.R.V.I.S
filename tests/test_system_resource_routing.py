@@ -117,7 +117,10 @@ def test_resource_discovery_executes_without_confirmation_and_records_audit(
 
     assert result["success"] is True
     assert "2 running processes returned" in result["spoken_message"]
-    assert "notepad.exe (PID 42)" in result["message"]
+    assert result["message"].startswith("# J.A.R.V.I.S — System resource report")
+    assert "## Running processes" in result["message"]
+    assert "| notepad.exe | 42 |" in result["message"]
+    assert "## System overview" not in result["message"]
     assert result["summary"] == result["spoken_message"]
     assert result["inventory"]["scopes"] == ["processes"]
 

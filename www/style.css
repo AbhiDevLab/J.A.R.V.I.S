@@ -3458,3 +3458,88 @@ body.history-open #ChatBtn {
     outline: 2px solid rgba(0, 170, 255, 0.8);
     outline-offset: 2px;
 }
+
+
+/* System resource inventories use the rich HUD card, not the oversized
+   transient status line. Keep the report inside the JARVIS window and let
+   its content scroll independently from the card header/footer. */
+.hood-response-card.hood-response-resource-report {
+    max-height: min(68vh, 640px);
+}
+
+.hood-response-card.hood-response-resource-report .jarvis-response-body {
+    max-height: min(54vh, 520px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+
+.hood-response-card.hood-response-resource-report
+.jarvis-response-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.hood-response-card.hood-response-resource-report
+.jarvis-response-body::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.hood-response-card.hood-response-resource-report
+.jarvis-response-body::-webkit-scrollbar-thumb {
+    background: rgba(0, 170, 255, 0.48);
+    border-radius: 10px;
+}
+
+@media (max-height: 650px) {
+    .hood-response-card.hood-response-resource-report {
+        max-height: 76vh;
+    }
+
+    .hood-response-card.hood-response-resource-report .jarvis-response-body {
+        max-height: 61vh;
+    }
+}
+
+
+/* Persistent report panel inside the main Oval HUD. This keeps the result
+   visible after ShowHood restores the normal controls and microphone. */
+#Oval .hood-response-shell {
+    position: fixed;
+    top: 50%;
+    right: clamp(16px, 3vw, 44px);
+    z-index: 950;
+    width: min(580px, 48vw);
+    max-height: min(72vh, 680px);
+    margin-top: 0;
+    transform: translateY(-50%);
+}
+
+#Oval .hood-response-card.hood-response-resource-report {
+    max-height: min(72vh, 680px);
+}
+
+#Oval .hood-response-card.hood-response-resource-report .jarvis-response-body {
+    max-height: min(56vh, 540px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+@media (max-width: 900px) {
+    #Oval .hood-response-shell {
+        top: auto;
+        right: 12px;
+        bottom: 82px;
+        left: 12px;
+        width: auto;
+        max-height: 52vh;
+        transform: none;
+    }
+
+    #Oval .hood-response-card.hood-response-resource-report {
+        max-height: 52vh;
+    }
+
+    #Oval .hood-response-card.hood-response-resource-report .jarvis-response-body {
+        max-height: 36vh;
+    }
+}

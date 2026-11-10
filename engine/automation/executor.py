@@ -553,6 +553,17 @@ def _format_resource_size(value: Any) -> str:
     return "unknown"
 
 
+def _resource_markdown_cell(value: Any, fallback: str = "—") -> str:
+    """Normalize untrusted inventory values for a Markdown table cell."""
+    text = str(value if value not in (None, "") else fallback)
+    return (
+        text.replace("|", "¦")
+        .replace(chr(13), " ")
+        .replace(chr(10), " ")
+        .replace("`", "'")
+    )
+
+
 def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, Any]:
     parameters = action.parameters or {}
     scopes = parameters.get("scopes")
@@ -575,6 +586,14 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
 
     sections: list[str] = []
     spoken_parts: list[str] = []
+    generated_at = _resource_markdown_cell(
+        inventory.get("generated_at_utc"),
+        "timestamp unavailable",
+    )
+    scope_labels = ", ".join(
+        _resource_markdown_cell(scope)
+        for scope in inventory.get("scopes", [])
+    )
 
     system = inventory.get("system")
     if isinstance(system, dict):
@@ -586,14 +605,18 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
         ) or "Unknown operating system"
         architecture = str(system.get("architecture") or "unknown")
         cpu_count = system.get("logical_cpu_count")
-        total_memory = _format_resource_size(system.get("memory_total_bytes"))
+        memory_total = _format_resource_size(system.get("memory_total_bytes"))
+        memory_available = _format_resource_size(system.get("memory_available_bytes"))
         sections.append(
-            "SYSTEM\n"
-            f"Operating system: {operating_system}\n"
-            f"Architecture: {architecture}\n"
-            f"Processor: {system.get('processor') or 'unknown'}\n"
-            f"Logical CPUs: {cpu_count if cpu_count is not None else 'unknown'}\n"
-            f"Installed memory: {total_memory}"
+            "## System overview\n"
+            "| Property | Value |\n"
+            "|---|---|\n"
+            f"| Operating system | {_resource_markdown_cell(operating_system)} |\n"
+            f"| Architecture | {_resource_markdown_cell(architecture)} |\n"
+            f"| Processor | {_resource_markdown_cell(system.get('processor'), 'unknown')} |\n"
+            f"| Logical CPUs | {cpu_count if cpu_count is not None else 'unknown'} |\n"
+            f"| Installed memory | {memory_total} |\n"
+            f"| Available memory | {memory_available} |"
         )
         spoken_parts.append(
             f"system information for {operating_system} with {architecture} architecture"
@@ -601,90 +624,177 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
 
     applications = inventory.get("installed_applications")
     if isinstance(applications, list):
-        names = [str(item.get("name") or "") for item in applications if isinstance(item, dict)]
-        sections.append(
-            f"INSTALLED APPLICATIONS ({len(names)})\n"
-            + ("\n".join(f"- {name}" for name in names[:25]) or "No registered applications were found.")
-            + ("\n[Showing the first 25 entries.]" if len(names) > 25 else "")
+        rows = [
+            item for item in applications
+            if isinstance(item, dict)
+        ]
+        table_rows = [
+            "| Application | Discovery sources |",
+            "|---|---|",
+        ]
+        for item in rows[:25]:
+            source_labels = ", ".join(item.get("sources") or []) or "unknown"
+            table_rows.append(
+                f"| {_resource_markdown_cell(item.get('name'))} "
+                f"| {_resource_markdown_cell(source_labels)} |"
+            )
+        if not rows:
+            table_rows.append("| No registered applications found | — |")
+        suffix = (
+            f"\n\nShowing **25 of {len(rows)}** returned entries."
+            if len(rows) > 25
+            else f"\n\n**{len(rows)}** registered application entries returned."
         )
-        spoken_parts.append(f"{len(names)} registered applications")
+        sections.append(
+            "## Installed applications\n"
+            + "\n".join(table_rows)
+            + suffix
+        )
+        spoken_parts.append(f"{len(rows)} registered applications")
 
     processes = inventory.get("running_processes")
     if isinstance(processes, list):
-        lines = [
-            f"- {item.get('name')} (PID {item.get('pid')})"
-            for item in processes[:20]
+        rows = [
+            item for item in processes
             if isinstance(item, dict)
         ]
-        sections.append(
-            f"RUNNING PROCESSES ({len(processes)} returned)\n"
-            + ("\n".join(lines) or "No process data was available.")
-            + ("\n[Showing the first 20 entries.]" if len(processes) > 20 else "")
+        table_rows = [
+            "| Process | PID | Memory |",
+            "|---|---:|---:|",
+        ]
+        for item in rows[:20]:
+            memory_value = item.get("memory_kb")
+            memory_label = (
+                _format_resource_size(float(memory_value) * 1024)
+                if memory_value is not None
+                else "unknown"
+            )
+            table_rows.append(
+                f"| {_resource_markdown_cell(item.get('name'))} "
+                f"| {item.get('pid', '—')} | {memory_label} |"
+            )
+        if not rows:
+            table_rows.append("| No process data available | — | — |")
+        suffix = (
+            f"\n\nShowing **20 of {len(rows)}** returned processes."
+            if len(rows) > 20
+            else f"\n\n**{len(rows)}** processes returned."
         )
-        spoken_parts.append(f"{len(processes)} running processes returned")
+        sections.append(
+            "## Running processes\n"
+            + "\n".join(table_rows)
+            + suffix
+        )
+        spoken_parts.append(f"{len(rows)} running processes returned")
 
     windows = inventory.get("visible_windows")
     if isinstance(windows, list):
-        lines = [
-            f"- {item.get('title') or '(untitled)'} — {item.get('process_name') or 'unknown process'}"
-            for item in windows[:20]
+        rows = [
+            item for item in windows
             if isinstance(item, dict)
         ]
         foreground = inventory.get("foreground_window")
-        foreground_line = (
-            f"Foreground window: {foreground.get('title') or '(untitled)'}"
+        foreground_handle = (
+            foreground.get("handle")
             if isinstance(foreground, dict)
-            else "Foreground window: unavailable"
+            else None
+        )
+        table_rows = [
+            "| Window | Application | PID | State |",
+            "|---|---|---:|---|",
+        ]
+        for item in rows[:20]:
+            state = (
+                "**Foreground**"
+                if foreground_handle is not None
+                and item.get("handle") == foreground_handle
+                else "Visible"
+            )
+            table_rows.append(
+                f"| {_resource_markdown_cell(item.get('title'), '(untitled)')} "
+                f"| {_resource_markdown_cell(item.get('process_name'), 'unknown')} "
+                f"| {item.get('process_id', '—')} | {state} |"
+            )
+        if not rows:
+            table_rows.append("| No visible titled windows found | — | — | — |")
+        suffix = (
+            f"\n\nShowing **20 of {len(rows)}** visible windows."
+            if len(rows) > 20
+            else f"\n\n**{len(rows)}** visible windows returned."
         )
         sections.append(
-            f"VISIBLE WINDOWS ({len(windows)} returned)\n"
-            + foreground_line
-            + ("\n" + "\n".join(lines) if lines else "\nNo visible titled windows were found.")
-            + ("\n[Showing the first 20 entries.]" if len(windows) > 20 else "")
+            "## Open applications and windows\n"
+            + "\n".join(table_rows)
+            + suffix
         )
-        spoken_parts.append(f"{len(windows)} visible windows")
+        if isinstance(foreground, dict):
+            spoken_parts.append(
+                f"{len(rows)} visible windows; foreground window is "
+                f"{foreground.get('title') or 'untitled'}"
+            )
+        else:
+            spoken_parts.append(f"{len(rows)} visible windows")
 
     drives = inventory.get("drives")
     if isinstance(drives, list):
-        lines = []
-        for item in drives:
-            if not isinstance(item, dict):
-                continue
-            capacity = _format_resource_size(item.get("total_bytes"))
-            free = _format_resource_size(item.get("free_bytes"))
-            lines.append(
-                f"- {item.get('root')} ({item.get('type')}): {free} free of {capacity}"
+        rows = [
+            item for item in drives
+            if isinstance(item, dict)
+        ]
+        table_rows = [
+            "| Drive | Type | Capacity | Used | Free |",
+            "|---|---|---:|---:|---:|",
+        ]
+        for item in rows:
+            table_rows.append(
+                f"| {_resource_markdown_cell(item.get('root'))} "
+                f"| {_resource_markdown_cell(item.get('type'))} "
+                f"| {_format_resource_size(item.get('total_bytes'))} "
+                f"| {_format_resource_size(item.get('used_bytes'))} "
+                f"| {_format_resource_size(item.get('free_bytes'))} |"
             )
+        if not rows:
+            table_rows.append("| No logical drives found | — | — | — | — |")
         sections.append(
-            f"LOGICAL DRIVES ({len(drives)})\n"
-            + ("\n".join(lines) or "No logical drives were found.")
+            "## Logical drives\n"
+            + "\n".join(table_rows)
         )
-        spoken_parts.append(f"{len(drives)} logical drives")
+        spoken_parts.append(f"{len(rows)} logical drives")
 
     file_search = inventory.get("files_and_folders")
     if isinstance(file_search, dict):
-        results = file_search.get("results", [])
-        lines = [
-            f"- [{item.get('kind')}] {item.get('path')}"
-            for item in results[:25]
+        results = [
+            item for item in file_search.get("results", [])
             if isinstance(item, dict)
         ]
+        result_rows = [
+            f"- **{_resource_markdown_cell(item.get('kind'))}:** "
+            f"`{_resource_markdown_cell(item.get('path'))}`"
+            for item in results[:25]
+        ]
+        if not result_rows:
+            result_rows.append("- No matching file or folder names were found.")
         status = (
-            f"Search stopped at its {file_search.get('stop_reason')} limit."
+            f"Search stopped at the **{_resource_markdown_cell(file_search.get('stop_reason'))}** limit."
             if file_search.get("truncated")
             else "Search completed within its configured limits."
         )
         sections.append(
-            f"FILES AND FOLDERS MATCHING {file_search.get('query')!r} "
-            f"({file_search.get('result_count', len(results))} found)\n"
-            + ("\n".join(lines) or "No matching names were found.")
-            + f"\n{status}"
+            f"## File and folder matches for `{_resource_markdown_cell(file_search.get('query'))}`\n"
+            f"**{file_search.get('result_count', len(results))}** matches returned.\n\n"
+            + "\n".join(result_rows)
+            + f"\n\n{status}"
         )
         spoken_parts.append(
             f"{file_search.get('result_count', len(results))} file or folder names matching {file_search.get('query')}"
         )
 
-    message = "J.A.R.V.I.S SYSTEM RESOURCE DISCOVERY\n\n" + "\n\n".join(sections)
+    message = (
+        "# J.A.R.V.I.S — System resource report\n\n"
+        f"> Snapshot: {generated_at}  \n"
+        f"> Categories: {scope_labels or 'selected resources'}\n\n"
+        + "\n\n".join(sections)
+    )
     spoken_message = (
         "Resource discovery completed. " + "; ".join(spoken_parts) + "."
         if spoken_parts
@@ -697,6 +807,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
         summary=spoken_message,
         inventory=inventory,
     )
+
 
 
 def execute_action(
