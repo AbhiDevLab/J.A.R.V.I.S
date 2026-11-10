@@ -21,6 +21,10 @@ def test_resource_inventory_queries_use_deterministic_voice_fast_path(monkeypatc
         "list logical drives",
         "show application process relationships",
         "which processes belong to Chrome",
+        "show application states",
+        "check application state for Chrome",
+        "is Chrome responding",
+        "which applications are running right now",
         "find a file named report across all drives",
     ):
         assert should_interpret_query(query, is_voice_input=True) is False
@@ -86,6 +90,22 @@ def test_application_specific_process_queries_use_deterministic_relationship_rou
         assert action.action_type == "discover_system_resources", query
         assert action.parameters["scopes"] == ["relationships"], query
         assert action.parameters["query"] == expected, query
+
+
+def test_application_state_queries_use_deterministic_read_only_route():
+    cases = {
+        "show application states": (["application_states"], None),
+        "check application state for Chrome": (["application_states"], "Chrome"),
+        "what is the state of Brave": (["application_states"], "Brave"),
+        "is Visual Studio Code responding": (["application_states"], "Visual Studio Code"),
+        "which applications are running right now": (["application_states"], None),
+    }
+    for query, (scopes, expected_query) in cases.items():
+        action = route_command(query)
+        assert action is not None, query
+        assert action.action_type == "discover_system_resources", query
+        assert action.parameters["scopes"] == scopes, query
+        assert action.parameters.get("query") == expected_query, query
 
 
 def test_resource_discovery_is_classified_as_an_ordinary_action():
@@ -230,6 +250,53 @@ def test_resource_report_labels_installed_and_usable_memory_separately(monkeypat
     assert "Installed desktop applications" in report
     assert "Start Menu shortcuts (installation not verified)" in report
     assert "NTFS" in report
+
+
+def test_application_state_report_is_rendered_with_evidence_and_limits(monkeypatch):
+    from engine.automation import executor
+
+    monkeypatch.setattr(
+        executor,
+        "discover_system_resources",
+        lambda scopes, query=None: {
+            "schema_version": 1,
+            "scopes": ["application_states"],
+            "application_state_report": {
+                "query": "Chrome",
+                "items": [
+                    {
+                        "application": "Google Chrome",
+                        "state": "foreground",
+                        "is_running": True,
+                        "process_count": 2,
+                        "process_ids": [100, 101],
+                        "window_count": 1,
+                        "window_titles": ["Chrome - Example"],
+                        "responsiveness": "responsive",
+                    }
+                ],
+                "application_count": 1,
+                "process_sample_limit": 250,
+                "process_sample_count": 250,
+                "process_sample_truncated": True,
+                "process_inventory_available": True,
+            },
+        },
+    )
+    action = AutomationAction(
+        action_type="discover_system_resources",
+        parameters={"scopes": ["application_states"], "query": "Chrome"},
+        risk=RiskLevel.LOW,
+    )
+
+    result = executor._execute_system_resource_discovery(action)
+    report = result["message"]
+
+    assert "## Application state awareness" in report
+    assert "Google Chrome" in report
+    assert "Foreground" in report
+    assert "responsive" in report
+    assert "sample reached its configured limit" in report
 
 
 def test_application_process_relationship_report_is_structured_and_does_not_expose_paths(monkeypatch):
