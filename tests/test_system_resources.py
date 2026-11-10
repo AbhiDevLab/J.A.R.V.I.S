@@ -765,3 +765,121 @@ def test_installed_memory_reader_converts_win32_kilobytes_to_bytes(monkeypatch):
     )
 
     assert system_resources._installed_memory_bytes() == 16 * 1024 ** 3
+
+
+def test_cpu_registry_reader_returns_runtime_processor_identity(monkeypatch):
+    import sys
+
+    values = {
+        "ProcessorNameString": "13th Gen Intel(R) Core(TM) i7-13620H",
+        "Identifier": "Intel64 Family 6 Model 186 Stepping 2",
+        "VendorIdentifier": "GenuineIntel",
+        "~MHz": 2400,
+    }
+
+    class FakeKey:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeWinreg:
+        HKEY_LOCAL_MACHINE = object()
+        KEY_READ = 0x20019
+
+        @staticmethod
+        def OpenKey(root, path, reserved, access):
+            assert path == r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
+            return FakeKey()
+
+        @staticmethod
+        def QueryValueEx(key, name):
+            if name not in values:
+                raise OSError("missing")
+            return values[name], 1
+
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setitem(sys.modules, "winreg", FakeWinreg)
+
+    result = system_resources._read_cpu_registry_details()
+
+    assert result["ProcessorNameString"] == values["ProcessorNameString"]
+    assert result["VendorIdentifier"] == "GenuineIntel"
+    assert result["~MHz"] == 2400
+
+
+def test_windows_version_fields_preserve_runtime_edition_and_ubr(monkeypatch):
+    monkeypatch.setattr(system_resources, "_read_windows_version_registry", lambda: {
+        "ProductName": "Windows 10 Home Single Language",
+        "EditionID": "CoreSingleLanguage",
+        "InstallationType": "Client",
+        "DisplayVersion": "26H2",
+        "CurrentMajorVersionNumber": 10,
+        "CurrentMinorVersionNumber": 0,
+        "CurrentBuildNumber": "26300",
+        "UBR": 9711,
+    })
+
+    fields = system_resources._windows_version_fields()
+
+    assert fields["operating_system"] == "Windows 11"
+    assert fields["os_edition"] == "Home Single Language"
+    assert fields["os_release"] == "26H2"
+    assert fields["os_version"] == "10.0.26300.9711"
+    assert fields["os_build"] == "26300"
+    assert fields["os_update_revision"] == "9711"
+
+
+def test_drive_discovery_returns_runtime_volume_label_and_filesystem(monkeypatch):
+    from types import SimpleNamespace
+
+    class FakeFunction:
+        def __init__(self, callback):
+            self.callback = callback
+            self.argtypes = None
+            self.restype = None
+        def __call__(self, *args):
+            return self.callback(*args)
+
+    class FakeKernel32:
+        def __init__(self):
+            self.GetLogicalDrives = FakeFunction(lambda: 1 << 2)
+            self.GetDriveTypeW = FakeFunction(lambda root: 3)
+            def volume_info(root, volume_label, volume_size, serial, max_component,
+                            flags, filesystem, filesystem_size):
+                volume_label.value = "Windows"
+                filesystem.value = "NTFS"
+                return 1
+            self.GetVolumeInformationW = FakeFunction(volume_info)
+
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setattr(
+        system_resources.ctypes,
+        "WinDLL",
+        lambda *args, **kwargs: FakeKernel32(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        system_resources.shutil,
+        "disk_usage",
+        lambda root: SimpleNamespace(
+            total=500 * 1024 ** 3,
+            used=300 * 1024 ** 3,
+            free=200 * 1024 ** 3,
+        ),
+    )
+
+    drives = system_resources.discover_drives()
+
+    assert drives == [
+        {
+            "root": "C:\\",
+            "type": "fixed",
+            "accessible": True,
+            "volume_label": "Windows",
+            "filesystem": "NTFS",
+            "total_bytes": 500 * 1024 ** 3,
+            "used_bytes": 300 * 1024 ** 3,
+            "free_bytes": 200 * 1024 ** 3,
+        }
+    ]
