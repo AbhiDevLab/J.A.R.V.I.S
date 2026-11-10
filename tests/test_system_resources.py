@@ -1294,6 +1294,35 @@ def test_application_state_scope_collects_live_dependencies_without_exposing_pat
     assert "running_processes" not in inventory
 
 
+def test_application_state_scope_is_not_part_of_default_inventory():
+    assert "application_states" in system_resources._VALID_SCOPES
+    assert "application_states" not in system_resources._DEFAULT_SCOPES
+
+
+def test_application_state_report_does_not_claim_not_running_when_process_inventory_unavailable():
+    applications = [
+        {
+            "display_name": "Chrome",
+            "category": "installed_application",
+            "is_installed": True,
+            "_executable_names": ["chrome.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        }
+    ]
+
+    result = system_resources.build_application_state_report(
+        applications,
+        [],
+        [],
+        query="Chrome",
+        process_inventory_available=False,
+    )
+
+    assert result["items"][0]["state"] == "not_verified_process_inventory_unavailable"
+    assert result["items"][0]["is_running"] is None
+
+
 def test_application_process_relationship_query_filters_by_app_or_process():
     applications = [
         {
