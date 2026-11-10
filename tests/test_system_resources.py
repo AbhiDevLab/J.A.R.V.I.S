@@ -449,3 +449,116 @@ def test_system_resource_request_parser_does_not_capture_existing_commands(utter
 )
 def test_win32_handle_conversion_accepts_ctypes_and_callback_values(handle, expected):
     assert system_resources._handle_to_int(handle) == expected
+
+
+@pytest.mark.parametrize(
+    "metadata, expected",
+    [
+        (
+            {"ProductName": "Windows 10 Pro", "CurrentBuildNumber": "26100"},
+            "Windows 11",
+        ),
+        (
+            {"ProductName": "Windows 10 Pro", "CurrentBuildNumber": "19045"},
+            "Windows 10",
+        ),
+        (
+            {"ProductName": "Windows Server 2025", "CurrentBuildNumber": "26100"},
+            "Windows Server 2025",
+        ),
+        (
+            {"ProductName": "Windows 11 Pro", "CurrentBuildNumber": "22631"},
+            "Windows 11",
+        ),
+    ],
+)
+def test_windows_version_label_uses_build_and_preserves_server_product(metadata, expected):
+    assert system_resources._windows_version_label(metadata) == expected
+
+
+def test_windows_version_fallback_uses_build_not_platform_release(monkeypatch):
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setattr(system_resources, "_read_windows_version_registry", lambda: {})
+    monkeypatch.setattr(system_resources.platform, "release", lambda: "10")
+    monkeypatch.setattr(
+        system_resources.platform,
+        "version",
+        lambda: "10.0.26100.3476",
+    )
+
+    fields = system_resources._windows_version_fields()
+
+    assert fields["operating_system"] == "Windows 11"
+    assert fields["os_build"] == "26100"
+    assert fields["os_release"] == "Build 26100"
+
+
+def test_windows_registry_reader_uses_the_current_version_key(monkeypatch):
+    import sys
+
+    captured = {}
+    registry_values = {
+        "ProductName": "Windows 10 Pro",
+        "DisplayVersion": "24H2",
+        "CurrentBuildNumber": "26100",
+        "CurrentMajorVersionNumber": 10,
+        "CurrentMinorVersionNumber": 0,
+        "UBR": 3476,
+    }
+
+    class FakeKey:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeWinreg:
+        HKEY_LOCAL_MACHINE = object()
+        KEY_READ = 0x20019
+        KEY_WOW64_64KEY = 0x0100
+
+        @staticmethod
+        def OpenKey(root, sub_key, reserved, access):
+            captured["root"] = root
+            captured["path"] = sub_key
+            captured["reserved"] = reserved
+            captured["access"] = access
+            return FakeKey()
+
+        @staticmethod
+        def QueryValueEx(key, name):
+            if name not in registry_values:
+                raise OSError("missing value")
+            return registry_values[name], 1
+
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setitem(sys.modules, "winreg", FakeWinreg)
+
+    metadata = system_resources._read_windows_version_registry()
+
+    assert captured["path"] == r"SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+    assert captured["reserved"] == 0
+    assert captured["access"] == FakeWinreg.KEY_READ | FakeWinreg.KEY_WOW64_64KEY
+    assert metadata["CurrentBuildNumber"] == "26100"
+
+
+def test_windows_system_information_uses_detected_version_fields(monkeypatch):
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setattr(system_resources, "_memory_bytes", lambda: (32, 16))
+    monkeypatch.setattr(
+        system_resources,
+        "_windows_version_fields",
+        lambda: {
+            "operating_system": "Windows 11",
+            "os_release": "24H2",
+            "os_version": "10.0.26100.3476",
+            "os_build": "26100",
+        },
+    )
+
+    info = system_resources.get_system_information()
+
+    assert info["operating_system"] == "Windows 11"
+    assert info["os_release"] == "24H2"
+    assert info["os_build"] == "26100"
