@@ -756,7 +756,11 @@ def get_system_information() -> dict[str, Any]:
     return {
         **os_fields,
         "architecture": platform.machine() or "unknown",
-        "processor": str(cpu_data.get("ProcessorNameString") or platform.processor() or "unknown").strip(),
+        "processor": str(
+            cpu_data.get("ProcessorNameString")
+            or (platform.processor() if not _is_windows() else "Processor name unavailable")
+            or "unknown"
+        ).strip(),
         "processor_identifier": str(cpu_data.get("Identifier") or "").strip() or None,
         "processor_vendor": str(cpu_data.get("VendorIdentifier") or "").strip() or None,
         "processor_clock_mhz": cpu_clock_mhz,
