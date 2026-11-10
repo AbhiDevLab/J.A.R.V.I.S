@@ -43,5 +43,6 @@ def test_resource_response_keeps_the_oval_hidden_after_rendering():
     assert '$("#SiriWave #siri-container").hide()' in controller_js
 
     assert "keep_response_view = True" in command_py
+    assert '_safe_display("ShowSiriWave")' in command_py
     assert "if not keep_response_view:" in command_py
     assert '            "ShowHood"' in command_py
