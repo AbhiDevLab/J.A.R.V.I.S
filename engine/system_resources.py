@@ -159,6 +159,7 @@ def discover_uninstall_registry_applications() -> list[dict[str, Any]]:
                         current = records.get(key)
                         candidate = {
                             "name": canonical,
+                            "display_name": display_name,
                             "publisher": str(values.get("Publisher") or "").strip() or None,
                             "version": str(values.get("DisplayVersion") or "").strip() or None,
                             "category": category,
@@ -248,7 +249,7 @@ def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, A
     try:
         for item in discover_uninstall_registry_applications():
             add(
-                item.get("name"),
+                item.get("display_name") or item.get("name"),
                 "uninstall_registry",
                 str(item.get("category") or "installed_application"),
                 publisher=item.get("publisher"),
