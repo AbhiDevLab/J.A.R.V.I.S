@@ -318,13 +318,112 @@ def _memory_bytes() -> tuple[int | None, int | None]:
         return None, None
 
 
+def _read_windows_version_registry() -> dict[str, Any]:
+    """Read Windows product/build metadata without relying on compatibility APIs."""
+    if not _is_windows():
+        return {}
+
+    try:
+        import winreg
+
+        registry_path = r"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, registry_path) as key:
+            values: dict[str, Any] = {}
+            for name in (
+                "ProductName",
+                "DisplayVersion",
+                "ReleaseId",
+                "CurrentBuildNumber",
+                "CurrentMajorVersionNumber",
+                "CurrentMinorVersionNumber",
+                "UBR",
+            ):
+                try:
+                    values[name] = winreg.QueryValueEx(key, name)[0]
+                except OSError:
+                    continue
+            return values
+    except (ImportError, OSError, AttributeError):
+        return {}
+
+
+def _windows_version_label(metadata: dict[str, Any]) -> str:
+    """Resolve Windows 10/11 from the build, not platform.release().
+
+    Python can report release '10' for Windows 11 when the process manifest
+    does not declare Windows 11 compatibility. Windows 11 client builds start
+    at 22000; server products retain their registry product name.
+    """
+    product_name = str(metadata.get("ProductName") or "").strip()
+    try:
+        build = int(str(metadata.get("CurrentBuildNumber") or "0"))
+    except (TypeError, ValueError, OverflowError):
+        build = 0
+
+    if "server" in product_name.casefold():
+        return product_name
+    if build >= 22000:
+        return "Windows 11"
+    if build >= 10240:
+        return "Windows 10"
+    return product_name or f"Windows (build {build})" if build else "Windows"
+
+
+def _windows_version_fields() -> dict[str, str]:
+    """Return user-facing Windows release and exact build details."""
+    metadata = _read_windows_version_registry()
+    if not metadata:
+        return {
+            "operating_system": platform.system(),
+            "os_release": platform.release(),
+            "os_version": platform.version(),
+            "os_build": "unknown",
+        }
+
+    label = _windows_version_label(metadata)
+    display_version = str(
+        metadata.get("DisplayVersion")
+        or metadata.get("ReleaseId")
+        or ""
+    ).strip()
+    try:
+        major = int(metadata.get("CurrentMajorVersionNumber", 10))
+        minor = int(metadata.get("CurrentMinorVersionNumber", 0))
+        build = int(str(metadata.get("CurrentBuildNumber") or "0"))
+    except (TypeError, ValueError, OverflowError):
+        major, minor, build = 10, 0, 0
+    try:
+        update_build = int(metadata.get("UBR", 0))
+    except (TypeError, ValueError, OverflowError):
+        update_build = 0
+
+    version = f"{major}.{minor}.{build}"
+    if update_build:
+        version += f".{update_build}"
+
+    return {
+        "operating_system": label,
+        "os_release": display_version or f"Build {build}",
+        "os_version": version,
+        "os_build": str(build) if build else "unknown",
+    }
+
+
 def get_system_information() -> dict[str, Any]:
     """Return non-identifying OS, CPU, Python, and memory details."""
     memory_total, memory_available = _memory_bytes()
+    os_fields = (
+        _windows_version_fields()
+        if _is_windows()
+        else {
+            "operating_system": platform.system(),
+            "os_release": platform.release(),
+            "os_version": platform.version(),
+            "os_build": "unknown",
+        }
+    )
     return {
-        "operating_system": platform.system(),
-        "os_release": platform.release(),
-        "os_version": platform.version(),
+        **os_fields,
         "architecture": platform.machine(),
         "processor": platform.processor() or "unknown",
         "logical_cpu_count": os.cpu_count(),
