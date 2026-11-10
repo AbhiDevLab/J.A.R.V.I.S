@@ -1609,6 +1609,15 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
                 return {"scopes": ["relationships"]}
             return {"scopes": [scope]}
 
+    # Also recognize application-specific process queries whose wording does
+    # not contain the generic "application-process relationships" phrase.
+    for query_pattern in _RELATIONSHIP_QUERY_REQUESTS:
+        query_match = query_pattern.fullmatch(value)
+        if query_match:
+            query = str(query_match.group("query") or "").strip()
+            if query and query.casefold() not in {"running", "all", "system"}:
+                return {"scopes": ["relationships"], "query": query}
+
     for pattern in _FILE_SEARCH_REQUESTS:
         match = pattern.fullmatch(value)
         if match:
