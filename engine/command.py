@@ -1194,6 +1194,10 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     # Oval hidden and leave the separate SiriWave response view
                     # visible after TTS completes.
                     keep_response_view = True
+                    # Also enforce the response-screen transition for commands
+                    # submitted by the continuous-listening worker, which may
+                    # not have passed through the manual microphone button.
+                    _safe_display("ShowSiriWave")
                     # Long inventories belong in the rich response card. Do not
                     # send them through receiverText, which mirrors raw text onto
                     # the large HUD status line.
