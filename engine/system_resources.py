@@ -552,11 +552,20 @@ def discover_files_and_folders(
 
 _RESOURCE_REQUESTS = (
     (
+        "all",
+        re.compile(
+            r"^(?:please )?(?:(?:show|display|get|give me|tell me|list)(?: me)? "
+            r"(?:(?:all|full|my|this|the) )?)?(?:system|pc|computer) "
+            r"(?:resources|inventory|overview|full inventory)$",
+            re.IGNORECASE,
+        ),
+    ),
+    (
         "system",
         re.compile(
-            r"^(?:please )?(?:(?:show|display|get|give me|tell me|list) "
+            r"^(?:please )?(?:(?:show|display|get|give me|tell me|list)(?: me)? "
             r"(?:(?:my|this|the) )?)?(?:system|pc|computer) "
-            r"(?:information|info|details|overview|resources|inventory)$",
+            r"(?:information|info|details)$",
             re.IGNORECASE,
         ),
     ),
@@ -592,13 +601,12 @@ _RESOURCE_REQUESTS = (
         re.compile(
             r"^(?:please )?(?:(?:show|list|display)(?: me)? "
             r"(?:(?:all|logical|available|my) )?drives|"
-            r"what drives (?:are available|do i have)|"
-            r"show drives on this (?:pc|computer))$",
+            r"what drives? (?:are available|do i have)|"
+            r"show drives? on this (?:pc|computer))$",
             re.IGNORECASE,
         ),
     ),
-)
-_FILE_SEARCH_REQUESTS = (
+)_FILE_SEARCH_REQUESTS = (
     re.compile(
         r"^(?:please )?(?:find|search for|locate) "
         r"(?:(?:the|a|all) )?(?:files?|folders?|documents?)"
@@ -632,6 +640,8 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
 
     for scope, pattern in _RESOURCE_REQUESTS:
         if pattern.fullmatch(value):
+            if scope == "all":
+                return {"scopes": sorted(_DEFAULT_SCOPES)}
             return {"scopes": [scope]}
 
     for pattern in _FILE_SEARCH_REQUESTS:
