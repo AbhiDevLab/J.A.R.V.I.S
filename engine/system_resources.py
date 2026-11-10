@@ -628,9 +628,20 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
     for pattern in _FILE_SEARCH_REQUESTS:
         match = pattern.fullmatch(value)
         if match:
-            search_query = str(match.group("query") or "").strip().strip("\\"'")
-            if len(search_query) >= 2 and "\\x00" not in search_query:
-                return {"scopes": ["files"], "query": search_query}
+            search_query = str(match.group("query") or "").strip()
+            if (
+                len(search_query) >= 2
+                and chr(0) not in search_query
+                and not search_query.startswith(("\\", "/"))
+            ):
+                if (
+                    len(search_query) >= 2
+                    and search_query[0] == search_query[-1]
+                    and search_query[0] in {"\\"", "'"}
+                ):
+                    search_query = search_query[1:-1].strip()
+                if len(search_query) >= 2:
+                    return {"scopes": ["files"], "query": search_query}
 
     return None
 
