@@ -118,7 +118,7 @@ def test_resource_discovery_executes_without_confirmation_and_records_audit(
 
     events = list_recent_audit_events()
     assert len(events) == 2
-    assert {event["action"] if "action" in event else event["event"] for event in events} == {
+    assert {event["event"] for event in events} == {
         "requested",
         "execution_succeeded",
     }
