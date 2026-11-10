@@ -417,7 +417,7 @@ def discover_files_and_folders(
     response; nothing is persisted.
     """
     search_term = str(query or "").strip()
-    if len(search_term) < 2 or "\\x00" in search_term:
+    if len(search_term) < 2 or chr(0) in search_term:
         raise ValueError("Provide at least two non-null characters to search for.")
 
     result_limit = _bounded_limit(max_results, 50, 200)
@@ -637,7 +637,7 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
                 if (
                     len(search_query) >= 2
                     and search_query[0] == search_query[-1]
-                    and search_query[0] in {"\\"", "'"}
+                    and search_query[0] in (chr(34), chr(39))
                 ):
                     search_query = search_query[1:-1].strip()
                 if len(search_query) >= 2:
