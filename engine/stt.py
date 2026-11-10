@@ -307,9 +307,7 @@ def _transcribe_local(audio_data: sr.AudioData) -> Tuple[str, str, float]:
     ):
         print(
             "Language detection corrected from "
-            f"{language or 'unknown'} to "
-            f"{normalized_language} "
-            f"(Whisper confidence={probability:.2f})"
+            f"{language or 'unknown'} to {normalized_language}"
         )
 
     return (
@@ -342,10 +340,7 @@ def transcribe_audio(audio_data: sr.AudioData) -> Tuple[str, str, float]:
         try:
             text, language, confidence = _transcribe_local(audio_data)
             if text:
-                print(
-                    f"Detected language: {language} "
-                    f"(confidence={confidence:.2f})"
-                )
+                print(f"Detected language: {language}")
                 print(f"Transcript: {text}")
                 return text, language, confidence
             print("Local STT returned no transcript.")

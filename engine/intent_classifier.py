@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any
 
 from engine.automation.applications import (
+    canonical_application_name,
     find_application_reference,
     parse_hindi_application_command,
 )
@@ -64,6 +65,11 @@ _DIRECTORY_LIST_QUESTION = re.compile(
 _DIRECT_COMMAND = re.compile(
     r"^\s*(?:please\s+)?(?:open|launch|start|run|close|quit|exit|read|delete|remove|rename|move|copy|"
     r"create|make|install|uninstall|kill|terminate|play)\b",
+    re.IGNORECASE,
+)
+_KNOWN_APPLICATION_COMMAND = re.compile(
+    r"^\s*(?:please\s+)?(?:open|launch|start|run|close|quit|exit)\s+"
+    r"(?:the\s+)?(?P<target>.+?)\s*[.!?]*$",
     re.IGNORECASE,
 )
 
@@ -214,6 +220,14 @@ def _command_family(text: str) -> str:
     return verb
 
 
+def _is_known_application_command(text: str) -> bool:
+    """Recognize a complete command whose target is a known installed app."""
+    match = _KNOWN_APPLICATION_COMMAND.match(str(text or "").strip())
+    if not match:
+        return False
+    return canonical_application_name(match.group("target")) is not None
+
+
 def _voice_correction_threshold(default: float = 0.85) -> float:
     """Use a higher confidence floor before correcting a spoken target."""
     try:
@@ -264,6 +278,61 @@ def classify_intent(
         ):
             return _result(SemanticIntent.AUTOMATION, interpreted_query, confidence, "context_interpreter", "affirmative reply resolved to the pending concrete action")
         return _result(SemanticIntent.CONFIRMATION, raw, confidence, "pending_state", "approval target is unresolved", needs_clarification=True)
+
+    # A complete command naming a known application remains executable even
+    # when the contextual model is unavailable. If a model does propose a
+    # different target, retain the stricter correction threshold; otherwise
+    # preserve the exact recognized application and use normal authorization.
+    if voice_input and _is_known_application_command(raw):
+        if interpretation is not None:
+            contextual_query = str(
+                getattr(interpretation, "query", "") or normalized
+            ).strip()
+            target_changed = contextual_query.casefold() != raw.casefold()
+            if target_changed:
+                try:
+                    contextual_confidence = float(
+                        getattr(interpretation, "confidence", 0.0) or 0.0
+                    )
+                except (TypeError, ValueError):
+                    contextual_confidence = 0.0
+                contextual_intent = str(
+                    getattr(interpretation, "intent", "unknown") or "unknown"
+                ).strip().lower()
+                needs_clarification = bool(
+                    getattr(interpretation, "needs_clarification", False)
+                )
+                if (
+                    not needs_clarification
+                    and contextual_confidence >= max(_voice_correction_threshold(), 0.97)
+                    and contextual_intent == "automation"
+                    and _explicit_automation(contextual_query)
+                    and _command_family(raw)
+                    and _command_family(raw) == _command_family(contextual_query)
+                ):
+                    return _result(
+                        SemanticIntent.AUTOMATION,
+                        contextual_query,
+                        contextual_confidence,
+                        "context_interpreter",
+                        "near-certain voice correction preserved the requested application action",
+                    )
+                return _result(
+                    SemanticIntent.CLARIFICATION,
+                    raw,
+                    contextual_confidence,
+                    "voice_interpretation_unresolved",
+                    "a known application target was changed without near-certain evidence",
+                    needs_clarification=True,
+                )
+
+        return _result(
+            SemanticIntent.AUTOMATION,
+            raw,
+            0.99,
+            "known_application_command",
+            "complete command names a known application; contextual interpretation is not required",
+        )
 
     # Explicit text-entry requests must win over broad application-content
     # markers such as "text" or "inside". Otherwise a command to type into

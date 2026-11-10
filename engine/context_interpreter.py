@@ -60,29 +60,23 @@ _TARGET_ACTION_PATTERN = re.compile(
     r"play|send|install|uninstall|kill|terminate)\b",
     re.IGNORECASE,
 )
-_LAUNCH_PATTERN = re.compile(
-    r"^\s*(?:please\s+)?(?:open|launch|start|run)\s+(?:the\s+)?(.+?)\s*[.!?]*$",
+_APPLICATION_COMMAND_PATTERN = re.compile(
+    r"^\s*(?:please\s+)?(?:open|launch|start|run|close|quit|exit)\s+"
+    r"(?:the\s+)?(.+?)\s*[.!?]*$",
     re.IGNORECASE,
 )
 
 
-def _is_known_application_launch(transcript: str) -> bool:
-    """Identify a known app launch; voice callers still receive semantic review."""
-    match = _LAUNCH_PATTERN.match(str(transcript or "").strip())
+def _is_known_application_command(transcript: str) -> bool:
+    """Return True when a complete open/close command names one known app."""
+    match = _APPLICATION_COMMAND_PATTERN.match(str(transcript or "").strip())
     if not match:
         return False
 
     try:
-        from engine.automation.applications import (
-            APPLICATIONS,
-            ALIASES,
-            normalize_application_name,
-        )
+        from engine.automation.applications import canonical_application_name
 
-        target = normalize_application_name(match.group(1))
-        known_names = set(APPLICATIONS) | set(ALIASES)
-        known_names |= set(ALIASES.values())
-        return target in known_names
+        return canonical_application_name(match.group(1)) is not None
     except Exception:
         return False
 
@@ -98,17 +92,15 @@ def should_interpret_query(
 ) -> bool:
     """Return whether this utterance benefits from contextual interpretation.
 
-    Clear known application launches are the fast path. Interpret when previous
-    context, relevant memory, pending interaction state, follow-up language, or
-    a target-sensitive action makes ambiguity/STT correction materially useful.
+    Exact known application open/close commands use a deterministic fast path.
+    Interpret when a pending interaction, relevant context, follow-up language,
+    or an ambiguous target makes correction materially useful.
     In auto mode, other microphone utterances are interpreted too, while plain
     typed text stays on the direct path unless a contextual signal applies.
     """
     mode = str(os.getenv("JARVIS_INTERPRETATION_MODE", "auto")).strip().lower()
     if mode in {"off", "0", "false", "disabled"}:
         return False
-    if mode in {"always", "on", "1", "true"}:
-        return bool(str(transcript or "").strip())
 
     raw = str(transcript or "").strip()
     if not raw:
@@ -118,22 +110,27 @@ def should_interpret_query(
     if not state_context:
         state_context = get_interaction_state().as_context()
 
+    # A pending clarification/confirmation must retain contextual handling.
+    if state_context:
+        return True
+
+    # An exact, known application command is already unambiguous. Do not make
+    # ordinary desktop control depend on an external interpretation service.
+    if _is_known_application_command(raw):
+        return False
+
+    if mode in {"always", "on", "1", "true"}:
+        return True
+
     if any((
         str(conversation_context or "").strip(),
         str(memory_context or "").strip(),
         str(profile_context or "").strip(),
-        state_context,
     )):
         return True
 
     if _FOLLOW_UP_PATTERN.search(raw):
         return True
-
-    if _is_known_application_launch(raw):
-        # Speech recognition can turn an intended application name into a
-        # different-looking phrase. Keep typed known-app launches on the fast
-        # path, but semantically review voice launches before routing.
-        return bool(is_voice_input)
 
     # Target-sensitive requests should be interpreted before deterministic
     # routing even if they are the first utterance in a new session.
