@@ -19,6 +19,8 @@ def test_resource_inventory_queries_use_deterministic_voice_fast_path(monkeypatc
         "show running processes",
         "what apps are open",
         "list logical drives",
+        "show application process relationships",
+        "which processes belong to Chrome",
         "find a file named report across all drives",
     ):
         assert should_interpret_query(query, is_voice_input=True) is False
@@ -53,6 +55,8 @@ def test_resource_inventory_requests_route_to_typed_read_only_actions():
             ["applications", "drives", "processes", "system", "windows"],
             None,
         ),
+        "show application process relationships": (["relationships"], None),
+        "which processes belong to Chrome": (["relationships"], "Chrome"),
         "list installed applications": (["applications"], None),
         "show running processes": (["processes"], None),
         "what apps are open": (["windows"], None),
