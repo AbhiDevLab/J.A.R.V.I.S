@@ -284,7 +284,7 @@ def classify_intent(
     # different target, retain the stricter correction threshold; otherwise
     # preserve the exact recognized application and use normal authorization.
     if voice_input and _is_known_application_command(raw):
-        if voice_input and interpretation is not None:
+        if interpretation is not None:
             contextual_query = str(
                 getattr(interpretation, "query", "") or normalized
             ).strip()
