@@ -3458,3 +3458,44 @@ body.history-open #ChatBtn {
     outline: 2px solid rgba(0, 170, 255, 0.8);
     outline-offset: 2px;
 }
+
+
+/* System resource inventories use the rich HUD card, not the oversized
+   transient status line. Keep the report inside the JARVIS window and let
+   its content scroll independently from the card header/footer. */
+.hood-response-card.hood-response-resource-report {
+    max-height: min(68vh, 640px);
+}
+
+.hood-response-card.hood-response-resource-report .jarvis-response-body {
+    max-height: min(54vh, 520px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+
+.hood-response-card.hood-response-resource-report
+.jarvis-response-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.hood-response-card.hood-response-resource-report
+.jarvis-response-body::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.hood-response-card.hood-response-resource-report
+.jarvis-response-body::-webkit-scrollbar-thumb {
+    background: rgba(0, 170, 255, 0.48);
+    border-radius: 10px;
+}
+
+@media (max-height: 650px) {
+    .hood-response-card.hood-response-resource-report {
+        max-height: 76vh;
+    }
+
+    .hood-response-card.hood-response-resource-report .jarvis-response-body {
+        max-height: 61vh;
+    }
+}
