@@ -328,7 +328,11 @@ def _extract_registered_executable_path(value: Any) -> str | None:
     try:
         shortcuts = _application_discovery.discover_application_shortcuts()
         for display_name, shortcut_path in shortcuts:
-            target_path = _application_discovery.resolve_shortcut_target(shortcut_path)
+            target_path = (
+                _application_discovery.resolve_shortcut_target(shortcut_path)
+                if include_relationship_metadata
+                else None
+            )
             target_name = ntpath.basename(str(target_path or "")).casefold()
             add(
                 display_name,
@@ -383,7 +387,11 @@ def _extract_registered_executable_path(value: Any) -> str | None:
                         else value
                     )
                     for key, value in record.items()
-                    if key not in {"sources", "_executable_paths", "_install_locations"}
+                    if key != "sources"
+                    and (
+                        include_relationship_metadata
+                        or not str(key).startswith("_")
+                    )
                 },
                 "sources": sorted(record["sources"]),
             }
@@ -526,6 +534,8 @@ def build_application_process_relationships(
     applications: list[dict[str, Any]],
     processes: list[dict[str, Any]],
     windows: list[dict[str, Any]],
+    *,
+    query: str | None = None,
 ) -> dict[str, Any]:
     """Join live processes to application evidence and windows by exact IDs.
 
@@ -678,13 +688,29 @@ def build_application_process_relationships(
             }
         )
 
+    if query and str(query).strip():
+        needle = _application_discovery.normalize_application_name(str(query))
+        rows = [
+            item for item in rows
+            if needle in _application_discovery.normalize_application_name(
+                item.get("application", "")
+            )
+            or needle in _application_discovery.normalize_application_name(
+                item.get("process", "")
+            )
+        ]
+
     rows.sort(key=lambda item: (item["application"].casefold(), item["pid"]))
+    matched = sum(1 for item in rows if item["match_status"] == "matched")
+    ambiguous = sum(1 for item in rows if item["match_status"] == "ambiguous")
+    unmapped = sum(1 for item in rows if item["match_status"] == "unmapped")
     return {
         "items": rows,
         "process_count": len(rows),
         "matched_count": matched,
         "ambiguous_count": ambiguous,
         "unmapped_count": unmapped,
+        "query": str(query).strip() if query else None,
         "visible_window_count": sum(
             int(item["window_count"]) for item in rows
         ),
@@ -1474,7 +1500,7 @@ _VALID_SCOPES = {
     "relationships",
     "files",
 }
-_DEFAULT_SCOPES = _VALID_SCOPES - {"files"}
+_DEFAULT_SCOPES = _VALID_SCOPES - {"files", "relationships"}
 
 
 def discover_system_resources(
@@ -1515,40 +1541,56 @@ def discover_system_resources(
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "scopes": sorted(selected),
     }
+    relationships_requested = "relationships" in selected
+    applications = None
+    processes = None
+    windows = None
+
     if "system" in selected:
         inventory["system"] = get_system_information()
     if "applications" in selected:
-        inventory["installed_applications"] = discover_installed_applications()
-    relationships_requested = "relationships" in selected
+        applications = discover_installed_applications(
+            include_relationship_metadata=relationships_requested
+        )
+        inventory["installed_applications"] = applications
     if "processes" in selected or relationships_requested:
-        inventory["running_processes"] = discover_running_processes(
+        processes = discover_running_processes(
             max_items=max_processes,
             include_image_paths=relationships_requested,
         )
+        if "processes" in selected:
+            inventory["running_processes"] = processes
     if "windows" in selected or relationships_requested:
         windows = discover_visible_windows(max_items=max_windows)
-        inventory["visible_windows"] = windows
-        inventory["foreground_window"] = next(
-            (window for window in windows if window.get("is_foreground")),
-            None,
-        )
+        if "windows" in selected:
+            inventory["visible_windows"] = windows
+            inventory["foreground_window"] = next(
+                (window for window in windows if window.get("is_foreground")),
+                None,
+            )
     if "drives" in selected:
         inventory["drives"] = discover_drives()
     if relationships_requested:
-        applications = inventory.get("installed_applications")
-        if not isinstance(applications, list):
-            applications = discover_installed_applications()
-        processes = inventory.get("running_processes", [])
-        windows = inventory.get("visible_windows", [])
+        if applications is None:
+            applications = discover_installed_applications(
+                include_relationship_metadata=True
+            )
         inventory["application_process_relationships"] = (
             build_application_process_relationships(
                 applications,
-                processes,
-                windows,
+                processes or [],
+                windows or [],
+                query=query,
             )
         )
-        for process in processes:
+        # The report exposes process names/PIDs and relationships, never the
+        # private full image paths used for exact in-memory matching.
+        for process in inventory.get("running_processes", []):
             process.pop("_image_path", None)
+        for app in inventory.get("installed_applications", []):
+            app.pop("_executable_paths", None)
+            app.pop("_install_locations", None)
+            app.pop("_executable_names", None)
     if "files" in selected:
         inventory["files_and_folders"] = discover_files_and_folders(
             query,
@@ -1635,7 +1677,11 @@ def discover_application_path_executables() -> list[dict[str, Any]]:
     return list(found.values())
 
 
-def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, Any]]:
+def discover_installed_applications(
+    *,
+    max_items: int = 500,
+    include_relationship_metadata: bool = False,
+) -> list[dict[str, Any]]:
     """Discover applications and classify them by the strength of runtime evidence.
 
     Uninstall registry records are conventional installed applications.
