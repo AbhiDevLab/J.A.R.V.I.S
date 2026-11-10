@@ -409,13 +409,25 @@ def discover_installed_applications(
 
     try:
         shortcuts = _application_discovery.discover_application_shortcuts()
-        for display_name, shortcut_path in shortcuts:
+        for display_name, shortcut_path in shortcuts[:500]:
             target_path = (
                 _application_discovery.resolve_shortcut_target(shortcut_path)
                 if include_relationship_metadata
                 else None
             )
             target_name = ntpath.basename(str(target_path or "")).casefold()
+            if target_path and (
+                not target_name.endswith(".exe")
+                or target_name in {
+                    "explorer.exe",
+                    "applicationframehost.exe",
+                    "rundll32.exe",
+                    "shellhost.exe",
+                }
+                or not Path(target_path).is_file()
+            ):
+                target_path = None
+                target_name = ""
             add(
                 display_name,
                 "start_menu_shortcut",
