@@ -1097,6 +1097,203 @@ def test_relationship_query_supports_multiple_application_names():
     assert result["process_count"] == 2
 
 
+def test_application_state_report_distinguishes_foreground_background_and_not_running():
+    applications = [
+        {
+            "display_name": "Google Chrome",
+            "category": "installed_application",
+            "is_installed": True,
+            "_executable_names": ["chrome.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        },
+        {
+            "display_name": "Brave",
+            "category": "installed_application",
+            "is_installed": True,
+            "_executable_names": ["brave.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        },
+        {
+            "display_name": "Notepad",
+            "category": "packaged_application",
+            "is_installed": True,
+            "_executable_names": ["notepad.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        },
+    ]
+    processes = [
+        {"name": "chrome.exe", "pid": 100},
+        {"name": "brave.exe", "pid": 200},
+    ]
+    windows = [
+        {
+            "process_id": 100,
+            "title": "Chrome",
+            "is_foreground": True,
+            "window_state": "foreground",
+            "responsiveness": "responsive",
+        }
+    ]
+
+    result = system_resources.build_application_state_report(
+        applications, processes, windows, process_sample_limit=250
+    )
+    by_name = {item["application"]: item for item in result["items"]}
+
+    assert by_name["Google Chrome"]["state"] == "foreground"
+    assert by_name["Google Chrome"]["is_running"] is True
+    assert by_name["Google Chrome"]["responsiveness"] == "responsive"
+    assert by_name["Google Chrome"]["process_ids"] == [100]
+    assert by_name["Brave"]["state"] == "running_background"
+    assert by_name["Brave"]["is_running"] is True
+    assert by_name["Brave"]["responsiveness"] == "not_checked_no_window"
+    assert by_name["Notepad"]["state"] == "not_running"
+    assert by_name["Notepad"]["is_running"] is False
+    assert result["process_sample_truncated"] is False
+
+
+def test_application_state_report_does_not_claim_closed_when_process_sample_is_full():
+    applications = [
+        {
+            "display_name": "Notepad",
+            "category": "packaged_application",
+            "is_installed": True,
+            "_executable_names": ["notepad.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        }
+    ]
+    processes = [{"name": "unrelated.exe", "pid": 500}]
+
+    result = system_resources.build_application_state_report(
+        applications,
+        processes,
+        [],
+        query="Notepad",
+        process_sample_limit=1,
+    )
+
+    assert result["process_sample_truncated"] is True
+    assert result["items"][0]["state"] == "not_verified_process_sample_limit"
+    assert result["items"][0]["is_running"] is None
+
+
+def test_discover_window_states_adds_minimized_and_responsiveness_flags(monkeypatch):
+    import ctypes
+    from ctypes import wintypes
+
+    class FakeFunction:
+        def __init__(self, values):
+            self.values = values
+            self.argtypes = None
+            self.restype = None
+
+        def __call__(self, hwnd):
+            handle = getattr(hwnd, "value", hwnd)
+            return self.values.get(int(handle or 0), False)
+
+    class FakeUser32:
+        IsIconic = FakeFunction({2: True})
+        IsHungAppWindow = FakeFunction({1: True, 2: False})
+
+    monkeypatch.setattr(
+        system_resources,
+        "discover_visible_windows",
+        lambda max_items=200: [
+            {
+                "handle": 1,
+                "process_id": 10,
+                "title": "Foreground App",
+                "is_foreground": True,
+            },
+            {
+                "handle": 2,
+                "process_id": 20,
+                "title": "Minimized App",
+                "is_foreground": False,
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        system_resources,
+        "_load_windows_apis",
+        lambda: (FakeUser32(), object(), wintypes),
+    )
+
+    rows = system_resources.discover_window_states()
+    by_title = {item["title"]: item for item in rows}
+
+    assert by_title["Foreground App"]["window_state"] == "foreground"
+    assert by_title["Foreground App"]["responsiveness"] == "unresponsive"
+    assert by_title["Minimized App"]["window_state"] == "minimized"
+    assert by_title["Minimized App"]["responsiveness"] == "responsive"
+
+
+def test_application_state_scope_collects_live_dependencies_without_exposing_paths(monkeypatch):
+    calls = []
+    private_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    monkeypatch.setattr(
+        system_resources,
+        "discover_installed_applications",
+        lambda **kwargs: (
+            calls.append(("applications", kwargs))
+            or [{
+                "display_name": "Google Chrome",
+                "category": "installed_application",
+                "is_installed": True,
+                "_executable_names": ["chrome.exe"],
+                "_executable_paths": [system_resources._normalize_executable_path(private_path)],
+                "_install_locations": [],
+            }]
+        ),
+    )
+    monkeypatch.setattr(
+        system_resources,
+        "discover_running_processes",
+        lambda **kwargs: (
+            calls.append(("processes", kwargs))
+            or [{
+                "name": "chrome.exe",
+                "pid": 100,
+                "_image_path": system_resources._normalize_executable_path(private_path),
+            }]
+        ),
+    )
+    monkeypatch.setattr(
+        system_resources,
+        "discover_window_states",
+        lambda **kwargs: (
+            calls.append(("windows", kwargs))
+            or [{
+                "handle": 1,
+                "process_id": 100,
+                "title": "Chrome",
+                "is_foreground": True,
+                "window_state": "foreground",
+                "responsiveness": "responsive",
+            }]
+        ),
+    )
+
+    inventory = system_resources.discover_system_resources(
+        ["application_states"], query="Chrome"
+    )
+
+    assert [name for name, _ in calls] == ["applications", "processes", "windows"]
+    assert calls[0][1]["include_relationship_metadata"] is True
+    assert calls[1][1]["include_image_paths"] is True
+    report = inventory["application_state_report"]
+    assert report["items"][0]["application"] == "Google Chrome"
+    assert report["items"][0]["state"] == "foreground"
+    assert report["items"][0]["responsiveness"] == "responsive"
+    assert private_path.casefold() not in str(inventory).casefold()
+    assert "installed_applications" not in inventory
+    assert "running_processes" not in inventory
+
+
 def test_application_process_relationship_query_filters_by_app_or_process():
     applications = [
         {
