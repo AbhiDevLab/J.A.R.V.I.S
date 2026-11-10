@@ -592,7 +592,7 @@ _RESOURCE_REQUESTS = (
 _FILE_SEARCH_REQUESTS = (
     re.compile(
         r"^(?:please )?(?:find|search for|locate) "
-        r"(?:the |a )?(?:files?|folders?|documents?)"
+        r"(?:(?:the|a|all) )?(?:files?|folders?|documents?)"
         r"(?: named| called| matching)? (?P<query>.+?) "
         r"(?:across|on|in) (?:all|every|accessible) drives$",
         re.IGNORECASE,
@@ -640,6 +640,12 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
                     and search_query[0] in (chr(34), chr(39))
                 ):
                     search_query = search_query[1:-1].strip()
+                search_query = re.sub(
+                    r"^(?:(?:a|the) )?(?:file|folder|document)(?: named| called| matching)? ",
+                    "",
+                    search_query,
+                    flags=re.IGNORECASE,
+                ).strip()
                 if len(search_query) >= 2:
                     return {"scopes": ["files"], "query": search_query}
 
