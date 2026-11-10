@@ -700,7 +700,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             for item in category_rows[:25]:
                 source_labels = ", ".join(item.get("sources") or []) or "unknown"
                 table_rows.append(
-                    f"| {_resource_markdown_cell(item.get('name'))} "
+                    f"| {_resource_markdown_cell(item.get('display_name') or item.get('name'))} "
                     f"| {_resource_markdown_cell(item.get('publisher'))} "
                     f"| {_resource_markdown_cell(item.get('version'))} "
                     f"| {_resource_markdown_cell(source_labels)} |"
