@@ -65,6 +65,12 @@ def test_installed_app_discovery_deduplicates_names_and_keeps_sources(monkeypatc
     ]
     assert indexed["telegram"] == ["start_menu_shortcut"]
     assert indexed["android studio"] == ["start_menu_app_id"]
+    by_name = {row["name"]: row for row in rows}
+    assert by_name["chrome"]["category"] == "packaged_application"
+    assert by_name["chrome"]["is_installed"] is True
+    assert by_name["chrome"]["display_name"] == "Chrome"
+    assert by_name["telegram"]["category"] == "shortcut_only"
+    assert by_name["telegram"]["is_installed"] is None
     assert all("path" not in row and "app_id" not in row for row in rows)
 
 
