@@ -1108,3 +1108,111 @@ def test_application_path_normalization_and_icon_extraction_are_conservative():
     assert system_resources._extract_registered_executable_path(
         r"C:\\Program Files\\Sample\\sample.dll,0"
     ) is None
+
+
+def test_application_path_registry_evidence_returns_existing_executable_only(monkeypatch, tmp_path):
+    import sys
+
+    executable = tmp_path / "sample.exe"
+    executable.write_bytes(b"test executable")
+
+    class FakeKey:
+        def __init__(self, name):
+            self.name = name
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeWinreg:
+        HKEY_LOCAL_MACHINE = object()
+        HKEY_CURRENT_USER = object()
+        KEY_READ = 0x20019
+        KEY_WOW64_64KEY = 0x0100
+        KEY_WOW64_32KEY = 0x0200
+
+        @staticmethod
+        def OpenKey(root, path, reserved=0, access=0):
+            if path == r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths":
+                return FakeKey("parent")
+            if path == "sample.exe":
+                return FakeKey("sample.exe")
+            raise OSError("missing key")
+
+        @staticmethod
+        def EnumKey(parent, index):
+            if index == 0:
+                return "sample.exe"
+            raise OSError("no more entries")
+
+        @staticmethod
+        def QueryValueEx(key, name):
+            if name is None:
+                return str(executable), 1
+            raise OSError("missing value")
+
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setitem(sys.modules, "winreg", FakeWinreg)
+
+    entries = system_resources.discover_application_path_executables()
+
+    assert len(entries) == 1
+    assert entries[0]["name"] == "sample"
+    assert entries[0]["executable_name"] == "sample.exe"
+    assert entries[0]["path_verified"] is True
+    assert entries[0]["executable_path"] == system_resources._normalize_executable_path(
+        str(executable)
+    )
+
+
+def test_application_path_registry_ignores_non_executable_and_missing_targets(monkeypatch):
+    import sys
+
+    entries = {
+        "library.dll": r"C:\Apps\library.dll",
+        "missing.exe": r"C:\Apps\missing.exe",
+    }
+
+    class FakeKey:
+        def __init__(self, name):
+            self.name = name
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeWinreg:
+        HKEY_LOCAL_MACHINE = object()
+        HKEY_CURRENT_USER = object()
+        KEY_READ = 0x20019
+
+        @staticmethod
+        def OpenKey(root, path, reserved=0, access=0):
+            if path == r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths":
+                return FakeKey("parent")
+            if path in entries:
+                return FakeKey(path)
+            raise OSError("missing key")
+
+        @staticmethod
+        def EnumKey(parent, index):
+            names = list(entries)
+            if index >= len(names):
+                raise OSError("no more entries")
+            return names[index]
+
+        @staticmethod
+        def QueryValueEx(key, name):
+            return entries[key.name], 1
+
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
+    monkeypatch.setattr(
+        system_resources.Path,
+        "is_file",
+        lambda self: False,
+    )
+    monkeypatch.setitem(sys.modules, "winreg", FakeWinreg)
+
+    rows = system_resources.discover_application_path_executables()
+
+    assert rows == []
