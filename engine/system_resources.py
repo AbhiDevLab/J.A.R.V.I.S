@@ -326,8 +326,13 @@ def _read_windows_version_registry() -> dict[str, Any]:
     try:
         import winreg
 
-        registry_path = r"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, registry_path) as key:
+        registry_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            registry_path,
+            0,
+            winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0),
+        ) as key:
             values: dict[str, Any] = {}
             for name in (
                 "ProductName",
@@ -373,11 +378,27 @@ def _windows_version_fields() -> dict[str, str]:
     """Return user-facing Windows release and exact build details."""
     metadata = _read_windows_version_registry()
     if not metadata:
+        # platform.release() may report "10" for Windows 11 when an
+        # application compatibility manifest is in effect. Prefer the actual
+        # numeric build from platform.version(); do not treat "10" as proof
+        # that the operating system is Windows 10.
+        raw_version = platform.version()
+        build_match = re.search(r"(?:^|\.)(\d{5,})(?:\.|$)", raw_version)
+        try:
+            build = int(build_match.group(1)) if build_match else 0
+        except (TypeError, ValueError, OverflowError):
+            build = 0
+        if build >= 22000:
+            label = "Windows 11"
+        elif build >= 10240:
+            label = "Windows 10"
+        else:
+            label = "Windows (version unavailable)"
         return {
-            "operating_system": platform.system(),
-            "os_release": platform.release(),
-            "os_version": platform.version(),
-            "os_build": "unknown",
+            "operating_system": label,
+            "os_release": f"Build {build}" if build else "Version metadata unavailable",
+            "os_version": raw_version,
+            "os_build": str(build) if build else "unknown",
         }
 
     label = _windows_version_label(metadata)
