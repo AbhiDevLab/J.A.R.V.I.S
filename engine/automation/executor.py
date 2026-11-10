@@ -805,6 +805,77 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
         else:
             spoken_parts.append(f"{len(rows)} visible windows")
 
+    relationships = inventory.get("application_process_relationships")
+    if isinstance(relationships, dict):
+        rows = [
+            item for item in relationships.get("items", [])
+            if isinstance(item, dict)
+        ]
+        table_rows = [
+            "| Application | Process | PID | Match evidence | Windows |",
+            "|---|---|---:|---|---:|",
+        ]
+        for item in rows[:40]:
+            basis_labels = {
+                "exact_executable_path": "Exact executable path",
+                "inside_registered_install_location": "Inside registered install folder",
+                "unique_executable_name": "Unique executable name",
+                "executable_name_claimed_by_multiple_apps": "Ambiguous executable name",
+                "duplicate_executable_path_evidence": "Duplicate path evidence",
+                "overlapping_install_locations": "Overlapping install folders",
+                "unmatched": "No verified application match",
+            }
+            basis = basis_labels.get(
+                str(item.get("match_basis") or ""),
+                str(item.get("match_basis") or "unknown"),
+            )
+            table_rows.append(
+                f"| {_resource_markdown_cell(item.get('application'))} "
+                f"| {_resource_markdown_cell(item.get('process'))} "
+                f"| {item.get('pid', '—')} "
+                f"| {_resource_markdown_cell(basis)} "
+                f"| {item.get('window_count', 0)} |"
+            )
+            titles = [
+                _resource_markdown_cell(title)
+                for title in item.get("window_titles", [])
+                if title
+            ]
+            if titles:
+                table_rows.append(
+                    f"| ↳ Window titles | {_resource_markdown_cell('; '.join(titles))} "
+                    "| — | Joined by exact PID | — |"
+                )
+        if not rows:
+            table_rows.append("| No process relationships returned | — | — | — | — |")
+
+        query_label = relationships.get("query")
+        summary = (
+            f"**{relationships.get('matched_count', 0)}** mapped, "
+            f"**{relationships.get('ambiguous_count', 0)}** ambiguous, "
+            f"**{relationships.get('unmapped_count', 0)}** unmapped "
+            f"out of **{relationships.get('process_count', len(rows))}** processes."
+        )
+        if query_label:
+            summary = (
+                f"Filtered for **{_resource_markdown_cell(query_label)}**. "
+                + summary
+            )
+        sections.append(
+            "## Application–process relationships\n"
+            + summary
+            + "\n\n"
+            + "\n".join(table_rows[:81])
+            + "\n\nRelationships use executable path, registered install location, "
+              "or a unique executable name. Windows are joined to processes by exact PID. "
+              "Ambiguous or inaccessible matches are not guessed."
+        )
+        spoken_parts.append(
+            f"{relationships.get('matched_count', 0)} application-process relationships mapped; "
+            f"{relationships.get('ambiguous_count', 0)} ambiguous and "
+            f"{relationships.get('unmapped_count', 0)} unmapped"
+        )
+
     drives = inventory.get("drives")
     if isinstance(drives, list):
         rows = [
