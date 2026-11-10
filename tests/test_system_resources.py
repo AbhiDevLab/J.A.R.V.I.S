@@ -34,6 +34,13 @@ def test_tasklist_parser_handles_empty_malformed_and_unavailable_memory():
 
 
 def test_installed_app_discovery_deduplicates_names_and_keeps_sources(monkeypatch):
+    # Isolate the newer path-verified App Paths collector; this test covers
+    # the legacy name-only fallback below.
+    monkeypatch.setattr(
+        system_resources,
+        "discover_application_path_executables",
+        lambda: [],
+    )
     monkeypatch.setattr(
         system_resources,
         "discover_uninstall_registry_applications",
@@ -84,6 +91,12 @@ def test_installed_app_discovery_is_resilient_when_windows_sources_fail(monkeypa
         raise OSError("registry unavailable")
 
     monkeypatch.setattr(
+        system_resources,
+        "discover_application_path_executables",
+        fail,
+    )
+
+    monkeypatch.setattr(
         system_resources._application_discovery,
         "discover_application_shortcuts",
         fail,
@@ -102,6 +115,11 @@ def test_installed_app_discovery_is_resilient_when_windows_sources_fail(monkeypa
 
 
 def test_installed_app_discovery_respects_result_limit(monkeypatch):
+    monkeypatch.setattr(
+        system_resources,
+        "discover_application_path_executables",
+        lambda: [],
+    )
     monkeypatch.setattr(
         system_resources,
         "discover_uninstall_registry_applications",
@@ -717,6 +735,11 @@ def test_uninstall_registry_discovery_separates_apps_from_windows_components(mon
 
 
 def test_application_inventory_does_not_promote_shortcuts_to_installed_apps(monkeypatch):
+    monkeypatch.setattr(
+        system_resources,
+        "discover_application_path_executables",
+        lambda: [],
+    )
     monkeypatch.setattr(
         system_resources,
         "discover_uninstall_registry_applications",
