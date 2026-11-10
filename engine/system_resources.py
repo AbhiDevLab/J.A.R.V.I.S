@@ -541,6 +541,100 @@ def discover_files_and_folders(
     }
 
 
+_RESOURCE_REQUESTS = (
+    (
+        "system",
+        re.compile(
+            r"^(?:please )?(?:(?:show|display|get|give me|tell me|list) "
+            r"(?:(?:my|this|the) )?)?(?:system|pc|computer) "
+            r"(?:information|info|details|overview|resources|inventory)$",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "applications",
+        re.compile(
+            r"^(?:please )?(?:(?:list|show|display|find)(?: me)? "
+            r"(?:all )?(?:installed )?(?:apps|applications|programs|software)|"
+            r"(?:what|which) (?:apps|applications|programs|software) are installed)$",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "processes",
+        re.compile(
+            r"^(?:please )?(?:(?:show|list|display)(?: me)? "
+            r"(?:all )?(?:running )?(?:processes|tasks)|"
+            r"what (?:processes|tasks) are running)$",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "windows",
+        re.compile(
+            r"^(?:please )?(?:(?:show|list|display)(?: me)? "
+            r"(?:the )?(?:active|open|visible) (?:windows|apps|applications)|"
+            r"what (?:apps|applications|windows) are open)$",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "drives",
+        re.compile(
+            r"^(?:please )?(?:(?:show|list|display)(?: me)? "
+            r"(?:(?:all|logical|available|my) )?drives|"
+            r"what drives (?:are available|do i have)|"
+            r"show drives on this (?:pc|computer))$",
+            re.IGNORECASE,
+        ),
+    ),
+)
+_FILE_SEARCH_REQUESTS = (
+    re.compile(
+        r"^(?:please )?(?:find|search for|locate) "
+        r"(?:the |a )?(?:files?|folders?|documents?)"
+        r"(?: named| called| matching)? (?P<query>.+?) "
+        r"(?:across|on|in) (?:all|every|accessible) drives$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:please )?(?:search|scan) (?:all|every|accessible) drives "
+        r"for (?P<query>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:please )?(?:find|search for|locate) (?P<query>.+?) "
+        r"(?:across|on|in) (?:all|every|accessible) drives$",
+        re.IGNORECASE,
+    ),
+)
+
+
+def parse_system_resource_request(text: str) -> dict[str, Any] | None:
+    """Parse explicit, deterministic system-inventory requests.
+
+    Full-drive filename search is recognized only when the user explicitly
+    names all/every/accessible drives. Ordinary file requests keep their
+    existing scoped filesystem routing.
+    """
+    value = " ".join(str(text or "").strip().rstrip(".!?").split())
+    if not value:
+        return None
+
+    for scope, pattern in _RESOURCE_REQUESTS:
+        if pattern.fullmatch(value):
+            return {"scopes": [scope]}
+
+    for pattern in _FILE_SEARCH_REQUESTS:
+        match = pattern.fullmatch(value)
+        if match:
+            search_query = str(match.group("query") or "").strip().strip("\\"'")
+            if len(search_query) >= 2 and "\\x00" not in search_query:
+                return {"scopes": ["files"], "query": search_query}
+
+    return None
+
+
 _VALID_SCOPES = {"system", "applications", "processes", "windows", "drives", "files"}
 _DEFAULT_SCOPES = _VALID_SCOPES - {"files"}
 
