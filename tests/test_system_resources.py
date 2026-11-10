@@ -1012,6 +1012,91 @@ def test_application_process_relationships_prefer_paths_and_join_windows_by_pid(
     assert result["unmapped_count"] == 1
 
 
+def test_duplicate_exact_path_prefers_unique_installed_app_registration():
+    shared_path = r"C:\Program Files\Microsoft VS Code\Code.exe"
+    applications = [
+        {
+            "name": "code",
+            "display_name": "code",
+            "category": "registered_executable",
+            "is_installed": None,
+            "_executable_names": ["code.exe"],
+            "_executable_paths": [shared_path],
+            "_install_locations": [],
+        },
+        {
+            "name": "microsoft visual studio code user",
+            "display_name": "Microsoft Visual Studio Code (User)",
+            "category": "installed_application",
+            "is_installed": True,
+            "_executable_names": ["code.exe"],
+            "_executable_paths": [shared_path],
+            "_install_locations": [],
+        },
+    ]
+    processes = [{"name": "Code.exe", "pid": 7448, "_image_path": shared_path}]
+
+    result = system_resources.build_application_process_relationships(
+        applications, processes, []
+    )
+
+    assert result["matched_count"] == 1
+    assert result["ambiguous_count"] == 0
+    assert result["items"][0]["application"] == "Microsoft Visual Studio Code (User)"
+    assert result["items"][0]["match_basis"] == "exact_executable_path"
+
+
+def test_duplicate_exact_path_remains_ambiguous_for_competing_installed_apps():
+    shared_path = r"C:\Program Files\Shared\host.exe"
+    applications = [
+        {
+            "display_name": "Installed App A",
+            "category": "installed_application",
+            "is_installed": True,
+            "_executable_names": ["host.exe"],
+            "_executable_paths": [shared_path],
+            "_install_locations": [],
+        },
+        {
+            "display_name": "Installed App B",
+            "category": "installed_application",
+            "is_installed": True,
+            "_executable_names": ["host.exe"],
+            "_executable_paths": [shared_path],
+            "_install_locations": [],
+        },
+    ]
+    processes = [{"name": "host.exe", "pid": 400, "_image_path": shared_path}]
+
+    result = system_resources.build_application_process_relationships(
+        applications, processes, []
+    )
+
+    assert result["matched_count"] == 0
+    assert result["ambiguous_count"] == 1
+    assert result["items"][0]["match_basis"] == "duplicate_executable_path_evidence"
+
+
+def test_relationship_query_supports_multiple_application_names():
+    applications = [
+        {"display_name": "Google Chrome", "_executable_names": ["chrome.exe"]},
+        {"display_name": "Brave", "_executable_names": ["brave.exe"]},
+        {"display_name": "Notepad", "_executable_names": ["notepad.exe"]},
+    ]
+    processes = [
+        {"name": "chrome.exe", "pid": 1},
+        {"name": "brave.exe", "pid": 2},
+        {"name": "notepad.exe", "pid": 3},
+    ]
+
+    result = system_resources.build_application_process_relationships(
+        applications, processes, [], query="Brave and Chrome"
+    )
+
+    assert {item["pid"] for item in result["items"]} == {1, 2}
+    assert result["process_count"] == 2
+
+
 def test_application_process_relationship_query_filters_by_app_or_process():
     applications = [
         {
