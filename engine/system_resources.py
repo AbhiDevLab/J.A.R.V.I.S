@@ -186,6 +186,15 @@ def _load_windows_apis():
     return user32, kernel32, wintypes
 
 
+def _handle_to_int(handle: Any) -> int:
+    """Convert ctypes pointer handles and callback integer handles safely."""
+    value = getattr(handle, "value", handle)
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
 def _process_image_name(kernel32, wintypes, process_id: int) -> str:
     process_query_limited_information = 0x1000
     handle = kernel32.OpenProcess(
@@ -221,7 +230,7 @@ def discover_visible_windows(*, max_items: int = 200) -> list[dict[str, Any]]:
         if apis is None:
             return []
         user32, kernel32, wintypes = apis
-        foreground_handle = int(user32.GetForegroundWindow() or 0)
+        foreground_handle = _handle_to_int(user32.GetForegroundWindow())
         callback_type = ctypes.WINFUNCTYPE(
             wintypes.BOOL,
             wintypes.HWND,
