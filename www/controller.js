@@ -1597,6 +1597,18 @@ $(document).ready(function () {
           }
 
 
+          // Give resource inventories a larger, scrollable report surface.
+          // Other assistant responses retain the compact default HUD card.
+          if (hoodCard) {
+            const isResourceReport = String(message).trim().startsWith(
+              "# J.A.R.V.I.S — System resource report"
+            );
+            hoodCard.classList.toggle(
+              "hood-response-resource-report",
+              isResourceReport
+            );
+          }
+
           // Reveal the HUD response panel
           hoodResponse.hidden = false;
 
