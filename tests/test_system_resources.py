@@ -377,6 +377,18 @@ def test_default_resource_scopes_do_not_trigger_a_drive_wide_name_search(monkeyp
     "utterance, expected",
     [
         ("Show system info", {"scopes": ["system"]}),
+        (
+            "show system resources",
+            {"scopes": ["applications", "drives", "processes", "system", "windows"]},
+        ),
+        (
+            "show system inventory",
+            {"scopes": ["applications", "drives", "processes", "system", "windows"]},
+        ),
+        (
+            "show full system inventory",
+            {"scopes": ["applications", "drives", "processes", "system", "windows"]},
+        ),
         ("list installed applications", {"scopes": ["applications"]}),
         ("what applications are installed", {"scopes": ["applications"]}),
         ("show running processes", {"scopes": ["processes"]}),
