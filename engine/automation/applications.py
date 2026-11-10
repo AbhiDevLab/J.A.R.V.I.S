@@ -133,6 +133,26 @@ ALIASES: Dict[str, str] = {
 }
 
 
+# Websites are destinations, not installed desktop applications. Resolve only
+# exact names to fixed HTTPS URLs so filesystem discovery cannot hijack them.
+WEBSITE_URLS: Dict[str, str] = {
+    "youtube": "https://www.youtube.com",
+}
+
+WEBSITE_ALIASES: Dict[str, str] = {
+    "you tube": "youtube",
+    "youtube com": "youtube",
+    "www youtube com": "youtube",
+}
+
+
+def resolve_website_url(name: str) -> Optional[str]:
+    """Return a fixed HTTPS destination for an exact, supported website name."""
+    normalized = normalize_application_name(name)
+    canonical = WEBSITE_ALIASES.get(normalized, normalized)
+    return WEBSITE_URLS.get(canonical)
+
+
 def normalize_application_name(
     name: str,
 ) -> str:
