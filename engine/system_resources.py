@@ -1695,6 +1695,7 @@ def discover_system_resources(
             app.pop("_executable_paths", None)
             app.pop("_install_locations", None)
             app.pop("_executable_names", None)
+            app.pop("executable_names", None)
     if "files" in selected:
         inventory["files_and_folders"] = discover_files_and_folders(
             query,
