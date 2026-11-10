@@ -944,7 +944,7 @@ def build_application_state_report(
         applications, processes, windows
     )
     relationship_rows = relationships.get("items", [])
-    query_terms = [
+    raw_query_terms = [
         _application_discovery.normalize_application_name(term)
         for term in re.split(
             r"\s*(?:,|&|\band\b|\bor\b)\s*",
@@ -953,8 +953,20 @@ def build_application_state_report(
         )
         if term.strip()
     ]
-    if query and not query_terms:
-        query_terms = [_application_discovery.normalize_application_name(query)]
+    if query and not raw_query_terms:
+        raw_query_terms = [_application_discovery.normalize_application_name(query)]
+    query_terms = []
+    for term in raw_query_terms:
+        canonical = _application_discovery.ALIASES.get(term, term)
+        aliases = {
+            canonical,
+            term,
+            *(
+                alias for alias, target in _application_discovery.ALIASES.items()
+                if target == canonical
+            ),
+        }
+        query_terms.append(sorted(aliases, key=str.casefold))
 
     eligible = []
     for app in applications:
@@ -982,8 +994,9 @@ def build_application_state_report(
             for item in search_fields if item
         ]
         if query_terms and not any(
-            term and any(term in field for field in normalized_fields)
-            for term in query_terms
+            alias and any(alias in field for field in normalized_fields)
+            for aliases in query_terms
+            for alias in aliases
         ):
             continue
         eligible.append(app)
