@@ -853,6 +853,9 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
     retry_state = get_interaction_state()
     retry_replay = None
     retry_cancelled = False
+    # Keep rich resource reports on the dedicated SiriWave response screen.
+    # Other automation commands continue returning to the normal Oval HUD.
+    keep_response_view = False
     retry_resolution = resolve_pending_retry(query, retry_state)
     if retry_resolution is not None:
         if retry_resolution.action == "retry":
@@ -1187,6 +1190,10 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     break
 
                 if automation_action.action_type == "discover_system_resources":
+                    # Match the established JARVIS response lifecycle: keep
+                    # Oval hidden and leave the separate SiriWave response view
+                    # visible after TTS completes.
+                    keep_response_view = True
                     # Long inventories belong in the rich response card. Do not
                     # send them through receiverText, which mirrors raw text onto
                     # the large HUD status line.
@@ -1605,9 +1612,10 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
 
             break
 
-    _safe_display(
-        "ShowHood"
-    )
+    if not keep_response_view:
+        _safe_display(
+            "ShowHood"
+        )
 
 
 if __name__ == "__main__":
