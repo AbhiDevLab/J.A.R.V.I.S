@@ -371,3 +371,44 @@ def test_default_resource_scopes_do_not_trigger_a_drive_wide_name_search(monkeyp
     inventory = system_resources.discover_system_resources()
     assert "files" not in inventory["scopes"]
     assert "files_and_folders" not in inventory
+
+
+@pytest.mark.parametrize(
+    "utterance, expected",
+    [
+        ("Show system info", {"scopes": ["system"]}),
+        ("list installed applications", {"scopes": ["applications"]}),
+        ("what applications are installed", {"scopes": ["applications"]}),
+        ("show running processes", {"scopes": ["processes"]}),
+        ("what apps are open", {"scopes": ["windows"]}),
+        ("list logical drives", {"scopes": ["drives"]}),
+        (
+            "find a file named report.csv across all drives",
+            {"scopes": ["files"], "query": "report.csv"},
+        ),
+        (
+            "search all drives for JARVIS",
+            {"scopes": ["files"], "query": "JARVIS"},
+        ),
+        (
+            "find \"project report\" across all drives",
+            {"scopes": ["files"], "query": "project report"},
+        ),
+    ],
+)
+def test_system_resource_request_parser_recognizes_explicit_requests(utterance, expected):
+    assert system_resources.parse_system_resource_request(utterance) == expected
+
+
+@pytest.mark.parametrize(
+    "utterance",
+    [
+        "open Notepad",
+        "find a file named report",
+        "search my Downloads folder for report",
+        "show me everything",
+        "show all files",
+    ],
+)
+def test_system_resource_request_parser_does_not_capture_existing_commands(utterance):
+    assert system_resources.parse_system_resource_request(utterance) is None
