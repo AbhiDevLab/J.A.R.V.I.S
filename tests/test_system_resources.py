@@ -420,3 +420,16 @@ def test_system_resource_request_parser_recognizes_explicit_requests(utterance, 
 )
 def test_system_resource_request_parser_does_not_capture_existing_commands(utterance):
     assert system_resources.parse_system_resource_request(utterance) is None
+
+
+@pytest.mark.parametrize(
+    "handle, expected",
+    [
+        (system_resources.ctypes.c_void_p(1234), 1234),
+        (1234, 1234),
+        (system_resources.ctypes.c_void_p(None), 0),
+        (None, 0),
+    ],
+)
+def test_win32_handle_conversion_accepts_ctypes_and_callback_values(handle, expected):
+    assert system_resources._handle_to_int(handle) == expected
