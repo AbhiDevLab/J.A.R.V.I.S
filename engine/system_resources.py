@@ -1886,11 +1886,12 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
         return None
 
     for scope, pattern in _RESOURCE_REQUESTS:
-        if pattern.fullmatch(value):
+        match = pattern.fullmatch(value)
+        if match:
             if scope == "all":
                 return {"scopes": sorted(_DEFAULT_SCOPES)}
             if scope == "application_states":
-                query_value = pattern.groupdict().get("query")
+                query_value = match.groupdict().get("query")
                 return {
                     "scopes": ["application_states"],
                     **({"query": query_value.strip()} if query_value and query_value.strip() else {}),
