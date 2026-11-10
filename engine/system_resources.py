@@ -1549,15 +1549,21 @@ def discover_system_resources(
     if "system" in selected:
         inventory["system"] = get_system_information()
     if "applications" in selected:
-        applications = discover_installed_applications(
-            include_relationship_metadata=relationships_requested
-        )
+        if relationships_requested:
+            applications = discover_installed_applications(
+                include_relationship_metadata=True
+            )
+        else:
+            applications = discover_installed_applications()
         inventory["installed_applications"] = applications
     if "processes" in selected or relationships_requested:
-        processes = discover_running_processes(
-            max_items=max_processes,
-            include_image_paths=relationships_requested,
-        )
+        if relationships_requested:
+            processes = discover_running_processes(
+                max_items=max_processes,
+                include_image_paths=True,
+            )
+        else:
+            processes = discover_running_processes(max_items=max_processes)
         if "processes" in selected:
             inventory["running_processes"] = processes
     if "windows" in selected or relationships_requested:
