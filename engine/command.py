@@ -1186,9 +1186,30 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     )
                     break
 
-                if automation_result.get(
-                    "success"
-                ):
+                if automation_action.action_type == "discover_system_resources":
+                    # Long inventories belong in the rich response card. Do not
+                    # send them through receiverText, which mirrors raw text onto
+                    # the large HUD status line.
+                    report = str(
+                        automation_result.get("message")
+                        or "System resource discovery did not return a report."
+                    )
+                    _safe_display("assistantResponse", report)
+                    voice_message = (
+                        automation_result.get(
+                            "spoken_message",
+                            "Resource discovery completed.",
+                        )
+                        if automation_result.get("success")
+                        else report
+                    )
+                    speak(
+                        voice_message,
+                        display=False,
+                        language=query_language or "en",
+                    )
+
+                elif automation_result.get("success"):
                     if automation_action.action_type == "read_application":
                         # Show the extracted text in the UI, but keep TTS concise.
                         _safe_display(
@@ -1203,27 +1224,10 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                             display=False,
                             language=query_language or "en",
                         )
-                    elif automation_action.action_type == "discover_system_resources":
-                        # Resource details are displayed in the UI; speak only
-                        # a concise count summary to avoid reading inventories aloud.
-                        _safe_display(
-                            "receiverText",
-                            automation_result.get("message", ""),
-                        )
-                        speak(
-                            automation_result.get(
-                                "spoken_message",
-                                "System resource discovery completed.",
-                            ),
-                            display=False,
-                            language=query_language or "en",
-                        )
                     elif (
                         automation_action.action_type
                         == "find_file"
-                        and automation_result.get(
-                            "message"
-                        )
+                        and automation_result.get("message")
                     ):
                         speak(
                             automation_result.get(
