@@ -1068,6 +1068,23 @@ $(document).ready(function () {
       const status =
         String(message).trim();
 
+      // Clear the previous resource report as soon as a new request starts.
+      // The next rich assistant response will populate the panel again.
+      if (
+        status === "Thinking..." ||
+        status === "Listening..." ||
+        status === "Recognizing..."
+      ) {
+        const resourcePanel = document.getElementById("HoodResponse");
+        const resourceCard = document.getElementById("HoodResponseCard");
+        if (resourcePanel) {
+          resourcePanel.hidden = true;
+        }
+        if (resourceCard) {
+          resourceCard.classList.remove("hood-response-resource-report");
+        }
+      }
+
       const conversationViewer =
         document.getElementById(
           "ConversationViewer"
