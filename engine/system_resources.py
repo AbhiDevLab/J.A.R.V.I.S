@@ -709,9 +709,29 @@ def build_application_process_relationships(
             match_basis = "exact_executable_path"
             match_status = "matched"
         elif len(exact_path_matches) > 1:
-            candidates = exact_path_matches
-            match_basis = "duplicate_executable_path_evidence"
-            match_status = "ambiguous"
+            # A lower-confidence App Paths alias can point to the same binary
+            # as a richer uninstall/package registration. Prefer that stronger
+            # installed-app record only when it is unique.
+            preferred = [
+                app for app in exact_path_matches
+                if app.get("is_installed") is True
+                and app.get("category") in {
+                    "installed_application",
+                    "packaged_application",
+                }
+            ]
+            preferred_by_name = {
+                str(app.get("display_name") or app.get("name") or "").casefold(): app
+                for app in preferred
+            }
+            if len(preferred_by_name) == 1:
+                candidates = list(preferred_by_name.values())
+                match_basis = "exact_executable_path"
+                match_status = "matched"
+            else:
+                candidates = exact_path_matches
+                match_basis = "duplicate_executable_path_evidence"
+                match_status = "ambiguous"
 
         if match_status == "unmapped" and image_path:
             location_matches = [
@@ -787,14 +807,24 @@ def build_application_process_relationships(
         )
 
     if query and str(query).strip():
-        needle = _application_discovery.normalize_application_name(str(query))
+        query_terms = [
+            _application_discovery.normalize_application_name(term)
+            for term in re.split(r"\s*(?:,|&|\band\b|\bor\b)\s*", str(query), flags=re.IGNORECASE)
+            if term.strip()
+        ]
+        if not query_terms:
+            query_terms = [_application_discovery.normalize_application_name(str(query))]
         rows = [
             item for item in rows
-            if needle in _application_discovery.normalize_application_name(
-                item.get("application", "")
-            )
-            or needle in _application_discovery.normalize_application_name(
-                item.get("process", "")
+            if any(
+                needle in _application_discovery.normalize_application_name(
+                    item.get("application", "")
+                )
+                or needle in _application_discovery.normalize_application_name(
+                    item.get("process", "")
+                )
+                for needle in query_terms
+                if needle
             )
         ]
 
@@ -1535,6 +1565,25 @@ _FILE_SEARCH_REQUESTS = (
 )
 
 
+_RELATIONSHIP_QUERY_REQUESTS = (
+    re.compile(
+        r"^(?:which|what) processes belong to (?P<query>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:(?:please )?(?:(?:show|display|list)(?: me)? )?)"
+        r"(?:(?:all )?(?:running )?)?processes? "
+        r"(?:for|of|belonging to|associated with) (?P<query>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:please )?(?:(?:show|display|list)(?: me)? )?"
+        r"(?P<query>.+?) processes?$",
+        re.IGNORECASE,
+    ),
+)
+
+
 def parse_system_resource_request(text: str) -> dict[str, Any] | None:
     """Parse explicit, deterministic system-inventory requests.
 
@@ -1551,16 +1600,23 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
             if scope == "all":
                 return {"scopes": sorted(_DEFAULT_SCOPES)}
             if scope == "relationships":
-                query_match = re.search(
-                    r"which processes belong to (.+)$",
-                    value,
-                    re.IGNORECASE,
-                )
-                parsed = {"scopes": ["relationships"]}
-                if query_match:
-                    parsed["query"] = query_match.group(1).strip()
-                return parsed
+                for query_pattern in _RELATIONSHIP_QUERY_REQUESTS:
+                    query_match = query_pattern.fullmatch(value)
+                    if query_match:
+                        query = str(query_match.group("query") or "").strip()
+                        if query and query.casefold() not in {"running", "all", "system"}:
+                            return {"scopes": ["relationships"], "query": query}
+                return {"scopes": ["relationships"]}
             return {"scopes": [scope]}
+
+    # Also recognize application-specific process queries whose wording does
+    # not contain the generic "application-process relationships" phrase.
+    for query_pattern in _RELATIONSHIP_QUERY_REQUESTS:
+        query_match = query_pattern.fullmatch(value)
+        if query_match:
+            query = str(query_match.group("query") or "").strip()
+            if query and query.casefold() not in {"running", "all", "system"}:
+                return {"scopes": ["relationships"], "query": query}
 
     for pattern in _FILE_SEARCH_REQUESTS:
         match = pattern.fullmatch(value)
@@ -1640,6 +1696,7 @@ def discover_system_resources(
         "scopes": sorted(selected),
     }
     relationships_requested = "relationships" in selected
+    process_limit = _bounded_limit(max_processes, 250, 1000)
     applications = None
     processes = None
     windows = None
@@ -1661,11 +1718,11 @@ def discover_system_resources(
     if "processes" in selected or relationships_requested:
         if relationships_requested:
             processes = discover_running_processes(
-                max_items=max_processes,
+                max_items=process_limit,
                 include_image_paths=True,
             )
         else:
-            processes = discover_running_processes(max_items=max_processes)
+            processes = discover_running_processes(max_items=process_limit)
         if "processes" in selected:
             inventory["running_processes"] = processes
     if "windows" in selected or relationships_requested:
@@ -1687,6 +1744,7 @@ def discover_system_resources(
                 query=query,
             )
         )
+        inventory["application_process_relationships"]["process_sample_limit"] = process_limit
         # The report exposes process names/PIDs and relationships, never the
         # private full image paths used for exact in-memory matching.
         for process in inventory.get("running_processes", []):

@@ -657,7 +657,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
         category_labels = {
             "installed_application": "Installed desktop applications",
             "packaged_application": "Packaged applications",
-            "windows_component": "Windows components and updates",
+            "windows_component": "Registered components and updates",
             "registered_executable": "Registered executables (installation not verified)",
             "shortcut_only": "Start Menu shortcuts (installation not verified)",
         }
@@ -862,6 +862,13 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
                 f"Filtered for **{_resource_markdown_cell(query_label)}**. "
                 + summary
             )
+        sample_limit = relationships.get("process_sample_limit")
+        sample_note = (
+            f"\n\nSnapshot is bounded to up to {int(sample_limit)} processes; "
+            "additional running processes may not be included."
+            if isinstance(sample_limit, int) and sample_limit > 0
+            else ""
+        )
         sections.append(
             "## Application–process relationships\n"
             + summary
@@ -870,6 +877,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             + "\n\nRelationships use executable path, registered install location, "
               "or a unique executable name. Windows are joined to processes by exact PID. "
               "Ambiguous or inaccessible matches are not guessed."
+            + sample_note
         )
         spoken_parts.append(
             f"{relationships.get('matched_count', 0)} application-process relationships mapped; "

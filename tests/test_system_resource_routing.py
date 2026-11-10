@@ -72,6 +72,22 @@ def test_resource_inventory_requests_route_to_typed_read_only_actions():
         assert action.parameters.get("query") == expected_query
 
 
+def test_application_specific_process_queries_use_deterministic_relationship_route():
+    cases = {
+        "Which processes belong to Chrome": "Chrome",
+        "Show running processes for Chrome": "Chrome",
+        "List processes for Brave and Chrome": "Brave and Chrome",
+        "Brave and Chrome processes": "Brave and Chrome",
+        "Show Chrome processes": "Chrome",
+    }
+    for query, expected in cases.items():
+        action = route_command(query)
+        assert action is not None, query
+        assert action.action_type == "discover_system_resources", query
+        assert action.parameters["scopes"] == ["relationships"], query
+        assert action.parameters["query"] == expected, query
+
+
 def test_resource_discovery_is_classified_as_an_ordinary_action():
     action = AutomationAction(
         action_type="discover_system_resources",
