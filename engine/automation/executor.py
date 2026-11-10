@@ -682,6 +682,8 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
                 app_summary.append(
                     f"| {category_labels[category]} | {count} |"
                 )
+        if not rows:
+            app_summary.append("| No application evidence returned | 0 |")
         sections.append(
             "## Application discovery\n"
             + "\n".join(app_summary)
