@@ -391,6 +391,10 @@ def test_default_resource_scopes_do_not_trigger_a_drive_wide_name_search(monkeyp
             {"scopes": ["files"], "query": "JARVIS"},
         ),
         (
+            "search every drive for JARVIS",
+            {"scopes": ["files"], "query": "JARVIS"},
+        ),
+        (
             "search all drives for a file named report.csv",
             {"scopes": ["files"], "query": "report.csv"},
         ),
