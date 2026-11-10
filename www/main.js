@@ -450,11 +450,6 @@ $(document).ready(function () {
                 "auto"
             );
 
-            $("#SettingsContinuousListening").prop(
-                "checked",
-                settings.continuous_listening === true
-            );
-
         } catch (error) {
             console.error(
                 "Settings loading failed:",
@@ -475,9 +470,6 @@ $(document).ready(function () {
                     $("#SettingsResponseLanguage")
                         .val(),
 
-                continuous_listening:
-                    $("#SettingsContinuousListening")
-                        .prop("checked"),
             };
 
             const result =
@@ -643,12 +635,90 @@ $(document).ready(function () {
         }
     );
 
-    $("#SettingsContinuousListening").on(
-        "change",
-        function () {
-            saveSettings();
+
+    let continuousListeningTransition = false;
+
+    async function toggleContinuousListening() {
+        if (continuousListeningTransition) {
+            return;
         }
-    );
+
+        const primaryButton = document.getElementById(
+            "ContinuousListeningBtn"
+        );
+        const conversationButton = document.getElementById(
+            "ConversationContinuousListeningBtn"
+        );
+        const buttons = [primaryButton, conversationButton].filter(Boolean);
+        if (!buttons.length) {
+            return;
+        }
+
+        const currentlyActive = buttons.some(
+            (button) => button.getAttribute("aria-pressed") === "true"
+        );
+        const enable = !currentlyActive;
+        continuousListeningTransition = true;
+        buttons.forEach((button) => {
+            button.disabled = true;
+            button.setAttribute("aria-busy", "true");
+        });
+
+        try {
+            // The backend remains the authority: it checks successful
+            // authentication and guarantees a single microphone worker.
+            const runtimeResult = await eel.setContinuousListening(enable)();
+            if (!runtimeResult || !runtimeResult.success) {
+                console.warn(
+                    runtimeResult?.message ||
+                    "JARVIS could not change continuous-listening state."
+                );
+                return;
+            }
+
+            // Persist only after the authenticated runtime transition succeeds.
+            const saved = await eel.saveSettings({
+                continuous_listening: enable
+            })();
+            if (!saved || !saved.success) {
+                if (enable) {
+                    await eel.setContinuousListening(false)();
+                }
+                console.error(
+                    "Continuous-listening state could not be saved."
+                );
+                return;
+            }
+
+            if (typeof window.setContinuousListeningStatus === "function") {
+                window.setContinuousListeningStatus(
+                    enable,
+                    enable ? "Listening" : "Paused"
+                );
+            }
+        } catch (error) {
+            console.error(
+                "Continuous-listening control failed:",
+                error
+            );
+        } finally {
+            continuousListeningTransition = false;
+            buttons.forEach((button) => {
+                button.disabled = false;
+                button.removeAttribute("aria-busy");
+            });
+        }
+    }
+
+    [
+        "ContinuousListeningBtn",
+        "ConversationContinuousListeningBtn"
+    ].forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) {
+            button.addEventListener("click", toggleContinuousListening);
+        }
+    });
 
     $("#ContinuousListeningPauseBtn").on(
         "click",
