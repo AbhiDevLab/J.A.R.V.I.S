@@ -685,7 +685,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             + "\n".join(table_rows)
             + suffix
         )
-        spoken_parts.append(f"{len(rows)} running processes")
+        spoken_parts.append(f"{len(rows)} running processes returned")
 
     windows = inventory.get("visible_windows")
     if isinstance(windows, list):
