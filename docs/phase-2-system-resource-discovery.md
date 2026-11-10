@@ -56,3 +56,18 @@ The frontend displays the detailed inventory in the response panel. Speech and t
 ## Verification still required
 
 CI tests cover CSV parsing, alias deduplication, bounded drive searches, scope validation, deterministic parsing, LLM bypass, typed action routing, ordinary policy classification, and audit recording. A real Windows machine check is still required for Win32 process/window/drive enumeration and voice/UI behavior.
+
+
+## Runtime data accuracy improvements
+
+The current resource-inventory implementation supplements the initial Phase 2 collectors with additional live Windows sources:
+
+- **OS edition and revision:** `EditionID`, `DisplayVersion`, `CurrentBuildNumber`, and `UBR` from the 64-bit Windows CurrentVersion registry view. The display edition is mapped from the runtime edition identifier; the Windows 10/11 family is determined from the runtime build.
+- **Processor identity:** `ProcessorNameString`, `Identifier`, `VendorIdentifier`, and `~MHz` from the Windows CentralProcessor registry key. Physical cores are counted from `GetLogicalProcessorInformationEx`; logical processors come from the running Python/OS view (`os.cpu_count`).
+- **Memory:** installed RAM is queried through `GetPhysicallyInstalledSystemMemory`; usable and available physical RAM are read through `GlobalMemoryStatusEx`. Used bytes and the percentage are calculated from the returned runtime values. The report labels installed RAM separately from usable RAM.
+- **Application evidence:** uninstall registry records are reported as conventional installed desktop applications; Start Menu AppUserModelID entries are reported as packaged applications; App Paths entries are reported as registered executables; shortcut-only entries are explicitly marked as installation-unverified; uninstall entries marked as system components/updates are reported separately.
+- **Storage:** drive type, volume label and filesystem are queried at runtime; disk capacity, used and free bytes come from the mounted volume's disk-usage API. An empty optical drive can legitimately report unknown capacity/filesystem.
+
+No machine-specific model, RAM size, processor count, application list, volume label, or capacity is embedded in the inventory code. Missing or inaccessible sources remain `unknown` rather than being filled with example values.
+
+The CPU clock from the `~MHz` registry value is a registry-reported clock value, not a live per-core frequency measurement. The memory-use percentage is calculated from the current total and available physical-memory values, not a hardcoded threshold.
