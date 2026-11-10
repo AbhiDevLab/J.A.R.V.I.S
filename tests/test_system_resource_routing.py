@@ -21,6 +21,10 @@ def test_resource_inventory_queries_use_deterministic_voice_fast_path(monkeypatc
         "list logical drives",
         "show application process relationships",
         "which processes belong to Chrome",
+        "show application states",
+        "check application state for Chrome",
+        "is Chrome responding",
+        "which applications are running right now",
         "find a file named report across all drives",
     ):
         assert should_interpret_query(query, is_voice_input=True) is False
@@ -86,6 +90,22 @@ def test_application_specific_process_queries_use_deterministic_relationship_rou
         assert action.action_type == "discover_system_resources", query
         assert action.parameters["scopes"] == ["relationships"], query
         assert action.parameters["query"] == expected, query
+
+
+def test_application_state_queries_use_deterministic_read_only_route():
+    cases = {
+        "show application states": (["application_states"], None),
+        "check application state for Chrome": (["application_states"], "Chrome"),
+        "what is the state of Brave": (["application_states"], "Brave"),
+        "is Visual Studio Code responding": (["application_states"], "Visual Studio Code"),
+        "which applications are running right now": (["application_states"], None),
+    }
+    for query, (scopes, expected_query) in cases.items():
+        action = route_command(query)
+        assert action is not None, query
+        assert action.action_type == "discover_system_resources", query
+        assert action.parameters["scopes"] == scopes, query
+        assert action.parameters.get("query") == expected_query, query
 
 
 def test_resource_discovery_is_classified_as_an_ordinary_action():
