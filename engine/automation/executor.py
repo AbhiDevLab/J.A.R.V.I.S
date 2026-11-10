@@ -645,7 +645,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             f"| Usable physical RAM | {memory_usable} |\n"
             f"| Physical RAM in use | {memory_used} |\n"
             f"| Available physical RAM | {memory_available} |\n"
-            f"| Physical memory load | {memory_load} |"
+            f"| Calculated physical memory use | {memory_load} |"
         )
         spoken_parts.append(
             f"system information for {operating_system} with {architecture} architecture"
