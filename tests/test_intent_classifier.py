@@ -284,6 +284,39 @@ def test_voice_interpretation_cannot_change_requested_operation_family():
     assert result.should_route_automation is False
 
 
+def test_spoken_known_application_commands_route_without_contextual_interpretation():
+    for command in ("open notepad", "launch Chrome", "close Notepad", "quit Telegram"):
+        result = classify_intent(
+            command,
+            raw_text=command,
+            interpretation=None,
+            voice_input=True,
+        )
+        assert result.intent is SemanticIntent.AUTOMATION
+        assert result.normalized_query == command
+        assert result.source == "known_application_command"
+        assert result.should_route_automation is True
+
+
+def test_spoken_known_application_command_survives_interpreter_fallback():
+    fallback = SimpleNamespace(
+        query="open notepad",
+        intent="unknown",
+        confidence=0.0,
+        needs_clarification=False,
+    )
+    result = classify_intent(
+        "open notepad",
+        raw_text="open notepad",
+        interpretation=fallback,
+        voice_input=True,
+    )
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.normalized_query == "open notepad"
+    assert result.source == "known_application_command"
+    assert result.should_route_automation is True
+
+
 def test_voice_interpretation_does_not_replace_a_valid_known_application_without_near_certainty():
     interpretation = SimpleNamespace(
         query="open telegram",
@@ -299,6 +332,25 @@ def test_voice_interpretation_does_not_replace_a_valid_known_application_without
     )
     assert result.intent is SemanticIntent.CLARIFICATION
     assert result.should_route_automation is False
+
+
+def test_near_certain_context_can_correct_a_known_application_command():
+    interpretation = SimpleNamespace(
+        query="open telegram",
+        intent="automation",
+        confidence=0.99,
+        needs_clarification=False,
+    )
+    result = classify_intent(
+        "open notepad",
+        raw_text="open notepad",
+        interpretation=interpretation,
+        voice_input=True,
+    )
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.normalized_query == "open telegram"
+    assert result.source == "context_interpreter"
+    assert result.should_route_automation is True
 
 
 def test_typed_explicit_command_keeps_deterministic_fast_path():
