@@ -931,6 +931,7 @@ def build_application_state_report(
     *,
     query: str | None = None,
     process_sample_limit: int = 250,
+    process_inventory_available: bool = True,
     max_applications: int = 200,
 ) -> dict[str, Any]:
     """Build conservative per-application runtime state from verified evidence.
@@ -1036,6 +1037,9 @@ def build_application_state_report(
                 state = "visible"
             else:
                 state = "running_background"
+        elif not process_inventory_available:
+            state = "not_verified_process_inventory_unavailable"
+            is_running = None
         elif sample_truncated:
             state = "not_verified_process_sample_limit"
             is_running = None
@@ -1075,6 +1079,7 @@ def build_application_state_report(
         "process_sample_limit": limit,
         "process_sample_count": len(processes),
         "process_sample_truncated": sample_truncated,
+        "process_inventory_available": bool(process_inventory_available),
         "query_matched": bool(results) if query else None,
     }
 
@@ -1933,7 +1938,7 @@ _VALID_SCOPES = {
     "application_states",
     "files",
 }
-_DEFAULT_SCOPES = _VALID_SCOPES - {"files", "relationships"}
+_DEFAULT_SCOPES = _VALID_SCOPES - {"files", "relationships", "application_states"}
 
 
 def discover_system_resources(
@@ -2023,6 +2028,7 @@ def discover_system_resources(
             state_windows,
             query=query,
             process_sample_limit=process_limit,
+            process_inventory_available=bool(processes),
         )
     if relationships_requested:
         inventory["application_process_relationships"] = (
