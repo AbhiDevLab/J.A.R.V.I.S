@@ -252,6 +252,53 @@ def test_resource_report_labels_installed_and_usable_memory_separately(monkeypat
     assert "NTFS" in report
 
 
+def test_application_state_report_is_rendered_with_evidence_and_limits(monkeypatch):
+    from engine.automation import executor
+
+    monkeypatch.setattr(
+        executor,
+        "discover_system_resources",
+        lambda scopes, query=None: {
+            "schema_version": 1,
+            "scopes": ["application_states"],
+            "application_state_report": {
+                "query": "Chrome",
+                "items": [
+                    {
+                        "application": "Google Chrome",
+                        "state": "foreground",
+                        "is_running": True,
+                        "process_count": 2,
+                        "process_ids": [100, 101],
+                        "window_count": 1,
+                        "window_titles": ["Chrome - Example"],
+                        "responsiveness": "responsive",
+                    }
+                ],
+                "application_count": 1,
+                "process_sample_limit": 250,
+                "process_sample_count": 250,
+                "process_sample_truncated": True,
+                "process_inventory_available": True,
+            },
+        },
+    )
+    action = AutomationAction(
+        action_type="discover_system_resources",
+        parameters={"scopes": ["application_states"], "query": "Chrome"},
+        risk=RiskLevel.LOW,
+    )
+
+    result = executor._execute_system_resource_discovery(action)
+    report = result["message"]
+
+    assert "## Application state awareness" in report
+    assert "Google Chrome" in report
+    assert "Foreground" in report
+    assert "responsive" in report
+    assert "sample reached its configured limit" in report
+
+
 def test_application_process_relationship_report_is_structured_and_does_not_expose_paths(monkeypatch):
     from engine.automation import executor
 
