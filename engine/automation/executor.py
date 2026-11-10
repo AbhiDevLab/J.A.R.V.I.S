@@ -892,8 +892,8 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             if isinstance(item, dict)
         ]
         table_rows = [
-            "| Application | State | Running | Processes | Windows | Responsiveness |",
-            "|---|---|---|---:|---:|---|",
+            "| Application | State | Running | Process IDs | Windows | Window state(s) | Responsiveness |",
+            "|---|---|---|---|---:|---|---|",
         ]
         state_labels = {
             "foreground": "Foreground",
@@ -903,6 +903,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             "not_running": "Not running",
             "not_verified_process_sample_limit": "Not verified (process sample limit)",
             "not_verified_process_inventory_unavailable": "Not verified (process inventory unavailable)",
+            "not_verified_application_identity_unavailable": "Not verified (no executable identity evidence)",
             "ambiguous": "Ambiguous application match",
         }
         for item in rows[:40]:
@@ -919,8 +920,9 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
                 f"| {_resource_markdown_cell(item.get('application'))} "
                 f"| {_resource_markdown_cell(state_label)} "
                 f"| {running} "
-                f"| {item.get('process_count', 0)} "
+                f"| {_resource_markdown_cell(', '.join(str(pid) for pid in item.get('process_ids', [])) or '—')} "
                 f"| {item.get('window_count', 0)} "
+                f"| {_resource_markdown_cell(', '.join(item.get('window_states', [])) or '—')} "
                 f"| {_resource_markdown_cell(item.get('responsiveness'))} |"
             )
             titles = [
@@ -931,7 +933,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             if titles:
                 table_rows.append(
                     f"| ↳ Windows | {_resource_markdown_cell('; '.join(titles))} "
-                    "| — | — | — | Window titles from current snapshot |"
+                    "| — | — | — | Titles from current snapshot | — |"
                 )
 
         if not rows:
@@ -941,7 +943,7 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
                 else "No application state rows could be verified."
             )
             table_rows.append(
-                f"| {_resource_markdown_cell(no_match)} | — | — | — | — | — |"
+                f"| {_resource_markdown_cell(no_match)} | — | — | — | — | — | — |"
             )
 
         sample_note = ""
