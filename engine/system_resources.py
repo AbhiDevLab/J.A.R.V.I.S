@@ -603,7 +603,7 @@ _FILE_SEARCH_REQUESTS = (
         r"^(?:please )?(?:find|search for|locate) "
         r"(?:(?:the|a|all) )?(?:files?|folders?|documents?)"
         r"(?: named| called| matching)? (?P<query>.+?) "
-        r"(?:across|on|in) (?:all|every|accessible) drives$",
+        r"(?:across|on|in) (?:all|every|accessible) drives?$",
         re.IGNORECASE,
     ),
     re.compile(
@@ -613,7 +613,7 @@ _FILE_SEARCH_REQUESTS = (
     ),
     re.compile(
         r"^(?:please )?(?:find|search for|locate) (?P<query>.+?) "
-        r"(?:across|on|in) (?:all|every|accessible) drives$",
+        r"(?:across|on|in) (?:all|every|accessible) drives?$",
         re.IGNORECASE,
     ),
 )
