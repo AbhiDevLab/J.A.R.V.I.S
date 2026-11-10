@@ -1222,6 +1222,7 @@ def test_discover_window_states_adds_minimized_and_responsiveness_flags(monkeypa
         IsIconic = FakeFunction({2: True})
         IsHungAppWindow = FakeFunction({1: True, 2: False})
 
+    monkeypatch.setattr(system_resources, "_is_windows", lambda: True)
     monkeypatch.setattr(
         system_resources,
         "discover_visible_windows",
