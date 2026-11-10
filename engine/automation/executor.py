@@ -885,6 +885,98 @@ def _execute_system_resource_discovery(action: AutomationAction) -> Dict[str, An
             f"{relationships.get('unmapped_count', 0)} unmapped"
         )
 
+    application_states = inventory.get("application_state_report")
+    if isinstance(application_states, dict):
+        rows = [
+            item for item in application_states.get("items", [])
+            if isinstance(item, dict)
+        ]
+        table_rows = [
+            "| Application | State | Running | Processes | Windows | Responsiveness |",
+            "|---|---|---|---:|---:|---|",
+        ]
+        state_labels = {
+            "foreground": "Foreground",
+            "visible": "Visible",
+            "minimized": "Minimized",
+            "running_background": "Running in background",
+            "not_running": "Not running",
+            "not_verified_process_sample_limit": "Not verified (process sample limit)",
+            "ambiguous": "Ambiguous application match",
+        }
+        for item in rows[:40]:
+            state_label = state_labels.get(
+                str(item.get("state") or ""),
+                str(item.get("state") or "Unknown"),
+            )
+            running = (
+                "Yes" if item.get("is_running") is True
+                else "No" if item.get("is_running") is False
+                else "Unknown"
+            )
+            table_rows.append(
+                f"| {_resource_markdown_cell(item.get('application'))} "
+                f"| {_resource_markdown_cell(state_label)} "
+                f"| {running} "
+                f"| {item.get('process_count', 0)} "
+                f"| {item.get('window_count', 0)} "
+                f"| {_resource_markdown_cell(item.get('responsiveness'))} |"
+            )
+            titles = [
+                _resource_markdown_cell(title)
+                for title in item.get("window_titles", [])
+                if title
+            ]
+            if titles:
+                table_rows.append(
+                    f"| ↳ Windows | {_resource_markdown_cell('; '.join(titles))} "
+                    "| — | — | — | Window titles from current snapshot |"
+                )
+
+        if not rows:
+            no_match = (
+                "No registered application evidence matched the requested name."
+                if application_states.get("query")
+                else "No application state rows could be verified."
+            )
+            table_rows.append(
+                f"| {_resource_markdown_cell(no_match)} | — | — | — | — | — |"
+            )
+
+        sample_note = ""
+        if application_states.get("process_sample_truncated"):
+            sample_note = (
+                "\n\nThe process sample reached its configured limit "
+                f"({application_states.get('process_sample_limit')}). "
+                "Applications absent from this sample are marked unverified, not closed."
+            )
+        summary = (
+            f"**{len(rows)}** application state record(s) returned from a live snapshot."
+        )
+        if application_states.get("query"):
+            summary = (
+                f"State check for **{_resource_markdown_cell(application_states.get('query'))}**. "
+                + summary
+            )
+        suffix = (
+            f"\n\nShowing **40 of {len(rows)}** application state records."
+            if len(rows) > 40 else ""
+        )
+        sections.append(
+            "## Application state awareness\n"
+            + summary
+            + "\n\n"
+            + "\n".join(table_rows[:81])
+            + "\n\nState is derived from the current process sample and visible-window snapshot. "
+              "Responsiveness is reported only when Windows provides a result for a window. "
+              "A background process is not treated as a visible window."
+            + sample_note
+            + suffix
+        )
+        spoken_parts.append(
+            f"{len(rows)} application state records checked"
+        )
+
     drives = inventory.get("drives")
     if isinstance(drives, list):
         rows = [
