@@ -1155,6 +1155,29 @@ def test_application_state_report_distinguishes_foreground_background_and_not_ru
     assert result["process_sample_truncated"] is False
 
 
+def test_application_state_query_resolves_vscode_alias_to_registered_display_name():
+    applications = [
+        {
+            "display_name": "Microsoft Visual Studio Code (User)",
+            "category": "installed_application",
+            "is_installed": True,
+            "_executable_names": ["code.exe"],
+            "_executable_paths": [],
+            "_install_locations": [],
+        }
+    ]
+    processes = [{"name": "Code.exe", "pid": 7448}]
+
+    result = system_resources.build_application_state_report(
+        applications, processes, [], query="VS Code"
+    )
+
+    assert result["query_matched"] is True
+    assert result["application_count"] == 1
+    assert result["items"][0]["application"] == "Microsoft Visual Studio Code (User)"
+    assert result["items"][0]["state"] == "running_background"
+
+
 def test_application_state_report_does_not_claim_closed_when_process_sample_is_full():
     applications = [
         {
