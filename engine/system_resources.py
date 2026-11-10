@@ -14,6 +14,7 @@ import platform
 import re
 import shutil
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -88,7 +89,8 @@ def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, A
         normalized = _application_discovery.normalize_application_name(str(name or ""))
         if not normalized:
             return
-        discovered.setdefault(normalized, set()).add(source)
+        canonical = _application_discovery.ALIASES.get(normalized, normalized)
+        discovered.setdefault(canonical, set()).add(source)
 
     try:
         for display_name, _shortcut_path in _application_discovery.discover_application_shortcuts():
@@ -377,7 +379,169 @@ def discover_drives() -> list[dict[str, Any]]:
         return []
 
 
-_VALID_SCOPES = {"system", "applications", "processes", "windows", "drives"}
+_FILE_SEARCH_EXCLUDED_DIRECTORIES = {
+    "$recycle.bin",
+    "system volume information",
+    "windows",
+    "program files",
+    "program files (x86)",
+    "programdata",
+    "recovery",
+    "perflogs",
+    "appdata",
+    "application data",
+    "local settings",
+    "node_modules",
+    ".git",
+    "__pycache__",
+    "envjarvis",
+    "venv",
+    ".venv",
+}
+
+
+def discover_files_and_folders(
+    query: str,
+    *,
+    max_results: int = 50,
+    max_directories: int = 5000,
+    max_seconds: float = 5.0,
+    include_hidden: bool = False,
+) -> dict[str, Any]:
+    """Search accessible drive roots by name without reading file contents.
+
+    This is deliberately query-scoped rather than a background/full-drive
+    indexer. Directory count, result count, and wall-clock time are bounded.
+    Windows/system folders, reparse points, symlinks, and hidden entries are
+    excluded by default. Results contain paths only in the returned in-memory
+    response; nothing is persisted.
+    """
+    search_term = str(query or "").strip()
+    if len(search_term) < 2 or "\\x00" in search_term:
+        raise ValueError("Provide at least two non-null characters to search for.")
+
+    result_limit = _bounded_limit(max_results, 50, 200)
+    directory_limit = _bounded_limit(max_directories, 5000, 20000)
+    try:
+        time_limit = max(0.25, min(20.0, float(max_seconds)))
+    except (TypeError, ValueError, OverflowError):
+        time_limit = 5.0
+
+    roots = [
+        Path(drive["root"])
+        for drive in discover_drives()
+        if isinstance(drive, dict) and drive.get("accessible") and drive.get("root")
+    ]
+    results: list[dict[str, Any]] = []
+    visited_directories = 0
+    stop_reason = ""
+    started = time.monotonic()
+    needle = search_term.casefold()
+
+    for root in roots:
+        if stop_reason:
+            break
+        if not root.is_dir():
+            continue
+        try:
+            for current_root, dir_names, file_names in os.walk(
+                root,
+                topdown=True,
+                followlinks=False,
+            ):
+                if time.monotonic() - started >= time_limit:
+                    stop_reason = "time_limit"
+                    break
+
+                visited_directories += 1
+                if visited_directories > directory_limit:
+                    visited_directories -= 1
+                    stop_reason = "directory_limit"
+                    break
+
+                current_path = Path(current_root)
+                kept_directories = []
+                for directory in sorted(dir_names, key=str.casefold):
+                    if directory.casefold() in _FILE_SEARCH_EXCLUDED_DIRECTORIES:
+                        continue
+                    candidate = current_path / directory
+                    try:
+                        metadata = candidate.stat(follow_symlinks=False)
+                    except OSError:
+                        continue
+                    attributes = int(getattr(metadata, "st_file_attributes", 0) or 0)
+                    if candidate.is_symlink() or attributes & 0x400:
+                        continue
+                    if not include_hidden and (
+                        directory.startswith(".") or attributes & (0x2 | 0x4)
+                    ):
+                        continue
+                    kept_directories.append(directory)
+                    if needle in directory.casefold():
+                        results.append(
+                            {
+                                "name": directory,
+                                "path": str(candidate),
+                                "kind": "folder",
+                                "drive": root.anchor or str(root),
+                            }
+                        )
+                        if len(results) >= result_limit:
+                            stop_reason = "result_limit"
+                            break
+
+                dir_names[:] = kept_directories
+                if stop_reason:
+                    break
+
+                for filename in sorted(file_names, key=str.casefold):
+                    if time.monotonic() - started >= time_limit:
+                        stop_reason = "time_limit"
+                        break
+                    candidate = current_path / filename
+                    try:
+                        metadata = candidate.stat(follow_symlinks=False)
+                    except OSError:
+                        continue
+                    attributes = int(getattr(metadata, "st_file_attributes", 0) or 0)
+                    if candidate.is_symlink() or attributes & 0x400:
+                        continue
+                    if not include_hidden and (
+                        filename.startswith(".") or attributes & (0x2 | 0x4)
+                    ):
+                        continue
+                    if needle in filename.casefold():
+                        results.append(
+                            {
+                                "name": filename,
+                                "path": str(candidate),
+                                "kind": "file",
+                                "drive": root.anchor or str(root),
+                            }
+                        )
+                        if len(results) >= result_limit:
+                            stop_reason = "result_limit"
+                            break
+                if stop_reason:
+                    break
+        except OSError:
+            # An inaccessible directory or removable/network volume is skipped.
+            continue
+
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    return {
+        "query": search_term,
+        "results": results,
+        "result_count": len(results),
+        "visited_directories": visited_directories,
+        "elapsed_ms": elapsed_ms,
+        "truncated": bool(stop_reason),
+        "stop_reason": stop_reason or None,
+        "drive_count": len(roots),
+    }
+
+
+_VALID_SCOPES = {"system", "applications", "processes", "windows", "drives", "files"}
 
 
 def discover_system_resources(
@@ -385,13 +549,18 @@ def discover_system_resources(
     *,
     max_processes: int = 250,
     max_windows: int = 200,
+    query: str | None = None,
+    max_file_results: int = 50,
+    max_file_directories: int = 5000,
+    max_file_seconds: float = 5.0,
 ) -> dict[str, Any]:
     """Build an in-memory, bounded inventory for the requested resource scopes.
 
     The default collects system details, registered applications, running
-    processes, visible windows, the foreground window, and logical drives.
-    File and folder names are not crawled automatically; targeted discovery
-    continues to use the existing filesystem search service.
+    processes, visible windows, and logical drives. When the "files" scope is
+    explicitly requested, a name-based search is performed across accessible
+    drives with strict result, directory, and time limits. File contents are
+    never opened or indexed.
     """
     if scopes is None:
         selected = set(_VALID_SCOPES)
@@ -405,6 +574,8 @@ def discover_system_resources(
         raise ValueError(f"Unsupported resource scope(s): {', '.join(sorted(invalid))}")
     if not selected:
         raise ValueError("At least one resource scope must be requested.")
+    if "files" in selected and not str(query or "").strip():
+        raise ValueError("The files scope requires a specific filename or folder-name query.")
 
     inventory: dict[str, Any] = {
         "schema_version": 1,
@@ -428,4 +599,11 @@ def discover_system_resources(
         )
     if "drives" in selected:
         inventory["drives"] = discover_drives()
+    if "files" in selected:
+        inventory["files_and_folders"] = discover_files_and_folders(
+            query,
+            max_results=max_file_results,
+            max_directories=max_file_directories,
+            max_seconds=max_file_seconds,
+        )
     return inventory
