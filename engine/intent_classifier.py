@@ -283,7 +283,7 @@ def classify_intent(
     # when the contextual model is unavailable. If a model does propose a
     # different target, retain the stricter correction threshold; otherwise
     # preserve the exact recognized application and use normal authorization.
-    if _is_known_application_command(raw):
+    if voice_input and _is_known_application_command(raw):
         if voice_input and interpretation is not None:
             contextual_query = str(
                 getattr(interpretation, "query", "") or normalized
