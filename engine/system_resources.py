@@ -220,10 +220,12 @@ def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, A
             return
         canonical = _application_discovery.ALIASES.get(normalized, normalized)
         key = canonical.casefold()
+        display_name = str(name or "").strip()
         record = discovered.setdefault(
             key,
             {
                 "name": canonical,
+                "display_name": display_name or canonical,
                 "sources": set(),
                 "category": category,
                 "publisher": None,
@@ -234,6 +236,8 @@ def discover_installed_applications(*, max_items: int = 500) -> list[dict[str, A
         record["sources"].add(source)
         if category_priority.get(category, 0) > category_priority.get(record["category"], 0):
             record["category"] = category
+            if display_name:
+                record["display_name"] = display_name
         if publisher and not record["publisher"]:
             record["publisher"] = publisher
         if version and not record["version"]:
