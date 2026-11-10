@@ -798,6 +798,18 @@ def build_application_process_relationships(
                 "match_basis": match_basis,
                 "window_count": len(related_windows),
                 "window_titles": window_titles[:10],
+                "window_states": [
+                    str(window.get("window_state") or "visible")
+                    for window in related_windows
+                ][:10],
+                "window_responsiveness": [
+                    str(window.get("responsiveness") or "unknown")
+                    for window in related_windows
+                ][:10],
+                "unresponsive_window_count": sum(
+                    1 for window in related_windows
+                    if window.get("responsiveness") == "unresponsive"
+                ),
                 "has_foreground_window": any(
                     bool(window.get("is_foreground"))
                     for window in related_windows
@@ -842,6 +854,228 @@ def build_application_process_relationships(
         "visible_window_count": sum(
             int(item["window_count"]) for item in rows
         ),
+    }
+
+
+def discover_window_states(*, max_items: int = 200) -> list[dict[str, Any]]:
+    """Enrich visible top-level windows with minimized and responsiveness state.
+
+    This is a point-in-time, read-only check. IsHungAppWindow is used as a
+    bounded Win32 status query; no input is sent to the target application.
+    """
+    if not _is_windows():
+        return []
+
+    windows = discover_visible_windows(max_items=max_items)
+    if not windows:
+        return []
+
+    try:
+        apis = _load_windows_apis()
+        if apis is None:
+            return [
+                {**window, "window_state": "visible", "responsiveness": "unknown"}
+                for window in windows
+            ]
+        user32, _kernel32, wintypes = apis
+        is_iconic = getattr(user32, "IsIconic", None)
+        is_hung = getattr(user32, "IsHungAppWindow", None)
+        if callable(is_iconic):
+            is_iconic.argtypes = [wintypes.HWND]
+            is_iconic.restype = wintypes.BOOL
+        if callable(is_hung):
+            is_hung.argtypes = [wintypes.HWND]
+            is_hung.restype = wintypes.BOOL
+
+        enriched = []
+        for window in windows:
+            handle = wintypes.HWND(int(window.get("handle") or 0))
+            try:
+                minimized = bool(is_iconic(handle)) if callable(is_iconic) else False
+            except Exception:
+                minimized = False
+            try:
+                unresponsive = bool(is_hung(handle)) if callable(is_hung) else None
+            except Exception:
+                unresponsive = None
+
+            if bool(window.get("is_foreground")):
+                window_state = "foreground"
+            elif minimized:
+                window_state = "minimized"
+            else:
+                window_state = "visible"
+
+            responsiveness = (
+                "unresponsive" if unresponsive is True
+                else "responsive" if unresponsive is False
+                else "unknown"
+            )
+            enriched.append({
+                **window,
+                "window_state": window_state,
+                "responsiveness": responsiveness,
+            })
+        return enriched
+    except Exception:
+        return [
+            {**window, "window_state": "visible", "responsiveness": "unknown"}
+            for window in windows
+        ]
+
+
+def build_application_state_report(
+    applications: list[dict[str, Any]],
+    processes: list[dict[str, Any]],
+    windows: list[dict[str, Any]],
+    *,
+    query: str | None = None,
+    process_sample_limit: int = 250,
+    max_applications: int = 200,
+) -> dict[str, Any]:
+    """Build conservative per-application runtime state from verified evidence.
+
+    No process match is called "not running" when the process sample is full.
+    Apps with competing process evidence remain explicitly ambiguous.
+    """
+    limit = _bounded_limit(process_sample_limit, 250, 1000)
+    relationships = build_application_process_relationships(
+        applications, processes, windows
+    )
+    relationship_rows = relationships.get("items", [])
+    query_terms = [
+        _application_discovery.normalize_application_name(term)
+        for term in re.split(
+            r"\s*(?:,|&|\band\b|\bor\b)\s*",
+            str(query or ""),
+            flags=re.IGNORECASE,
+        )
+        if term.strip()
+    ]
+    if query and not query_terms:
+        query_terms = [_application_discovery.normalize_application_name(query)]
+
+    eligible = []
+    for app in applications:
+        if not isinstance(app, dict):
+            continue
+        category = str(app.get("category") or "")
+        if category == "windows_component":
+            continue
+        name = str(app.get("display_name") or app.get("name") or "").strip()
+        if not name:
+            continue
+        executable_names = app.get("_executable_names", app.get("executable_names", []))
+        search_fields = [
+            name,
+            str(app.get("name") or ""),
+            *(str(item) for item in (executable_names or [])),
+        ]
+        normalized_fields = [
+            _application_discovery.normalize_application_name(item)
+            for item in search_fields if item
+        ]
+        if query_terms and not any(
+            term and any(term in field for field in normalized_fields)
+            for term in query_terms
+        ):
+            continue
+        eligible.append(app)
+
+    sample_truncated = len(processes) >= limit
+    results = []
+    for app in eligible[:_bounded_limit(max_applications, 200, 500)]:
+        name = str(app.get("display_name") or app.get("name") or "").strip()
+        folded_name = name.casefold()
+        matched_rows = [
+            row for row in relationship_rows
+            if row.get("match_status") == "matched"
+            and str(row.get("application") or "").casefold() == folded_name
+        ]
+        ambiguous_rows = [
+            row for row in relationship_rows
+            if row.get("match_status") == "ambiguous"
+            and folded_name in str(row.get("application") or "").casefold()
+        ]
+
+        process_rows = matched_rows
+        process_ids = sorted({
+            int(row["pid"]) for row in process_rows if row.get("pid") is not None
+        })
+        window_states = [
+            state for row in process_rows
+            for state in row.get("window_states", [])
+        ]
+        window_titles = [
+            title for row in process_rows
+            for title in row.get("window_titles", [])
+        ]
+        responsiveness_values = [
+            value for row in process_rows
+            for value in row.get("window_responsiveness", [])
+        ]
+        window_count = sum(int(row.get("window_count", 0) or 0) for row in process_rows)
+        unresponsive_count = sum(
+            int(row.get("unresponsive_window_count", 0) or 0)
+            for row in process_rows
+        )
+        has_foreground = any(
+            bool(row.get("has_foreground_window")) for row in process_rows
+        )
+
+        if ambiguous_rows and not matched_rows:
+            state = "ambiguous"
+            is_running = None
+        elif process_rows:
+            is_running = True
+            if has_foreground:
+                state = "foreground"
+            elif "minimized" in window_states:
+                state = "minimized"
+            elif window_count:
+                state = "visible"
+            else:
+                state = "running_background"
+        elif sample_truncated:
+            state = "not_verified_process_sample_limit"
+            is_running = None
+        else:
+            state = "not_running"
+            is_running = False
+
+        if unresponsive_count:
+            responsiveness = "unresponsive"
+        elif "responsive" in responsiveness_values:
+            responsiveness = "responsive"
+        elif window_count:
+            responsiveness = "unknown"
+        else:
+            responsiveness = "not_checked_no_window"
+
+        results.append({
+            "application": name,
+            "category": str(app.get("category") or "unknown"),
+            "state": state,
+            "is_running": is_running,
+            "process_count": len(process_ids),
+            "process_ids": process_ids,
+            "window_count": window_count,
+            "window_states": window_states,
+            "window_titles": window_titles[:10],
+            "responsiveness": responsiveness,
+            "unresponsive_window_count": unresponsive_count,
+            "ambiguous_process_count": len(ambiguous_rows),
+        })
+
+    results.sort(key=lambda item: item["application"].casefold())
+    return {
+        "query": str(query).strip() if query else None,
+        "items": results,
+        "application_count": len(results),
+        "process_sample_limit": limit,
+        "process_sample_count": len(processes),
+        "process_sample_truncated": sample_truncated,
+        "query_matched": bool(results) if query else None,
     }
 
 
@@ -1525,6 +1759,14 @@ _RESOURCE_REQUESTS = (
         ),
     ),
     (
+        "application_states",
+        re.compile(
+            r"^(?:please )?(?:(?:show|display|check|get|list)(?: me| the)? )?"
+            r"(?:application|app) states?(?: for (?P<query>.+))?$",
+            re.IGNORECASE,
+        ),
+    ),
+    (
         "relationships",
         re.compile(
             r"^(?:please )?(?:(?:show|display|get|give me|tell me|list)(?: me)? )?"
@@ -1584,6 +1826,27 @@ _RELATIONSHIP_QUERY_REQUESTS = (
 )
 
 
+_APPLICATION_STATE_QUERY_REQUESTS = (
+    re.compile(
+        r"^(?:what is|tell me) (?:the )?(?:current )?state of (?P<query>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^is (?P<query>.+?) (?:currently )?(?:running|open|responding|responsive|minimized)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:check|tell me whether) (?P<query>.+?) is (?:currently )?"
+        r"(?:running|open|responding|responsive|minimized)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:which|what) applications? are (?:currently )?running(?: right now)?$",
+        re.IGNORECASE,
+    ),
+)
+
+
 def parse_system_resource_request(text: str) -> dict[str, Any] | None:
     """Parse explicit, deterministic system-inventory requests.
 
@@ -1599,6 +1862,12 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
         if pattern.fullmatch(value):
             if scope == "all":
                 return {"scopes": sorted(_DEFAULT_SCOPES)}
+            if scope == "application_states":
+                query_value = pattern.groupdict().get("query")
+                return {
+                    "scopes": ["application_states"],
+                    **({"query": query_value.strip()} if query_value and query_value.strip() else {}),
+                }
             if scope == "relationships":
                 for query_pattern in _RELATIONSHIP_QUERY_REQUESTS:
                     query_match = query_pattern.fullmatch(value)
@@ -1608,6 +1877,15 @@ def parse_system_resource_request(text: str) -> dict[str, Any] | None:
                             return {"scopes": ["relationships"], "query": query}
                 return {"scopes": ["relationships"]}
             return {"scopes": [scope]}
+
+    for state_pattern in _APPLICATION_STATE_QUERY_REQUESTS:
+        state_match = state_pattern.fullmatch(value)
+        if state_match:
+            query_value = str(state_match.groupdict().get("query") or "").strip()
+            return {
+                "scopes": ["application_states"],
+                **({"query": query_value} if query_value else {}),
+            }
 
     # Also recognize application-specific process queries whose wording does
     # not contain the generic "application-process relationships" phrase.
@@ -1652,6 +1930,7 @@ _VALID_SCOPES = {
     "windows",
     "drives",
     "relationships",
+    "application_states",
     "files",
 }
 _DEFAULT_SCOPES = _VALID_SCOPES - {"files", "relationships"}
@@ -1696,6 +1975,7 @@ def discover_system_resources(
         "scopes": sorted(selected),
     }
     relationships_requested = "relationships" in selected
+    application_states_requested = "application_states" in selected
     process_limit = _bounded_limit(max_processes, 250, 1000)
     applications = None
     processes = None
@@ -1704,19 +1984,19 @@ def discover_system_resources(
     if "system" in selected:
         inventory["system"] = get_system_information()
     if "applications" in selected:
-        if relationships_requested:
+        if relationships_requested or application_states_requested:
             applications = discover_installed_applications(
                 include_relationship_metadata=True
             )
         else:
             applications = discover_installed_applications()
         inventory["installed_applications"] = applications
-    elif relationships_requested:
+    elif relationships_requested or application_states_requested:
         applications = discover_installed_applications(
             include_relationship_metadata=True
         )
-    if "processes" in selected or relationships_requested:
-        if relationships_requested:
+    if "processes" in selected or relationships_requested or application_states_requested:
+        if relationships_requested or application_states_requested:
             processes = discover_running_processes(
                 max_items=process_limit,
                 include_image_paths=True,
@@ -1735,6 +2015,15 @@ def discover_system_resources(
             )
     if "drives" in selected:
         inventory["drives"] = discover_drives()
+    if application_states_requested:
+        state_windows = discover_window_states(max_items=max_windows)
+        inventory["application_state_report"] = build_application_state_report(
+            applications or [],
+            processes or [],
+            state_windows,
+            query=query,
+            process_sample_limit=process_limit,
+        )
     if relationships_requested:
         inventory["application_process_relationships"] = (
             build_application_process_relationships(
