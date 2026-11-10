@@ -118,3 +118,40 @@ After merging, test:
 - `What apps are open?` (window ownership must agree with Task Manager process IDs)
 
 Compare PID values in JARVIS with Task Manager → Details. Expect some processes to remain unmapped or ambiguous; that is the correct result when Windows access or application evidence is insufficient.
+
+## Phase 2.3 — Intelligent application state awareness
+
+The explicit \`application_states\` scope produces a bounded, read-only snapshot of
+known applications, running processes, and their top-level windows.
+
+Supported examples:
+
+- \`Show application states\`
+- \`Check application state for Chrome\`
+- \`What is the state of Brave?\`
+- \`Is Visual Studio Code responding?\`
+- \`Which applications are running right now?\`
+
+The report separates these states:
+
+- **Foreground:** a related window is the current foreground window.
+- **Visible:** at least one related visible window exists.
+- **Minimized:** at least one related window is minimized.
+- **Running in background:** a verified process exists but no visible window is associated with it.
+- **Not running:** no related process was found and the bounded process sample was not saturated.
+- **Not verified (process sample limit):** no related process was found, but the process sample reached its configured limit; absence is not treated as proof that the application is closed.
+- **Ambiguous:** multiple application records still compete for the same process evidence.
+
+Window responsiveness is derived from the Windows \`IsHungAppWindow\` result when available.
+A result is reported as \`unknown\` or \`not_checked_no_window\` when Windows cannot provide a
+meaningful check. This is a point-in-time check, not a continuous monitor.
+
+### Safety and evidence boundaries
+
+- Process discovery uses the existing bounded \`tasklist.exe\` inventory and query-limited process image paths.
+- Window state uses Win32 visibility/minimized/foreground metadata and the Windows hung-window status check.
+- No process command lines, owners, environment variables, file contents, or credentials are collected.
+- No process is started, stopped, terminated, or modified.
+- No administrator elevation is requested.
+- The state inventory is not added to normal system-resource defaults; it runs only after an explicit state query.
+- Process sampling and window enumeration are bounded. Absence from a truncated sample is reported as unverified, not closed.
