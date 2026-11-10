@@ -13,6 +13,7 @@ The deterministic voice/typed-command parser recognizes explicit requests such a
 | Request | Inventory scope |
 | --- | --- |
 | `Show system info` | OS, architecture, processor, logical CPU count, physical memory |
+| `Show system resources` / `Show system inventory` | Combined system, installed-app, process, visible-window, and logical-drive inventory |
 | `List installed applications` | Registered Start Menu entries and Windows App Paths names |
 | `Show running processes` | Process image name, PID, and reported memory |
 | `What apps are open?` | Visible titled windows, process identity, and foreground window |
