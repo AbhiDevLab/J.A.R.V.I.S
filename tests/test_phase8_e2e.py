@@ -250,6 +250,7 @@ def test_relevant_memory_and_profile_reach_interpreter_and_answer_model(
 ):
     """Real SQLite memory retrieval must reach interpretation and response."""
     _patch_command_boundaries(monkeypatch)
+    monkeypatch.setenv("JARVIS_INTERPRETATION_MODE", "auto")
     from engine import memory as memory_module
     from engine.memory import build_memory_context
     from engine.user_context import (
@@ -257,7 +258,7 @@ def test_relevant_memory_and_profile_reach_interpreter_and_answer_model(
         save_profile_item,
     )
 
-    store = memory_module.MemoryStore(tmp_path / "intelligence-memory.sqlite3")
+    store = memory_module.MemoryStore(tmp_path / "intelligence-memory.sqlite3", enabled=True)
     monkeypatch.setattr(memory_module, "memory_store", store)
     saved_memory = store.save_memory(
         "The user is building a Python desktop assistant project.",
