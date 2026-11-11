@@ -246,25 +246,48 @@ def test_low_confidence_voice_correction_clarifies_without_executing(
 
 def test_relevant_memory_and_profile_reach_interpreter_and_answer_model(
     monkeypatch,
+    tmp_path,
 ):
-    """Relevant durable context must reach both interpretation and response."""
+    """Real SQLite memory retrieval must reach interpretation and response."""
     _patch_command_boundaries(monkeypatch)
-    memory_context = (
-        "Relevant stored memory: The user is building a Python desktop assistant."
+    from engine import memory as memory_module
+    from engine.memory import build_memory_context
+    from engine.user_context import (
+        build_user_profile_context,
+        save_profile_item,
     )
-    profile_context = (
-        "Relevant profile: The user prefers concise technical explanations."
+
+    store = memory_module.MemoryStore(tmp_path / "intelligence-memory.sqlite3")
+    monkeypatch.setattr(memory_module, "memory_store", store)
+    saved_memory = store.save_memory(
+        "The user is building a Python desktop assistant project.",
+        key="project.desktop_assistant",
+        confidence=0.98,
+        importance=4,
     )
+    saved_profile = save_profile_item(
+        "communication",
+        "response_style",
+        "The user prefers concise technical explanations.",
+        confidence=0.98,
+        importance=4,
+    )
+    assert saved_memory is not None
+    assert saved_profile is not None
+
     interpreter_prompts = []
     answer_prompts = []
 
     def interpret_with_context(prompt):
         interpreter_prompts.append(prompt)
-        assert memory_context in prompt
-        assert profile_context in prompt
+        assert "Python desktop assistant project" in prompt
+        assert "concise technical explanations" in prompt
         return json.dumps(
             {
-                "interpreted_query": "How should you explain my desktop assistant project?",
+                "interpreted_query": (
+                    "How should you give concise technical explanations "
+                    "about my desktop assistant project?"
+                ),
                 "intent": "conversation",
                 "confidence": 0.96,
                 "needs_clarification": False,
@@ -274,15 +297,18 @@ def test_relevant_memory_and_profile_reach_interpreter_and_answer_model(
 
     def answer_with_context(prompt):
         answer_prompts.append(prompt)
-        return "I will use concise technical explanations for your desktop assistant project."
+        return (
+            "I will use concise technical explanations for your "
+            "desktop assistant project."
+        )
 
     monkeypatch.setattr(
         "engine.intelligence_context.build_memory_context",
-        lambda _query: memory_context,
+        build_memory_context,
     )
     monkeypatch.setattr(
         "engine.intelligence_context.build_user_profile_context",
-        lambda _query: profile_context,
+        build_user_profile_context,
     )
     monkeypatch.setattr(
         "engine.context_interpreter.ask_llm",
@@ -297,16 +323,15 @@ def test_relevant_memory_and_profile_reach_interpreter_and_answer_model(
     )
 
     command.allCommands(
-        "How should you explain my desktop assistant project?",
+        "How should you give concise technical explanations about my desktop assistant project?",
         voice_input=True,
         detected_language="en",
     )
 
     assert len(interpreter_prompts) == 1
     assert len(answer_prompts) == 1
-    assert memory_context in answer_prompts[0]
-    assert profile_context in answer_prompts[0]
-
+    assert "Python desktop assistant project" in answer_prompts[0]
+    assert "concise technical explanations" in answer_prompts[0]
 
 def test_genuinely_ambiguous_voice_request_keeps_clarification_and_never_executes(
     monkeypatch,
