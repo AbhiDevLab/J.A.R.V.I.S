@@ -31,6 +31,7 @@ from engine.reference_resolver import (
     assistant_requests_confirmation,
     is_clear_affirmative_confirmation,
     is_clear_negative_confirmation,
+    assistant_requests_user_reply,
 )
 from engine.persona import build_jarvis_prompt
 
@@ -807,6 +808,41 @@ def _handle_llm_failure(
     )
 
 
+def _capture_pending_voice_reply(
+    is_voice_input: bool,
+    response_language: str = "en",
+) -> tuple[str, str] | None:
+    """Capture one immediate answer to a question JARVIS is waiting on.
+
+    This is a bounded one-shot handoff, not a permanent listener. Continuous
+    Listening already owns the microphone and captures the next phrase itself.
+    """
+    if not is_voice_input or _continuous_listening_event.is_set():
+        return None
+
+    listen_timeout = _bounded_env_float(
+        "JARVIS_FOLLOWUP_LISTEN_TIMEOUT", 10.0, 1.0, 30.0
+    )
+    phrase_time_limit = _bounded_env_float(
+        "JARVIS_FOLLOWUP_PHRASE_LIMIT", 8.0, 2.0, 20.0
+    )
+    print("Waiting for the user's answer; wake word is not required.")
+    _safe_display("DisplayMessage", "Listening for your response...")
+    _safe_display("ShowSiriWave")
+
+    reply, language = takecommand(
+        return_language=True,
+        listen_timeout=listen_timeout,
+        phrase_time_limit=phrase_time_limit,
+    )
+    reply = str(reply or "").strip()
+    if not reply:
+        # Pending state intentionally remains available for a later wake-word turn.
+        return None
+
+    return reply, (language or response_language or "en")
+
+
 @eel.expose
 def allCommands(message=1, *, voice_input=None, detected_language=None):
     # While hands-free mode is active, typed requests are queued for the same
@@ -876,6 +912,29 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
     # Phase 3/5 conversation loop:
     # If an LLM response is interrupted by saying "Jarvis", the loop
     # listens for the next query and continues without another activation.
+    followup_turns = 0
+    maximum_automatic_followups = 3
+
+    def continue_with_pending_reply() -> bool:
+        """Capture a bounded answer and continue this same command pipeline."""
+        nonlocal query, query_language, is_voice_input, followup_turns
+        if followup_turns >= maximum_automatic_followups:
+            return False
+        captured = _capture_pending_voice_reply(
+            is_voice_input,
+            query_language or "en",
+        )
+        if captured is None:
+            return False
+        query, query_language = captured
+        is_voice_input = True
+        followup_turns += 1
+        print(
+            f"Captured follow-up reply {followup_turns}/"
+            f"{maximum_automatic_followups}: {query!r}"
+        )
+        return True
+
     while True:
         raw_transcript = str(query or "").strip()
         trace_id = new_interaction_trace_id()
@@ -1071,6 +1130,13 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                         clarification,
                         language=query_language or "en",
                     )
+                    record_interaction_trace(
+                        trace_id, "turn_completed",
+                        route="clarification", outcome="clarification",
+                        latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                    )
+                    if continue_with_pending_reply():
+                        continue
                     break
 
                 current_state = get_interaction_state()
@@ -1105,6 +1171,13 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                             route="clarification",
                             outcome="clarification",
                         )
+                        record_interaction_trace(
+                            trace_id, "turn_completed",
+                            route="clarification", outcome="clarification",
+                            latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                        )
+                        if continue_with_pending_reply():
+                            continue
                         break
 
                 if current_state.state_type == "confirmation":
@@ -1140,6 +1213,13 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                                 route="clarification",
                                 outcome="clarification",
                             )
+                            record_interaction_trace(
+                                trace_id, "turn_completed",
+                                route="clarification", outcome="clarification",
+                                latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                            )
+                            if continue_with_pending_reply():
+                                continue
                             break
                         current_state.clear()
                     else:
@@ -1242,6 +1322,13 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     clarification,
                     language=query_language or "en",
                 )
+                record_interaction_trace(
+                    trace_id, "turn_completed",
+                    route="clarification", outcome="clarification",
+                    latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                )
+                if continue_with_pending_reply():
+                    continue
                 break
 
             automation_action = (
@@ -1691,13 +1778,21 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                 )
 
                 if assistant_requests_confirmation(response):
-                    # Persist the assistant's pending question across allCommands
-                    # calls so a later "yes", "do it", or "cancel" is interpreted
-                    # against the right task instead of as a standalone utterance.
+                    # Persist a pending approval so the answer is interpreted
+                    # against the right task rather than as a standalone request.
                     get_interaction_state().set(
                         "confirmation",
                         prompt=response,
                         action_type="confirm_previous_task",
+                        pending_request=query,
+                    )
+                elif assistant_requests_user_reply(response):
+                    # General reply-seeking questions also establish state so a
+                    # short answer continues this task rather than starting anew.
+                    get_interaction_state().set(
+                        "clarification",
+                        prompt=response,
+                        action_type="conversation_followup",
                         pending_request=query,
                     )
 
@@ -1779,6 +1874,11 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     route="conversation", outcome="success",
                     latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
                 )
+
+                if get_interaction_state().state_type in {
+                    "clarification", "confirmation"
+                } and continue_with_pending_reply():
+                    continue
 
             break
 
