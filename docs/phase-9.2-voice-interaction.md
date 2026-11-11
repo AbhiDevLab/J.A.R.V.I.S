@@ -119,7 +119,7 @@ During the capture, use a repeatable sequence:
 For a repeatable far-end-only stimulus, first confirm that `ffplay -version` works, then use a known speech WAV:
 
 ```powershell
-python -m echoff record --play-wav C:\\audio\\known-speech.wav --repetitions 3
+python -m echoff record --play-wav C:\audio\\known-speech.wav --repetitions 3
 ```
 
 Use an actual local WAV path. Keep the microphone silent during the stimulus portion. The Echoff CLI prints the artifact directory. Preserve it outside the repository and inspect at least:
