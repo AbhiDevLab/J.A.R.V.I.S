@@ -78,3 +78,66 @@ def test_llm_failure_preserves_pending_task_and_existing_dialogue_state(monkeypa
     assert recorded and recorded[0][0] == "open report.pdf"
     assert spoken and "say 'retry'" in spoken[0].lower()
     assert displayed and displayed[0][0] == "assistantResponse"
+
+
+
+def test_pending_voice_reply_is_captured_without_another_wake_word(monkeypatch):
+    captured = []
+    displays = []
+    monkeypatch.setattr(
+        command,
+        "takecommand",
+        lambda **kwargs: (captured.append(kwargs) or ("Notepad", "en")),
+    )
+    monkeypatch.setattr(
+        command,
+        "_safe_display",
+        lambda name, *args, **kwargs: displays.append(name),
+    )
+    command._continuous_listening_event.clear()
+
+    result = command._capture_pending_voice_reply(True, "en")
+
+    assert result == ("Notepad", "en")
+    assert captured[0]["return_language"] is True
+    assert captured[0]["listen_timeout"] == 10.0
+    assert captured[0]["phrase_time_limit"] == 8.0
+    assert "ShowSiriWave" in displays
+
+
+def test_pending_voice_reply_does_not_open_mic_for_typed_turns(monkeypatch):
+    def unexpected_capture(**kwargs):
+        raise AssertionError("Typed turns must not open the microphone.")
+
+    monkeypatch.setattr(command, "takecommand", unexpected_capture)
+    command._continuous_listening_event.clear()
+
+    assert command._capture_pending_voice_reply(False, "en") is None
+
+
+def test_pending_voice_reply_reuses_continuous_listener_instead_of_opening_second_mic(monkeypatch):
+    def unexpected_capture(**kwargs):
+        raise AssertionError("Continuous Listening already owns the microphone.")
+
+    monkeypatch.setattr(command, "takecommand", unexpected_capture)
+    command._continuous_listening_event.set()
+    try:
+        assert command._capture_pending_voice_reply(True, "en") is None
+    finally:
+        command._continuous_listening_event.clear()
+
+
+def test_followup_capture_timeout_preserves_pending_question_state(monkeypatch):
+    state = get_interaction_state()
+    state.set(
+        "clarification",
+        prompt="Which item would you like me to open?",
+        action_type="conversation_followup",
+        pending_request="open that one",
+    )
+    monkeypatch.setattr(command, "takecommand", lambda **kwargs: ("", ""))
+    command._continuous_listening_event.clear()
+
+    assert command._capture_pending_voice_reply(True, "en") is None
+    assert state.state_type == "clarification"
+    assert state.prompt == "Which item would you like me to open?"
