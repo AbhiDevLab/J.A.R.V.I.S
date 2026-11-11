@@ -148,3 +148,96 @@ def test_pending_yes_resolves_delete_but_cannot_bypass_authorization(
     assert authorization_requests[0][1] is True
     assert target.exists()
     assert get_interaction_state().has_state() is False
+
+
+
+def test_high_confidence_voice_stt_correction_reaches_real_router_and_executor(
+    monkeypatch,
+):
+    """A plausible Whisper error is corrected before deterministic routing."""
+    _patch_command_boundaries(monkeypatch)
+    raw_transcript = "open load pad"
+    interpreter_prompts = []
+
+    def interpret_with_correction(prompt):
+        interpreter_prompts.append(prompt)
+        assert raw_transcript in prompt
+        return json.dumps(
+            {
+                "interpreted_query": "open Notepad",
+                "intent": "automation",
+                "confidence": 0.96,
+                "needs_clarification": False,
+                "clarification_question": "",
+            }
+        )
+
+    executed_actions = []
+
+    def capture_execution(action):
+        executed_actions.append(action)
+        return {"success": True, "message": "Opening Notepad."}
+
+    monkeypatch.setattr(
+        "engine.context_interpreter.ask_llm",
+        interpret_with_correction,
+    )
+    monkeypatch.setattr(command, "execute_action", capture_execution)
+
+    command.allCommands(
+        raw_transcript,
+        voice_input=True,
+        detected_language="en",
+    )
+
+    assert interpreter_prompts
+    assert len(executed_actions) == 1
+    action = executed_actions[0]
+    assert action.action_type == "open_application"
+    assert action.parameters["application"] == "notepad"
+    assert get_interaction_state().has_state() is False
+
+
+def test_low_confidence_voice_correction_clarifies_without_executing(
+    monkeypatch,
+):
+    """An uncertain inferred target must stop before the automation executor."""
+    _patch_command_boundaries(monkeypatch)
+    raw_transcript = "open load pad"
+    interpreter_prompts = []
+
+    def uncertain_interpretation(prompt):
+        interpreter_prompts.append(prompt)
+        assert raw_transcript in prompt
+        return json.dumps(
+            {
+                "interpreted_query": "open Notepad",
+                "intent": "automation",
+                "confidence": 0.61,
+                "needs_clarification": False,
+                "clarification_question": "",
+            }
+        )
+
+    executed_actions = []
+    monkeypatch.setattr(
+        "engine.context_interpreter.ask_llm",
+        uncertain_interpretation,
+    )
+    monkeypatch.setattr(
+        command,
+        "execute_action",
+        lambda action: executed_actions.append(action),
+    )
+
+    command.allCommands(
+        raw_transcript,
+        voice_input=True,
+        detected_language="en",
+    )
+
+    state = get_interaction_state()
+    assert interpreter_prompts
+    assert executed_actions == []
+    assert state.state_type == "clarification"
+    assert "clarify" in state.prompt.casefold() or "repeat" in state.prompt.casefold()
