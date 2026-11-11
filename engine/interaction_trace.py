@@ -205,6 +205,16 @@ def record_interaction_trace(
                 "DELETE FROM interaction_trace_events WHERE timestamp_utc < ?",
                 (cutoff,),
             )
+            # Retention is time-based, with a hard row cap as a second bound.
+            connection.execute(
+                """
+                DELETE FROM interaction_trace_events
+                 WHERE id NOT IN (
+                     SELECT id FROM interaction_trace_events
+                     ORDER BY id DESC LIMIT 50000
+                 )
+                """
+            )
             connection.execute(
                 """
                 INSERT INTO interaction_trace_events (
