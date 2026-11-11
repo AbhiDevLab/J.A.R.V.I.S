@@ -361,11 +361,11 @@ Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
 - [x] Instrument command start, contextual interpretation, intent classification, clarification, automation outcome, response generation, provider failure and interruption
 - [x] Keep transcripts, prompts, model responses, document content, paths, shell arguments, tool output and credentials out of the trace schema
 - [x] Document trace storage, privacy boundaries, configuration and local inspection
-- [ ] Pass automated trace privacy/lifecycle and command-pipeline regression tests in CI
+- [x] Pass automated trace privacy/lifecycle and command-pipeline regression tests in CI — PR #29, run #121: full regression and Windows voice-contract jobs passed
 - [ ] Owner-verify the local trace database on Windows and inspect representative events
 - [ ] Confirm opt-out prevents trace database creation on the target machine
 
-**Phase status:** 🟡 Implemented; automated and live validation pending
+**Phase status:** 🟡 Implementation and CI validation complete; owner-side Windows storage/opt-out verification pending
 
 ---
 
