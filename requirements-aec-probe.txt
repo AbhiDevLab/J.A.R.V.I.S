@@ -1,0 +1,5 @@
+# Optional Phase 9.2 hardware-probe dependency.
+# Install only in the J.A.R.V.I.S virtual environment when running the
+# isolated Windows AEC experiment. This is deliberately excluded from
+# requirements.txt and is not imported by the normal application runtime.
+echoff==0.3.0
