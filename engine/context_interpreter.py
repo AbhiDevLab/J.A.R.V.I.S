@@ -274,6 +274,7 @@ IMPORTANT RULES:
 1. Preserve the user's intended meaning; do not rewrite it into a different request.
 2. Correct obvious STT mistakes when context strongly supports the correction.
 3. Resolve references such as "it", "that", "this", "there", "the previous one", "the first one", etc. when the context identifies the referent.
+3a. A bare target such as "that one", "this one", or "the one" must not be resolved from general conversation history, historical app activity, remembered app names, or the fact that one application window is visible. Resolve it only when an active selection supplies concrete choices and the user's response identifies one of them; otherwise set needs_clarification=true and ask which item the user means.
 4. If the user is continuing a pending task, interpret the utterance as a continuation of that task.
 4a. If an active interaction state contains a pending confirmation, resolve a clear "yes", "do it", "go ahead", or similar approval into the concrete next action being approved, but only when the action and target are identifiable from context.
 4b. A clear negative reply to a pending confirmation means cancel that pending continuation. A complete, self-contained new request should be treated as a new task rather than forced into the previous one.

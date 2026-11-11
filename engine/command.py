@@ -1197,13 +1197,22 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
             # existing executor remains responsible for authorization.
             if (
                 getattr(intent_result, "needs_clarification", False)
-                and getattr(intent_result, "source", "") == "voice_interpretation_unresolved"
+                and getattr(intent_result, "source", "") in {
+                    "voice_interpretation_unresolved",
+                    "unanchored_reference",
+                }
             ):
-                clarification = (
-                    interpretation.clarification_question
-                    if interpretation is not None
-                    else ""
-                ) or "I couldn't confidently identify that command. Please repeat it."
+                if (
+                    getattr(intent_result, "reason", "")
+                    == "bare demonstrative target has no active selection"
+                ):
+                    clarification = "Which item are you referring to?"
+                else:
+                    clarification = (
+                        interpretation.clarification_question
+                        if interpretation is not None
+                        else ""
+                    ) or "I couldn't confidently identify that command. Please repeat it."
                 record_interaction_trace(
                     trace_id, "clarification_requested",
                     interpretation_used=interpretation is not None,
@@ -1211,7 +1220,9 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                         interpretation.confidence if interpretation is not None else None
                     ),
                     intent="clarification",
-                    intent_source="voice_interpretation_unresolved",
+                    intent_source=getattr(
+                        intent_result, "source", "voice_interpretation_unresolved"
+                    ),
                     route="clarification",
                     outcome="clarification",
                 )
@@ -1220,7 +1231,11 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     prompt=clarification,
                     raw_transcript=raw_transcript,
                     candidate_query=(
-                        interpretation.query if interpretation is not None else ""
+                        interpretation.query
+                        if interpretation is not None
+                        and getattr(intent_result, "source", "")
+                        != "unanchored_reference"
+                        else ""
                     ),
                 )
                 speak(
