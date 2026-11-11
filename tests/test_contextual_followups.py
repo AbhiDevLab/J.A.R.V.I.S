@@ -165,3 +165,28 @@ def test_confirmation_classifier_does_not_treat_a_new_command_as_yes_or_no():
     assert is_clear_negative_confirmation("never mind") is True
     assert is_clear_affirmative_confirmation("open Chrome") is False
     assert is_clear_negative_confirmation("open Chrome") is False
+
+
+
+def test_assistant_questions_that_need_an_answer_request_a_followup():
+    from engine.reference_resolver import assistant_requests_user_reply
+
+    assert assistant_requests_user_reply("Which item would you like me to open?")
+    assert assistant_requests_user_reply("Would you like me to continue?")
+    assert assistant_requests_user_reply("Could you clarify which file you mean?")
+    assert assistant_requests_user_reply("Any questions?")
+    assert not assistant_requests_user_reply("The file has been opened successfully.")
+    assert not assistant_requests_user_reply(
+        "What is an API? An API lets software systems communicate."
+    )
+
+
+def test_pending_reply_detector_uses_the_final_sentence_only():
+    from engine.reference_resolver import assistant_requests_user_reply
+
+    assert not assistant_requests_user_reply(
+        "What is an API? An API lets software systems communicate."
+    )
+    assert assistant_requests_user_reply(
+        "I found two possibilities. Which one should I open?"
+    )

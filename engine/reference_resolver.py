@@ -214,3 +214,42 @@ def assistant_requests_confirmation(response: str) -> bool:
         value,
         re.IGNORECASE,
     ))
+
+
+_USER_REPLY_QUESTION_START = re.compile(
+    r"^(?:who|what|when|where|why|which|how|can|could|would|do|does|did|"
+    r"should|shall|is|are|am|will|have|has|may|might|any|anything|ready)\b",
+    re.IGNORECASE,
+)
+_USER_REPLY_REQUEST = re.compile(
+    r"\b(?:please\s+(?:tell|provide|specify|choose|select|share)|"
+    r"tell me which|let me know which|i need to know)\b",
+    re.IGNORECASE,
+)
+
+
+def assistant_requests_user_reply(response: str) -> bool:
+    """Return True when JARVIS's final question/request expects an answer."""
+    value = str(response or "").strip()
+    if not value:
+        return False
+
+    if assistant_requests_confirmation(value):
+        return True
+
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", value)
+        if sentence.strip()
+    ]
+    if not sentences:
+        return False
+
+    final_sentence = sentences[-1].strip().strip("\"' *_)]}>")
+    if _USER_REPLY_REQUEST.search(final_sentence):
+        return True
+
+    if not final_sentence.endswith("?"):
+        return False
+
+    return bool(_USER_REPLY_QUESTION_START.search(final_sentence))

@@ -89,6 +89,80 @@ def test_cross_turn_file_reference_reaches_real_router_and_executor(
     assert opened_paths == [str(report.resolve())]
 
 
+def test_unanchored_target_clarification_captures_answer_in_same_voice_turn(monkeypatch):
+    from types import SimpleNamespace
+
+    _patch_command_boundaries(monkeypatch)
+    command._continuous_listening_event.clear()
+    interpretations = [
+        SimpleNamespace(
+            raw_transcript="open that one",
+            interpreted_query="open Notepad",
+            query="open Notepad",
+            intent="automation",
+            confidence=0.99,
+            needs_clarification=False,
+            clarification_question="",
+            used_context=True,
+        ),
+        SimpleNamespace(
+            raw_transcript="Notepad",
+            interpreted_query="open Notepad",
+            query="open Notepad",
+            intent="automation",
+            confidence=0.98,
+            needs_clarification=False,
+            clarification_question="",
+            used_context=True,
+        ),
+    ]
+    interpreted_inputs = []
+
+    def interpret(transcript, **kwargs):
+        interpreted_inputs.append(transcript)
+        return interpretations.pop(0)
+
+    captured = []
+    executed = []
+    monkeypatch.setattr(command, "interpret_query", interpret)
+    monkeypatch.setattr(
+        command,
+        "takecommand",
+        lambda **kwargs: (captured.append(kwargs) or ("Notepad", "en")),
+    )
+    monkeypatch.setattr(
+        command,
+        "route_command",
+        lambda query: SimpleNamespace(
+            action_type="open_application",
+            parameters={"application": "notepad"},
+        ),
+    )
+    monkeypatch.setattr(command, "complete_action", lambda action: action)
+    monkeypatch.setattr(
+        command,
+        "execute_action",
+        lambda action: (executed.append(action) or {
+            "success": True,
+            "message": "Opened Notepad.",
+        }),
+    )
+    monkeypatch.setattr(command, "record_interaction_trace", lambda *args, **kwargs: True)
+    monkeypatch.setattr(command, "extract_memories_from_turn", lambda *args, **kwargs: None)
+    monkeypatch.setattr(command, "record_episode", lambda *args, **kwargs: None)
+
+    command.allCommands(
+        "open that one",
+        voice_input=True,
+        detected_language="en",
+    )
+
+    assert interpreted_inputs == ["open that one", "Notepad"]
+    assert len(captured) == 1
+    assert len(executed) == 1
+    assert get_interaction_state().state_type == ""
+
+
 def test_pending_yes_resolves_delete_but_cannot_bypass_authorization(
     monkeypatch,
     tmp_path,
