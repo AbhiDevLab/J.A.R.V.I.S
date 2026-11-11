@@ -39,7 +39,7 @@ Environment controls:
 | `JARVIS_INTERACTION_TRACE_DB` | `data/interaction_traces.sqlite3` | Override local database path |
 | `JARVIS_INTERACTION_TRACE_RETENTION_DAYS` | `30` | Retain at most the configured number of days (1–365) |
 
-The trace API is best-effort: database/path errors are swallowed and must never interrupt the current J.A.R.V.I.S request.
+The trace API is best-effort: database/path errors are swallowed and must never interrupt the current J.A.R.V.I.S request. Storage is bounded by both the configured time window and a hard cap of 50,000 events.
 
 ## Inspecting recent events
 
