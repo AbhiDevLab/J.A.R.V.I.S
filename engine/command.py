@@ -1217,7 +1217,7 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                         interpretation.confidence if interpretation is not None else None
                     ),
                     intent="clarification",
-                    intent_source="voice_interpretation_unresolved",
+                    intent_source=getattr(intent_result, "source", "voice_interpretation_unresolved"),
                     route="clarification",
                     outcome="clarification",
                 )
@@ -1226,7 +1226,10 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     prompt=clarification,
                     raw_transcript=raw_transcript,
                     candidate_query=(
-                        interpretation.query if interpretation is not None else ""
+                        interpretation.query
+                        if interpretation is not None
+                        and getattr(intent_result, "source", "") != "unanchored_reference"
+                        else ""
                     ),
                 )
                 speak(
