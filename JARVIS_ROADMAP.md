@@ -201,6 +201,7 @@ Remaining work: some legacy automation routes (such as the older app/YouTube/mes
 
 ### Phase 8.2 — Long-Term Memory System
 
+- [x] Queue eligible semantic-memory extraction on a bounded background worker so the existing LLM extraction and SQLite writes do not delay the next live interaction (adapted from OpenJarvis MemoryService; existing J.A.R.V.I.S eligibility/confidence/sensitivity rules retained)
 - [x] Design a dedicated JARVIS memory architecture instead of treating conversation history as memory
 - [x] Separate episodic memory from persistent semantic memory
 - [x] Store high-confidence durable user facts and preferences via selective LLM extraction
