@@ -410,6 +410,12 @@ Recent local Kokoro TTS work belongs to the broader voice capability work, but i
 
 **Implementation note:** The current increment is wake-word barge-in: say "Jarvis" during playback to stop JARVIS. It does not yet support interrupting with arbitrary speech. Acoustic echo cancellation and full-duplex capture remain open; see `docs/phase-9.2-voice-interaction.md`.
 
+- [x] Add isolated optional Echoff 0.3.0 probe dependency without changing normal runtime requirements
+- [x] Document repeatable Windows AEC device discovery, capture, privacy, and acceptance procedure
+- [ ] Run AEC probe on the target Windows microphone and output endpoints
+- [ ] Review raw/AEC recordings and confirm near-end speech preservation
+- [ ] Integrate a single-owner AEC capture path only after hardware acceptance
+
 **Phase status:** 🟡 Implementation started; automated and live validation pending
 
 ---
