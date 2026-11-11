@@ -115,7 +115,7 @@ These tests add no runtime dependency and do not change production routing or pe
 
 ## 6. Follow-on adoption: interaction traces
 
-The next selected OpenJarvis pattern is append-only trace collection for post-run analysis. J.A.R.V.I.S now has a local SQLite trace foundation in `engine/interaction_trace.py` and command-path event hooks. It records allowlisted metadata (channel, interpretation confidence, intent/source, route, action type, coarse outcome, provider/model identifiers and stage latency) and excludes user-content fields.
+The next selected OpenJarvis pattern is append-only trace collection for post-run analysis. J.A.R.V.I.S now has a local SQLite trace foundation in `engine/interaction_trace.py` and command-path event hooks. It records allowlisted metadata (channel, interpretation confidence, intent/source, route, action type, coarse outcome, allowlisted provider category and stage latency) and excludes user-content fields.
 
 This is observability only. It does not train or update a model, alter routing policy, bypass deterministic automation, or learn a new permission. Trace collection can be disabled with `JARVIS_INTERACTION_TRACES_ENABLED=0`; by default records remain local, expire after 30 days (configurable 1–365), and are capped at 50,000 events.
 
