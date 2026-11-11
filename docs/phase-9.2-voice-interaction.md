@@ -79,3 +79,82 @@ Do **not** add Echoff or pywebrtc-audio to the main requirements yet. Before int
 
 This investigation closes the research task only; AEC integration, arbitrary-speech barge-in, and full-duplex capture remain incomplete.
 
+## Isolated Windows AEC hardware probe (Echoff 0.3.0)
+
+The probe dependency is intentionally isolated from the normal application dependencies. It must not be imported by `run.py`, `engine/command.py`, or the default speech path before the target hardware has passed the acceptance checks below.
+
+OpenJarvis provides a useful architectural reference: its Faster-Whisper speech backend accepts audio data independently of device capture. J.A.R.V.I.S should preserve the same separation when AEC is integrated: capture and clean the audio first, then hand cleaned audio to the existing STT path. Do not create a second microphone reader or feed unsynchronized microphone and speaker streams into the AEC processor.
+
+### Install the optional probe
+
+Run from the repository root in the existing Python 3.11 `envjarvis` environment:
+
+```powershell
+python -m pip install -r requirements-aec-probe.txt
+python -m echoff --help
+```
+
+The normal `requirements.txt` remains unchanged. Echoff 0.3.0 is alpha software and requires Python 3.11 or newer.
+
+### Discover Windows audio endpoints
+
+```powershell
+python -m echoff devices
+```
+
+Record the selected microphone and render/output device names. Connect the same headphones/speakers and microphone normally used with J.A.R.V.I.S. Do not assume the default Windows endpoint is the endpoint J.A.R.V.I.S actually uses.
+
+### Capture a raw-versus-AEC comparison
+
+```powershell
+python -m echoff record --duration 25
+```
+
+During the capture, use a repeatable sequence:
+
+1. Play continuous spoken audio through the selected output device for at least ten seconds while remaining silent. This creates a far-end-only interval for checking speaker leakage.
+2. Stop playback and speak several normal commands into the selected microphone. This checks that AEC does not suppress the user's own speech.
+3. Play output audio again and speak over it. This checks the combined case required for interruption.
+
+For a repeatable far-end-only stimulus, first confirm that `ffplay -version` works, then use a known speech WAV:
+
+```powershell
+python -m echoff record --play-wav C:\audio\\known-speech.wav --repetitions 3
+```
+
+Use an actual local WAV path. Keep the microphone silent during the stimulus portion. The Echoff CLI prints the artifact directory. Preserve it outside the repository and inspect at least:
+
+- `computer_audio.wav` — render-device reference.
+- `microphone_raw.wav` — microphone before AEC.
+- `microphone_aec.wav` — microphone after AEC.
+
+### Acceptance criteria
+
+Do not integrate AEC into the J.A.R.V.I.S runtime unless all of these are satisfied on the target Windows PC:
+
+- The capture status is `completed`, not `incomplete`, `degraded`, or `failed`.
+- The three primary tracks have matching duration/frame counts.
+- No source failure, unsafe overflow, or hard discontinuity is reported.
+- With output audio and no user speech, the AEC track audibly reduces speaker leakage compared with the raw microphone track.
+- With user speech and no output audio, the user's words remain intelligible in the AEC track.
+- With simultaneous user speech and output audio, the user's words remain intelligible while speaker leakage is reduced.
+- The capture can start, stop, and recover after changing the Windows input/output device.
+- Repeat the test with the actual microphone/speaker placement and volume used during J.A.R.V.I.S sessions.
+
+Echoff's `echo_path_ready` indicator is a readiness heuristic, not proof that all echo is removed. Listen to the raw and AEC tracks; do not accept a numeric suppression score alone.
+
+### Privacy and repository hygiene
+
+The capture artifacts may contain private microphone speech and all computer audio routed through the selected output. Keep the artifacts local, do not commit them, and inspect `git status --short` before any push. Do not upload recordings unless their contents have been reviewed and sharing is intentional.
+
+### Runtime integration gate
+
+Until the hardware acceptance criteria pass:
+
+- Keep the current half-duplex listener and wake-word-only TTS interruption as the production behavior.
+- Do not add Echoff to `requirements.txt`.
+- Do not enable wake-word-free barge-in or full-duplex capture.
+- Do not allow Porcupine, SpeechRecognition, or a future AEC capture service to open competing microphone streams.
+
+After acceptance, the implementation should use one capture owner for both the microphone and render-loopback reference, dispatch bounded cleaned-audio frames to VAD/STT and the interruption detector, and retain the current half-duplex path as a safe fallback. AEC must be opt-in until the full Windows lifecycle and false-interruption tests pass.
+

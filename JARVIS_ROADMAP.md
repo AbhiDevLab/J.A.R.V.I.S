@@ -402,6 +402,8 @@ Recent local Kokoro TTS work belongs to the broader voice capability work, but i
 - [x] Ignore wake-word hits outside the TTS window in continuous mode to prevent duplicate activation flows
 - [x] Add bounded adaptive-energy VAD and phrase-endpoint configuration
 - [x] Add focused regression tests for microphone gating, interruption routing, and VAD configuration
+- [x] Add regression coverage for TTS consuming the shared interrupt event and cleaning up playback state
+- [x] Add a Windows CI job for mocked TTS interruption and playback-cleanup regression tests
 - [x] Run the complete pytest suite and inspect CI — GitHub Actions run #43: **149 passed, 5 warnings** (2026-11-08)
 - [ ] Validate barge-in timing and microphone handoff on Windows hardware
 - [ ] Implement wake-word-free speech barge-in after reliable AEC is available
@@ -409,6 +411,12 @@ Recent local Kokoro TTS work belongs to the broader voice capability work, but i
 - [ ] Validate no TTS self-triggering, false interruptions, or competing microphone readers
 
 **Implementation note:** The current increment is wake-word barge-in: say "Jarvis" during playback to stop JARVIS. It does not yet support interrupting with arbitrary speech. Acoustic echo cancellation and full-duplex capture remain open; see `docs/phase-9.2-voice-interaction.md`.
+
+- [x] Add isolated optional Echoff 0.3.0 probe dependency without changing normal runtime requirements
+- [x] Document repeatable Windows AEC device discovery, capture, privacy, and acceptance procedure
+- [ ] Run AEC probe on the target Windows microphone and output endpoints
+- [ ] Review raw/AEC recordings and confirm near-end speech preservation
+- [ ] Integrate a single-owner AEC capture path only after hardware acceptance
 
 **Phase status:** 🟡 Implementation started; automated and live validation pending
 
