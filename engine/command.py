@@ -1729,8 +1729,6 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                         "ShowSiriWave"
                     )
 
-                    import time
-
                     time.sleep(
                         0.15
                     )
