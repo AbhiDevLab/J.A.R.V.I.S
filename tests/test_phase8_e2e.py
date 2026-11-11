@@ -153,9 +153,15 @@ def test_pending_yes_resolves_delete_but_cannot_bypass_authorization(
 
 def test_high_confidence_voice_stt_correction_reaches_real_router_and_executor(
     monkeypatch,
+    tmp_path,
 ):
     """A plausible Whisper error is corrected before deterministic routing."""
     _patch_command_boundaries(monkeypatch)
+    monkeypatch.setenv("JARVIS_INTERACTION_TRACES_ENABLED", "1")
+    monkeypatch.setenv(
+        "JARVIS_INTERACTION_TRACE_DB",
+        str(tmp_path / "command-traces.sqlite3"),
+    )
     raw_transcript = "open load pad"
     interpreter_prompts = []
 
@@ -196,6 +202,22 @@ def test_high_confidence_voice_stt_correction_reaches_real_router_and_executor(
     assert action.action_type == "open_application"
     assert action.parameters["application"] == "notepad"
     assert get_interaction_state().has_state() is False
+
+    from engine.interaction_trace import list_recent_interaction_trace_events
+
+    events = list_recent_interaction_trace_events()
+    event_types = {event["event_type"] for event in events}
+    assert {
+        "turn_started",
+        "interpretation_completed",
+        "intent_classified",
+        "automation_completed",
+        "turn_completed",
+    }.issubset(event_types)
+    assert not any(
+        "raw_transcript" in event or "prompt" in event or "path" in event
+        for event in events
+    )
 
 
 def test_low_confidence_voice_correction_clarifies_without_executing(

@@ -2,6 +2,7 @@ import os
 import re
 import queue
 import threading
+import time
 from datetime import datetime, timezone
 import speech_recognition as sr
 import eel
@@ -39,6 +40,10 @@ from engine.settings_store import (
 )
 
 from engine.intelligence_context import build_turn_intelligence_context
+from engine.interaction_trace import (
+    new_interaction_trace_id,
+    record_interaction_trace,
+)
 
 from engine.automation import (
     route_command,
@@ -873,6 +878,13 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
     # listens for the next query and continues without another activation.
     while True:
         raw_transcript = str(query or "").strip()
+        trace_id = new_interaction_trace_id()
+        trace_started_at = time.perf_counter()
+        record_interaction_trace(
+            trace_id,
+            "turn_started",
+            input_channel="voice" if is_voice_input else "typed",
+        )
         if retry_replay is not None:
             raw_transcript = str(
                 retry_replay.get("raw_transcript") or raw_transcript
@@ -888,6 +900,11 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
 
         try:
             if retry_cancelled:
+                record_interaction_trace(
+                    trace_id, "turn_completed",
+                    route="recovery", outcome="cancelled",
+                    latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                )
                 speak(
                     "Understood. I won't retry the previous request.",
                     language=query_language or "en",
@@ -895,6 +912,11 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                 break
 
             if query == "":
+                record_interaction_trace(
+                    trace_id, "turn_completed",
+                    route="unknown", outcome="failed",
+                    latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                )
                 speak(
                     "I didn't catch that. Please try again.",
                     language="en",
@@ -970,6 +992,7 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                 is_voice_input=is_voice_input,
             )
 
+            interpretation_started_at = time.perf_counter()
             if should_interpret:
                 try:
                     interpretation = interpret_query(
@@ -981,6 +1004,19 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                         language=query_language or "en",
                     )
                 except LLMRequestError as error:
+                    record_interaction_trace(
+                        trace_id, "llm_failure",
+                        route="interpretation",
+                        outcome=(
+                            "timeout" if error.category == "timeout"
+                            else "configuration" if error.category == "configuration"
+                            else "rate_limit" if error.category == "rate_limit"
+                            else "provider_error"
+                        ),
+                        error_category=error.category,
+                        provider=os.getenv("LLM_PROVIDER", "omniroute"),
+                        latency_ms=(time.perf_counter() - interpretation_started_at) * 1000.0,
+                    )
                     # Do not discard a pending selection/clarification when the
                     # interpreter cannot reach its model. Keep the original
                     # request available for an explicit retry.
@@ -993,6 +1029,16 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     )
                     break
 
+                record_interaction_trace(
+                    trace_id, "interpretation_completed",
+                    interpretation_used=True,
+                    interpretation_confidence=interpretation.confidence,
+                    intent=interpretation.intent,
+                    intent_source="context_interpreter",
+                    route="interpretation",
+                    outcome="success",
+                    latency_ms=(time.perf_counter() - interpretation_started_at) * 1000.0,
+                )
                 print(
                     "Context interpretation: "
                     f"{interpretation.interpreted_query!r} "
@@ -1003,6 +1049,15 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     clarification = (
                         interpretation.clarification_question
                         or "Could you clarify what you mean?"
+                    )
+                    record_interaction_trace(
+                        trace_id, "clarification_requested",
+                        interpretation_used=True,
+                        interpretation_confidence=interpretation.confidence,
+                        intent="clarification",
+                        intent_source="context_interpreter",
+                        route="clarification",
+                        outcome="clarification",
                     )
                     # Retain the pending clarification so the next utterance
                     # is interpreted as its answer, not as an unrelated command.
@@ -1041,6 +1096,15 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                             or "I still need you to clarify that request.",
                             language=query_language or "en",
                         )
+                        record_interaction_trace(
+                            trace_id, "clarification_requested",
+                            interpretation_used=True,
+                            interpretation_confidence=interpretation.confidence,
+                            intent="clarification",
+                            intent_source="pending_clarification",
+                            route="clarification",
+                            outcome="clarification",
+                        )
                         break
 
                 if current_state.state_type == "confirmation":
@@ -1067,6 +1131,15 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                                 + (current_state.prompt or "Please state the action you want me to take."),
                                 language=query_language or "en",
                             )
+                            record_interaction_trace(
+                                trace_id, "clarification_requested",
+                                interpretation_used=True,
+                                interpretation_confidence=interpretation.confidence,
+                                intent="clarification",
+                                intent_source="pending_confirmation",
+                                route="clarification",
+                                outcome="clarification",
+                            )
                             break
                         current_state.clear()
                     else:
@@ -1079,6 +1152,15 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                 # confident answer, so its temporary state can be cleared.
                 if current_state.state_type == "clarification":
                     current_state.clear()
+            else:
+                record_interaction_trace(
+                    trace_id, "interpretation_completed",
+                    interpretation_used=False,
+                    intent_source="deterministic_fast_path",
+                    route="interpretation",
+                    outcome="success",
+                    latency_ms=(time.perf_counter() - interpretation_started_at) * 1000.0,
+                )
 
             intent_result = classify_intent(
                 query,
@@ -1086,6 +1168,20 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                 interpretation=interpretation,
                 interaction_state=get_interaction_state(),
                 voice_input=is_voice_input,
+            )
+            record_interaction_trace(
+                trace_id, "intent_classified",
+                interpretation_used=interpretation is not None,
+                interpretation_confidence=(
+                    interpretation.confidence if interpretation is not None else None
+                ),
+                intent=intent_result.intent.value,
+                intent_source=intent_result.source,
+                route=(
+                    "automation" if intent_result.should_route_automation
+                    else "clarification" if intent_result.intent.value == "clarification"
+                    else "conversation"
+                ),
             )
             print(
                 "Semantic intent: "
@@ -1108,6 +1204,17 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     if interpretation is not None
                     else ""
                 ) or "I couldn't confidently identify that command. Please repeat it."
+                record_interaction_trace(
+                    trace_id, "clarification_requested",
+                    interpretation_used=interpretation is not None,
+                    interpretation_confidence=(
+                        interpretation.confidence if interpretation is not None else None
+                    ),
+                    intent="clarification",
+                    intent_source="voice_interpretation_unresolved",
+                    route="clarification",
+                    outcome="clarification",
+                )
                 get_interaction_state().set(
                     "clarification",
                     prompt=clarification,
@@ -1141,6 +1248,13 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                         automation_action
                     )
                 except Exception as automation_error:
+                    record_interaction_trace(
+                        trace_id, "automation_completed",
+                        route="automation",
+                        action_type=getattr(automation_action, "action_type", ""),
+                        outcome="failed",
+                        error_category="automation_execution",
+                    )
                     # Clear stale dialogue state so the user cannot accidentally
                     # answer an old selection/confirmation after execution failed.
                     get_interaction_state().clear()
@@ -1187,8 +1301,20 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                         recovery_message,
                         language=query_language or "en",
                     )
+                    record_interaction_trace(
+                        trace_id, "turn_completed",
+                        route="automation", outcome="failed",
+                        latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                    )
                     break
 
+                record_interaction_trace(
+                    trace_id, "automation_completed",
+                    route="automation",
+                    action_type=automation_action.action_type,
+                    outcome="success" if automation_result.get("success") else "failed",
+                    latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                )
                 if automation_action.action_type == "discover_system_resources":
                     # Match the established JARVIS response lifecycle: keep
                     # Oval hidden and leave the separate SiriWave response view
@@ -1306,6 +1432,12 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                             f"{memory_error}"
                         )
 
+                record_interaction_trace(
+                    trace_id, "turn_completed",
+                    route="automation",
+                    outcome="success" if automation_result.get("success") else "failed",
+                    latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                )
                 break
 
             if intent_result.should_route_automation and is_legacy_open_command(query):
@@ -1448,11 +1580,26 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     context_section,
                 )
 
+                llm_started_at = time.perf_counter()
                 try:
                     response = ask_llm(
                         enhanced_prompt
                     )
                 except LLMRequestError as error:
+                    record_interaction_trace(
+                        trace_id, "llm_failure",
+                        route="conversation",
+                        outcome=(
+                            "timeout" if error.category == "timeout"
+                            else "configuration" if error.category == "configuration"
+                            else "rate_limit" if error.category == "rate_limit"
+                            else "provider_error"
+                        ),
+                        error_category=error.category,
+                        provider=os.getenv("LLM_PROVIDER", "omniroute"),
+                        model=os.getenv("OMNIROUTE_MODEL", ""),
+                        latency_ms=(time.perf_counter() - llm_started_at) * 1000.0,
+                    )
                     _handle_llm_failure(
                         error,
                         query,
@@ -1462,6 +1609,14 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     )
                     break
 
+                record_interaction_trace(
+                    trace_id, "response_generated",
+                    route="conversation",
+                    outcome="success",
+                    provider=os.getenv("LLM_PROVIDER", "omniroute"),
+                    model=os.getenv("OMNIROUTE_MODEL", ""),
+                    latency_ms=(time.perf_counter() - llm_started_at) * 1000.0,
+                )
                 assistant_timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
                 print(
@@ -1560,6 +1715,11 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     )
 
                 if interrupted:
+                    record_interaction_trace(
+                        trace_id, "turn_interrupted",
+                        route="conversation", outcome="interrupted",
+                        latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                    )
                     print(
                         "Speech was interrupted by "
                         "the JARVIS hotword."
@@ -1568,8 +1728,6 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     _safe_display(
                         "ShowSiriWave"
                     )
-
-                    import time
 
                     time.sleep(
                         0.15
@@ -1601,10 +1759,21 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                 print(
                     "Speech completed normally."
                 )
+                record_interaction_trace(
+                    trace_id, "turn_completed",
+                    route="conversation", outcome="success",
+                    latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+                )
 
             break
 
         except Exception as e:
+            record_interaction_trace(
+                trace_id, "turn_completed",
+                route="unknown", outcome="failed",
+                error_category="unexpected",
+                latency_ms=(time.perf_counter() - trace_started_at) * 1000.0,
+            )
             print(
                 f"Error in allCommands: {e}"
             )

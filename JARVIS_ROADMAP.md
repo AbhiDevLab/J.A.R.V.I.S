@@ -354,6 +354,21 @@ Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
+### Phase 8.10 — Privacy-conscious Interaction Tracing
+
+- [x] Add a local SQLite interaction-trace store with opaque trace IDs and an explicit metadata allowlist
+- [x] Add trace opt-out, configurable local database path, 1–365 day retention and a 50,000-event hard cap
+- [x] Instrument command start, contextual interpretation, intent classification, clarification, automation outcome, response generation, provider failure and interruption
+- [x] Keep transcripts, prompts, model responses, document content, paths, shell arguments, tool output and credentials out of the trace schema
+- [x] Document trace storage, privacy boundaries, configuration and local inspection
+- [ ] Pass automated trace privacy/lifecycle and command-pipeline regression tests in CI
+- [ ] Owner-verify the local trace database on Windows and inspect representative events
+- [ ] Confirm opt-out prevents trace database creation on the target machine
+
+**Phase status:** 🟡 Implemented; automated and live validation pending
+
+---
+
 **Phase 8 status:** 🟡 In progress. Phase 8.9's post-STT command pipeline now has automated end-to-end coverage for contextual transcript correction, file references, multi-turn approval continuation, real SQLite memory and profile retrieval, ambiguous-request clarification, fail-closed authorization and provider-timeout recovery. The owner reports that the live “open load pad” → “open Notepad” speech-correction test worked. The complete regression suite and Windows voice-contract job passed GitHub Actions run #117 after PR #28. Remaining work is the broader live Windows voice/context/memory/security/failure-recovery validation and the final Phase 8 checkpoint; no final completion is claimed yet.
 
 ---
