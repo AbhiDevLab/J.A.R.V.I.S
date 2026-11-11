@@ -129,7 +129,7 @@ def record_interaction_trace(
     Arbitrary keyword fields are discarded. Only these metadata keys can be
     persisted: input_channel, interpretation_used, interpretation_confidence,
     intent, intent_source, route, action_type, outcome, error_category,
-    provider, model, and latency_ms.
+    provider and latency_ms.
     """
     if not _enabled():
         return False
@@ -150,7 +150,6 @@ def record_interaction_trace(
     action_type = _safe_identifier(metadata.get("action_type"))
     intent_source = _safe_identifier(metadata.get("intent_source"))
     error_category = _safe_identifier(metadata.get("error_category"))
-    model = _safe_identifier(metadata.get("model"))
     confidence = _safe_confidence(metadata.get("interpretation_confidence"))
     latency = _safe_latency(metadata.get("latency_ms"))
 
@@ -184,7 +183,6 @@ def record_interaction_trace(
                     outcome TEXT NOT NULL DEFAULT '',
                     error_category TEXT NOT NULL DEFAULT '',
                     provider TEXT NOT NULL DEFAULT '',
-                    model TEXT NOT NULL DEFAULT '',
                     latency_ms REAL
                 )
                 """
@@ -211,7 +209,7 @@ def record_interaction_trace(
                 DELETE FROM interaction_trace_events
                  WHERE id NOT IN (
                      SELECT id FROM interaction_trace_events
-                     ORDER BY id DESC LIMIT 50000
+                     ORDER BY id DESC LIMIT 49999
                  )
                 """
             )
@@ -221,13 +219,13 @@ def record_interaction_trace(
                     trace_id, timestamp_utc, event_type, input_channel,
                     interpretation_used, interpretation_confidence, intent,
                     intent_source, route, action_type, outcome, error_category,
-                    provider, model, latency_ms
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    provider, latency_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     identifier, timestamp, event, channel, interpretation_used,
                     confidence, intent, intent_source, route, action_type,
-                    outcome, error_category, provider, model, latency,
+                    outcome, error_category, provider, latency,
                 ),
             )
             connection.commit()
@@ -257,7 +255,7 @@ def list_recent_interaction_trace_events(limit: int = 100) -> list[dict[str, Any
                 SELECT id, trace_id, timestamp_utc, event_type, input_channel,
                        interpretation_used, interpretation_confidence, intent,
                        intent_source, route, action_type, outcome, error_category,
-                       provider, model, latency_ms
+                       provider, latency_ms
                 FROM interaction_trace_events
                 ORDER BY id DESC LIMIT ?
                 """,
