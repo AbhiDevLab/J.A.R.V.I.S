@@ -257,6 +257,7 @@ The project owner subsequently reported that all Phase 8.3 focused tests, the fu
 ### Phase 8.5 — Contextual Follow-Ups & Reference Resolution
 
 - [ ] Support natural follow-ups across conversations/tasks without requiring the user to repeat context
+- [x] Capture an immediate, bounded voice reply after a clarification/confirmation question without requiring another wake word; preserve pending state on timeout and reuse the existing Continuous Listening microphone owner
 - [ ] Resolve references to previously mentioned files, applications, people, tasks, and answers
 - [x] Connect Phase 7 selection state with Phase 8 contextual interpretation for pending candidate lists
 - [x] Resolve clear ordinal and numeric choices deterministically before LLM interpretation (including wrapped forms such as “option 3”)
@@ -416,6 +417,10 @@ Recent local Kokoro TTS work belongs to the broader voice capability work, but i
 
 ## Phase 9.2 — Advanced Voice Interaction
 
+- [x] Add one-shot wake-word-free follow-up listening when a voice-originated assistant turn explicitly awaits a user answer
+- [x] Keep reply capture bounded and return to normal wake-word operation on timeout; do not create a second microphone reader while Continuous Listening owns the device
+- [ ] Validate follow-up timing, timeout recovery and question/answer handoff on Windows hardware
+
 - [x] Add TTS-window-only Porcupine microphone handoff while Continuous Listening is enabled
 - [x] Route a wake-word hit during Kokoro/SAPI5 playback into the shared TTS interrupt event
 - [x] Ignore wake-word hits outside the TTS window in continuous mode to prevent duplicate activation flows
@@ -537,22 +542,25 @@ PHASE 7
   ✅ Desktop Automation / Agent
       ├─ 7.1 ✅ Secure Automation Foundation
       ├─ 7.2 ✅ Desktop Application Control
-      └─ 7.3 ✅ Filesystem Automation — local E2E validation reported complete
+      └─ 7.3 ✅ Filesystem Automation
         ↓
 PHASE 8
-  🟡 Intelligence / Context — final integration and live E2E still open
+  🟡 Intelligence / Context — final owner-side Windows validation open
       ├─ 8.1 ✅ Contextual interpretation foundation
       ├─ 8.2 ✅ SQLite semantic + episodic memory
       ├─ 8.3 ✅ Structured profile/preferences context
       ├─ 8.4 ✅ Rolling conversation summaries
-      ├─ 8.5 🟡 Selection/reference index implemented; cross-turn task validation open
-      ├─ 8.6 🟡 Structured intent detection implemented; live routing validation open
-      ├─ 8.7 🟡 Error recovery implemented; live device/failure validation open
+      ├─ 8.5 🟡 Reference resolution + immediate answer capture implemented; broader live validation open
+      ├─ 8.6 🟡 Structured intent detection; live routing validation open
+      ├─ 8.7 🟡 Error recovery; live device/failure validation open
       ├─ 8.8 ✅ OmniRoute bounded retry/fallback implementation
-      └─ 8.9 🟡 Shared per-turn context snapshot integrated; end-to-end validation open
+      ├─ 8.9 🟡 Shared context integration; full live E2E validation open
+      └─ 8.10 🟡 Interaction tracing; local storage/opt-out validation open
         ↓
 PHASE 9
-  ⏳ Advanced Voice + Vision
+  🟡 Advanced Voice + Vision
+      ├─ 9.1 ✅ Continuous Listening Engine — core live validation complete
+      └─ 9.2 🟡 Advanced Voice Interaction — pending-answer capture implemented; hardware validation open
         ↓
 PHASE 10
   ⏳ AI Provider / Model Configuration
