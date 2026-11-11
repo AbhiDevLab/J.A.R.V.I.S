@@ -16,7 +16,7 @@ Each interaction receives a random trace ID. Separate event rows record bounded 
 - selected route: interpretation, automation, conversation, clarification or recovery;
 - action type (for example, `open_application`), but not action parameters;
 - coarse outcome and normalized provider error category;
-- provider/model identifier where it matches the safe identifier format;
+- allowlisted provider category;
 - stage latency in milliseconds.
 
 The database has no fields for raw transcripts, prompts, model responses, document contents, paths, shell commands, tool arguments, credentials, API keys, or audio. Arbitrary metadata passed to the trace API is discarded unless it is explicitly allowlisted.
