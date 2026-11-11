@@ -106,5 +106,8 @@ Adoption order should follow demonstrated value and preserve existing behavior:
 The first low-risk adoption is OpenJarvis's emphasis on **scenario-based end-to-end testing**. The J.A.R.V.I.S Phase 8.9 E2E suite now includes:
 - A high-confidence speech-recognition correction that must travel through the real contextual interpreter, intent classifier and deterministic router before reaching the executor.
 - A low-confidence correction that must stop at clarification and never reach the executor.
+- Retrieval from the real temporary SQLite memory store and profile store, with relevant context verified in both the interpretation prompt and final answer prompt.
+- A genuinely ambiguous spoken target that must remain a clarification and never reach the automation executor.
+- A contextual-interpreter provider timeout that must preserve the pending selection and original request for explicit retry.
 
-These tests add no runtime dependency and do not change production routing or permissions. The remaining live Windows speech and multi-turn validations stay open until they are performed on the target machine.
+These tests add no runtime dependency and do not change production routing or permissions. The project owner separately reported that the live spoken correction test ("open load pad" → "open Notepad") worked correctly. Broader live Windows context, memory, clarification, provider-recovery and multi-turn checks remain open until performed on the target machine.
