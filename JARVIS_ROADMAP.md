@@ -335,26 +335,26 @@ Implementation checkpoint (2026-11-07, branch `phase-8-reliability-2026-11-07`):
 - [x] Keep verified application activity available to interpretation while excluding it from the general response context
 - [x] Keep extracted document contents out of the shared context snapshot and long-term memory
 - [x] Add regression tests for source composition, prompt-context separation, and empty-context behavior in `tests/test_intelligence_context.py`
-- [ ] Integrate contextual interpretation into the existing STT → command/automation → LLM pipeline end-to-end
+- [x] Integrate contextual interpretation into the post-STT command/automation → LLM pipeline and cover it with command-pipeline E2E tests; physical STT handoff remains part of live Windows validation
 - [x] Add command-pipeline E2E regressions for cross-turn file references and pending approvals; verify an approved high-risk delete still passes through the authorization gate
 - [x] Add real command-pipeline E2E regressions for high-confidence speech correction and low-confidence clarification without action execution
 - [x] Add command-pipeline coverage proving retrieved SQLite memory and relevant profile preferences reach both contextual interpretation and response generation
 - [x] Add command-pipeline coverage for genuinely ambiguous voice requests and preservation of pending dialogue state after a recoverable provider failure
 - [x] Record the source-verified Stanford OpenJarvis capability map and selective adoption rules in `docs/stanford-openjarvis-reference.md`
 - [x] Verify imperfect-transcript recovery using realistic speech-recognition errors — owner-verified: “open load pad” was correctly interpreted as “open Notepad” and opened once (2026-11-12)
-- [ ] Verify context-aware file/application references
-- [ ] Verify multi-turn follow-up conversations
-- [ ] Verify long-term memory retrieval
-- [ ] Verify user preference/context retrieval
-- [ ] Verify clarification behavior for genuinely ambiguous requests
-- [ ] Verify automation security remains fail-closed after contextual interpretation
-- [ ] Verify recoverable LLM/provider failures preserve conversation state
-- [ ] Run complete Phase 8 automated regression suite
-- [ ] Run complete Phase 8 live voice E2E suite
+- [x] Verify context-aware file references through the real command pipeline and deterministic file router (automated E2E)
+- [x] Verify multi-turn file references and pending confirmation continuation (automated E2E)
+- [x] Verify persistent SQLite memory retrieval reaches interpretation and answer generation (automated E2E)
+- [x] Verify relevant user profile/preferences reach interpretation and answer generation (automated E2E)
+- [x] Verify low-confidence and genuinely ambiguous requests stop for clarification without executing (automated E2E)
+- [x] Verify contextual pending approval still passes through the existing high-risk authorization gate (automated E2E)
+- [x] Verify interpreter provider timeout preserves the request and pending selection for explicit retry (automated E2E)
+- [x] Run complete regression suite on GitHub Actions — PR #28, run #117: regression and Windows voice-contract jobs passed
+- [ ] Run complete Phase 8 live Windows voice E2E suite — initial owner-verified STT correction passed; remaining real-device context, memory, clarification and failure-recovery scenarios still need validation
 - [ ] Record final Phase 8 checkpoint
 - [ ] Commit Phase 8 checkpoint
 
-**Phase 8 status:** 🟡 In progress. Phases 8.1–8.4 have implementation and owner-reported validation checkpoints. Phase 8.5 selection/reference-index implementation and regression coverage are present; broader cross-turn task continuity still needs live validation. Phase 8.6 structured intent classification is implemented and regression-tested; live routing validation remains open. Phase 8.7 recovery and Phase 8.8 OmniRoute fallback are implemented with automated coverage; live Windows device/failure validation remains open. Phase 8.9 now has a shared per-turn context snapshot wired into the command pipeline, with tests that keep interpreter context and general response context separated. Full STT → interpretation → intent → router → authorization/execution → response end-to-end validation, broader live voice/memory/security checks, and the final Phase 8 checkpoint remain open. The owner-reported local test-jarvis baseline before this Phase 8.9 change was **149 passed, 6 warnings** on 2026-11-07; the current branch adds four tests and must be evaluated using its CI result.
+**Phase 8 status:** 🟡 In progress. Phase 8.9's post-STT command pipeline now has automated end-to-end coverage for contextual transcript correction, file references, multi-turn approval continuation, real SQLite memory and profile retrieval, ambiguous-request clarification, fail-closed authorization and provider-timeout recovery. The owner reports that the live “open load pad” → “open Notepad” speech-correction test worked. The complete regression suite and Windows voice-contract job passed GitHub Actions run #117 after PR #28. Remaining work is the broader live Windows voice/context/memory/security/failure-recovery validation and the final Phase 8 checkpoint; no final completion is claimed yet.
 
 ---
 
