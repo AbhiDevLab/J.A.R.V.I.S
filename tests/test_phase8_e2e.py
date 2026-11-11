@@ -241,3 +241,155 @@ def test_low_confidence_voice_correction_clarifies_without_executing(
     assert executed_actions == []
     assert state.state_type == "clarification"
     assert "clarify" in state.prompt.casefold() or "repeat" in state.prompt.casefold()
+
+
+
+def test_relevant_memory_and_profile_reach_interpreter_and_answer_model(
+    monkeypatch,
+):
+    """Relevant durable context must reach both interpretation and response."""
+    _patch_command_boundaries(monkeypatch)
+    memory_context = (
+        "Relevant stored memory: The user is building a Python desktop assistant."
+    )
+    profile_context = (
+        "Relevant profile: The user prefers concise technical explanations."
+    )
+    interpreter_prompts = []
+    answer_prompts = []
+
+    def interpret_with_context(prompt):
+        interpreter_prompts.append(prompt)
+        assert memory_context in prompt
+        assert profile_context in prompt
+        return json.dumps(
+            {
+                "interpreted_query": "How should you explain my desktop assistant project?",
+                "intent": "conversation",
+                "confidence": 0.96,
+                "needs_clarification": False,
+                "clarification_question": "",
+            }
+        )
+
+    def answer_with_context(prompt):
+        answer_prompts.append(prompt)
+        return "I will use concise technical explanations for your desktop assistant project."
+
+    monkeypatch.setattr(
+        "engine.intelligence_context.build_memory_context",
+        lambda _query: memory_context,
+    )
+    monkeypatch.setattr(
+        "engine.intelligence_context.build_user_profile_context",
+        lambda _query: profile_context,
+    )
+    monkeypatch.setattr(
+        "engine.context_interpreter.ask_llm",
+        interpret_with_context,
+    )
+    monkeypatch.setattr(command, "ask_llm", answer_with_context)
+    monkeypatch.setattr(command, "load_settings", lambda: {"response_language": "en"})
+    monkeypatch.setattr(command, "extract_memories_from_turn", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "engine.mongo_store.save_chat_turn",
+        lambda *args, **kwargs: None,
+    )
+
+    command.allCommands(
+        "How should you explain my desktop assistant project?",
+        voice_input=True,
+        detected_language="en",
+    )
+
+    assert len(interpreter_prompts) == 1
+    assert len(answer_prompts) == 1
+    assert memory_context in answer_prompts[0]
+    assert profile_context in answer_prompts[0]
+
+
+def test_genuinely_ambiguous_voice_request_keeps_clarification_and_never_executes(
+    monkeypatch,
+):
+    """An unresolved target must remain a clarification, not become an action."""
+    _patch_command_boundaries(monkeypatch)
+    raw_transcript = "open that one"
+    interpreter_prompts = []
+    executed_actions = []
+
+    def request_clarification(prompt):
+        interpreter_prompts.append(prompt)
+        assert raw_transcript in prompt
+        return json.dumps(
+            {
+                "interpreted_query": raw_transcript,
+                "intent": "clarification",
+                "confidence": 0.42,
+                "needs_clarification": True,
+                "clarification_question": "Which application or file do you mean?",
+            }
+        )
+
+    monkeypatch.setattr(
+        "engine.context_interpreter.ask_llm",
+        request_clarification,
+    )
+    monkeypatch.setattr(
+        command,
+        "execute_action",
+        lambda action: executed_actions.append(action),
+    )
+
+    command.allCommands(
+        raw_transcript,
+        voice_input=True,
+        detected_language="en",
+    )
+
+    state = get_interaction_state()
+    assert interpreter_prompts
+    assert executed_actions == []
+    assert state.state_type == "clarification"
+    assert state.prompt == "Which application or file do you mean?"
+
+
+def test_interpreter_provider_failure_preserves_pending_context_for_retry(
+    monkeypatch,
+):
+    """A provider error must preserve the request and previous dialogue state."""
+    _patch_command_boundaries(monkeypatch)
+    report_choices = ["C:/Reports/alpha.pdf", "C:/Downloads/beta.pdf"]
+    get_interaction_state().set(
+        "selection",
+        prompt="Which report should I open?",
+        action_type="select_file",
+        candidates=report_choices,
+        description="project report",
+    )
+
+    def fail_interpretation(_prompt):
+        from engine.llm_client import LLMRequestError
+
+        raise LLMRequestError(
+            "provider timeout",
+            category="timeout",
+            retryable=True,
+        )
+
+    monkeypatch.setattr(
+        "engine.context_interpreter.ask_llm",
+        fail_interpretation,
+    )
+
+    command.allCommands(
+        "the one in Downloads",
+        voice_input=True,
+        detected_language="en",
+    )
+
+    state = get_interaction_state()
+    assert state.state_type == "llm_retry"
+    assert state.data["pending_request"] == "the one in Downloads"
+    assert state.data["raw_transcript"] == "the one in Downloads"
+    assert state.data["previous_interaction_state"]["state_type"] == "selection"
+    assert state.data["previous_interaction_state"]["candidates"] == report_choices
