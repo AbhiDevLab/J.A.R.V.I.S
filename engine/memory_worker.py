@@ -14,7 +14,6 @@ from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-_STOP = object()
 _Processor = Callable[[str, str, str], object]
 
 
@@ -99,29 +98,26 @@ class MemoryExtractionWorker:
                 return False
 
     def _run(self) -> None:
-        while True:
+        while self._running.is_set() or not self._queue.empty():
             try:
                 job = self._queue.get(timeout=0.25)
             except queue.Empty:
-                if not self._running.is_set():
-                    return
                 continue
 
             try:
-                if job is _STOP:
-                    return
                 user_text, assistant_text, conversation_id = job
                 self._processor(
                     str(user_text),
                     str(assistant_text),
                     str(conversation_id),
                 )
-            except Exception:
+            except Exception as exc:
                 # Memory is best-effort. Never let one provider/database failure
                 # terminate the worker or affect the live assistant response.
+                # Do not log user text or provider response bodies.
                 logger.warning(
                     "Background memory extraction job failed (%s)",
-                    type(__import__("sys").exc_info()[1]).__name__,
+                    type(exc).__name__,
                 )
             finally:
                 self._queue.task_done()
@@ -136,13 +132,9 @@ class MemoryExtractionWorker:
             thread = self._thread
             if thread is None:
                 return True
+            # The worker drains already queued jobs, then exits once the queue
+            # is empty. No sentinel is needed, avoiding a shutdown/enqueue race.
             self._running.clear()
-            try:
-                self._queue.put_nowait(_STOP)
-            except queue.Full:
-                # The worker will drain the bounded queue, then observe the
-                # cleared running flag and exit without a sentinel.
-                pass
 
         thread.join(timeout=max(0.0, float(timeout)))
         finished = not thread.is_alive()
