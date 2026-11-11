@@ -403,6 +403,7 @@ Recent local Kokoro TTS work belongs to the broader voice capability work, but i
 - [x] Add bounded adaptive-energy VAD and phrase-endpoint configuration
 - [x] Add focused regression tests for microphone gating, interruption routing, and VAD configuration
 - [x] Add regression coverage for TTS consuming the shared interrupt event and cleaning up playback state
+- [x] Add a Windows CI job for mocked TTS interruption and playback-cleanup regression tests
 - [x] Run the complete pytest suite and inspect CI — GitHub Actions run #43: **149 passed, 5 warnings** (2026-11-08)
 - [ ] Validate barge-in timing and microphone handoff on Windows hardware
 - [ ] Implement wake-word-free speech barge-in after reliable AEC is available
