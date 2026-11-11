@@ -203,6 +203,53 @@ def test_unresolved_contextual_target_cannot_fall_through_to_application_launch(
     assert result.should_route_automation is False
 
 
+def test_bare_that_one_cannot_be_inferred_as_notepad_from_voice_context():
+    # Reproduce the failure: the model guesses Notepad with high confidence,
+    # even though the user did not identify an item or create a selection.
+    guessed_interpretation = SimpleNamespace(
+        query="open Notepad",
+        intent="automation",
+        confidence=0.99,
+        needs_clarification=False,
+    )
+
+    for raw in (
+        "open that one",
+        "JARVIS, open that one",
+        "Hey Jarvis, could you open that one?",
+    ):
+        result = classify_intent(
+            "open Notepad",
+            raw_text=raw,
+            interpretation=guessed_interpretation,
+            interaction_state=InteractionState(),
+            voice_input=True,
+        )
+        assert result.intent is SemanticIntent.CLARIFICATION
+        assert result.needs_clarification is True
+        assert result.should_route_automation is False
+        assert result.source == "unanchored_reference"
+
+
+def test_contextual_report_reference_can_still_resolve_for_voice_input():
+    interpretation = SimpleNamespace(
+        query="open report.pdf",
+        intent="automation",
+        confidence=0.95,
+        needs_clarification=False,
+    )
+    result = classify_intent(
+        "open report.pdf",
+        raw_text="open that report",
+        interpretation=interpretation,
+        voice_input=True,
+    )
+    assert result.intent is SemanticIntent.AUTOMATION
+    assert result.normalized_query == "open report.pdf"
+    assert result.source == "context_interpreter"
+    assert result.should_route_automation is True
+
+
 def test_self_contained_explicit_command_keeps_deterministic_fast_path():
     result = classify_intent("close Notepad")
 
