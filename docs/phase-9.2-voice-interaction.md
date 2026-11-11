@@ -158,3 +158,43 @@ Until the hardware acceptance criteria pass:
 
 After acceptance, the implementation should use one capture owner for both the microphone and render-loopback reference, dispatch bounded cleaned-audio frames to VAD/STT and the interruption detector, and retain the current half-duplex path as a safe fallback. AEC must be opt-in until the full Windows lifecycle and false-interruption tests pass.
 
+
+
+## Conversational follow-up listening (2026-11-12)
+
+JARVIS supports a bounded one-shot reply capture when a voice-originated turn
+ends with a question or a pending clarification/confirmation:
+
+- After JARVIS asks which item, requests a missing detail, asks for confirmation,
+  or produces another reply-seeking question, the command pipeline immediately
+  listens for one answer without requiring a second wake word.
+- The answer is fed back through the existing contextual interpretation,
+  intent-classification, deterministic router, and authorization pipeline.
+- If the user is silent until the bounded timeout, JARVIS preserves the pending
+  dialogue state and returns to normal wake-word mode.
+- This is not continuous listening. It captures only while an explicit pending
+  user response exists, then returns to normal operation.
+- Typed turns do not open the microphone. If Continuous Listening is enabled,
+  its existing listener captures the next utterance; the follow-up path does
+  not start a competing microphone reader.
+- A maximum of three automatic follow-up captures is allowed within one
+  command invocation to prevent indefinite capture loops.
+
+Configuration:
+- JARVIS_FOLLOWUP_LISTEN_TIMEOUT (default 10 seconds; bounded 1–30)
+- JARVIS_FOLLOWUP_PHRASE_LIMIT (default 8 seconds; bounded 2–20)
+
+### Windows validation
+
+1. Say "open that one" with no active selection. JARVIS should ask which item and
+   listen immediately without another wake word.
+2. Answer "Notepad". It should interpret the answer in the saved clarification
+   context and open Notepad once.
+3. Ask a conversational question that leads JARVIS to ask a genuine follow-up.
+   Answer it without saying the wake word.
+4. Remain silent past the reply timeout. JARVIS should return to wake-word mode
+   while retaining the pending question for a later answer.
+5. Repeat while Continuous Listening is enabled. Confirm only the existing
+   continuous listener owns the microphone.
+6. Repeat with voice output disabled and with a typed request. Confirm the
+   text-only path does not unexpectedly open the microphone.
