@@ -17,10 +17,8 @@ from engine.context_interpreter import (
     should_interpret_query,
 )
 from engine.interaction_state import get_interaction_state
-from engine.memory import (
-    extract_memories_from_turn,
-    record_episode,
-)
+from engine.memory import record_episode
+from engine.memory_worker import submit_memory_extraction
 from engine.legacy_routing import (
     is_legacy_message_command,
     is_legacy_open_command,
@@ -1544,20 +1542,14 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                     respect_voice_setting=True,
                 )
 
-                # Run selective durable-memory extraction after the response
-                # has been displayed/spoken, so memory maintenance does not
-                # delay the user's current answer.
-                try:
-                    extract_memories_from_turn(
-                        raw_transcript,
-                        response,
-                        conversation_id=conversation_manager.conversation_id,
-                    )
-                except Exception as memory_error:
-                    print(
-                        "Long-term memory extraction unavailable: "
-                        f"{memory_error}"
-                    )
+                # OpenJarvis-inspired background handoff: keep the current
+                # command/microphone loop free while the existing selective
+                # memory extractor performs its best-effort LLM and SQLite work.
+                submit_memory_extraction(
+                    raw_transcript,
+                    response,
+                    conversation_id=conversation_manager.conversation_id,
+                )
 
                 if interrupted:
                     print(
