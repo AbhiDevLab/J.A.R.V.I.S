@@ -79,6 +79,18 @@ _CONTEXTUAL_TARGET_REFERENCE = re.compile(
     r"(?:one|file|folder|document|report|application))\b",
     re.IGNORECASE,
 )
+# A bare "that one"/"this one"/"the one" has no noun that identifies its
+# target. It must not be completed from a historical app launch or a visible
+# window alone; only an active, explicit selection can anchor it.
+_UNANCHORED_DEICTIC_ACTION = re.compile(
+    r"^\s*(?:(?:hey\s+)?jarvis[\s,:-]+)?"
+    r"(?:(?:can|could|would)\s+you\s+(?:please\s+)?)?"
+    r"(?:please\s+)?"
+    r"(?:open|launch|start|run|close|quit|exit|read|delete|remove|rename|move|copy|"
+    r"create|make|install|uninstall|kill|terminate|play)\s+"
+    r"(?:that|this|the)\s+one\b",
+    re.IGNORECASE,
+)
 _FILE_SEARCH_COMMAND = re.compile(
     r"^\s*(?:please\s+)?(?:find|locate|search for)\s+"
     r"(?:(?:a|the)\s+)?(?:file|folder|document|directory|filename|file named|file called)\b",
@@ -264,6 +276,37 @@ def classify_intent(
 
     if not raw and not normalized:
         return _result(SemanticIntent.UNKNOWN, "", 0.0, "deterministic", "empty utterance")
+
+    # A demonstrative "one" without an active candidate list is not a target.
+    # Check the original utterance before trusting a contextual rewrite: a
+    # high-confidence guess such as "open Notepad" must not turn missing
+    # referential evidence into an executable desktop command.
+    reference_text = re.sub(
+        r"^\s*(?:(?:hey\s+)?jarvis[\s,:-]+)",
+        "",
+        raw,
+        flags=re.IGNORECASE,
+    )
+    has_active_selection = (
+        state_type in {"selection", "selection_or_all"}
+        and bool(_state_value(interaction_state, "candidates", []))
+    )
+    if (
+        _UNANCHORED_DEICTIC_ACTION.match(reference_text)
+        and not has_active_selection
+    ):
+        try:
+            confidence = float(getattr(interpretation, "confidence", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        return _result(
+            SemanticIntent.CLARIFICATION,
+            raw,
+            confidence,
+            "unanchored_reference",
+            "bare demonstrative target has no active selection",
+            needs_clarification=True,
+        )
 
     if state_type == "confirmation" and _CANCEL.fullmatch(control_text):
         return _result(SemanticIntent.CANCELLATION, raw, 1.0, "pending_state", "explicitly cancelled the pending continuation")
