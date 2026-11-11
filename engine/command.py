@@ -1015,7 +1015,6 @@ def allCommands(message=1, *, voice_input=None, detected_language=None):
                         ),
                         error_category=error.category,
                         provider=os.getenv("LLM_PROVIDER", "omniroute"),
-                        model=os.getenv("OMNIROUTE_MODEL", ""),
                         latency_ms=(time.perf_counter() - interpretation_started_at) * 1000.0,
                     )
                     # Do not discard a pending selection/clarification when the
